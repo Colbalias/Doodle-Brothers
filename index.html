@@ -701,8 +701,14 @@ const CAM_PAD = { x: 470, y: 360 };             // breathing room around the fig
 const cam = { x: W / 2, y: 390, z: 1.0 };
 let camPunch = 0;                               // 0..1, kicked up by big hits, fades fast
 const camZ = () => cam.z * (1 + 0.09 * camPunch);
+// MULTIPLAYER (two or more people playing - couch or online): a much STEADIER camera - mostly on the whole stage, drifting
+// only a little toward the action, a wide zoom that barely changes, and no sudden zoom-ins on X-rays. (Playing on your own
+// against CPUs keeps the lively one.) Ultimates / cutscenes still get their own camera work.
+const STEADY_CAM = { follow: 0.3, followY: 0.25, zMin: CAM_ZOOM_MIN, zMax: 0.88, speed: 1.6 };
+const steadyCam = () => (typeof netActive === 'function' && netActive()) || players.filter(p => !p.off && !p.cpu).length >= 2;
 function updateCamera(dt) {
   camPunch = Math.max(0, camPunch - dt * 4.5);
+  const steady = steadyCam();
   const l3 = fighters.find(f => f.action && (f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'sgCut' || f.action.type === 'fxSac'));   // (Hunter's Legendary 3 cutscene: the camera's on him)
   const alive = l3 ? [l3] : fighters.filter(f => f.respawnTimer <= 0 && !f.minion);
   let tx = STAGE.x + STAGE.w / 2, ty = STAGE.y - 110, tz = CAM_ZOOM_MAX;
@@ -710,17 +716,18 @@ function updateCamera(dt) {
     const xs = alive.map(f => clamp(f.x, BLAST.left + 200, BLAST.right - 200));
     const ys = alive.map(f => clamp(f.y - 45, CAM_CEIL, CAM_FLOOR));
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    tx = lerp(STAGE.x + STAGE.w / 2, (minX + maxX) / 2, 0.8);        // follow the action (stage stays in view)
-    ty = lerp(STAGE.y - 90, (minY + maxY) / 2, 0.6);
-    tz = clamp(Math.min(W / (maxX - minX + CAM_PAD.x), H / (maxY - minY + CAM_PAD.y)), CAM_ZOOM_MIN, CAM_ZOOM_MAX);
+    tx = lerp(STAGE.x + STAGE.w / 2, (minX + maxX) / 2, steady ? STEADY_CAM.follow : 0.8);        // follow the action (stage stays in view)
+    ty = lerp(STAGE.y - 90, (minY + maxY) / 2, steady ? STEADY_CAM.followY : 0.6);
+    tz = clamp(Math.min(W / (maxX - minX + CAM_PAD.x), H / (maxY - minY + CAM_PAD.y)), steady ? STEADY_CAM.zMin : CAM_ZOOM_MIN, steady ? STEADY_CAM.zMax : CAM_ZOOM_MAX);
+    if (steady && stageDef.walkoff) tx = clamp(tx, stageL() + 300, stageR() - 300);   // (the walk-off stage: stays over the playable part)
   }
-  let speed = 4;
+  let speed = steady ? STEADY_CAM.speed : 4;
   // CLASH teleports: pull out to the whole arena (floor to sky) so you can see them zip all over it
   if (alive.some(f => f.action && f.action.type === 'clash' && f.action.t > 0.06)) {
     tx = STAGE.x + STAGE.w / 2; ty = STAGE.y - 230;
     tz = clamp(Math.min(W / (STAGE.w + 160), H / 620), 0.5, CAM_ZOOM_MAX); speed = 7;
   }
-  if (typeof xray !== 'undefined' && xray && xray.t > 0 && xray.v.respawnTimer <= 0) {   // X-RAY: zoom right in on the broken bones
+  if (!steady && typeof xray !== 'undefined' && xray && xray.t > 0 && xray.v.respawnTimer <= 0) {   // X-RAY: zoom right in on the broken bones (not in multiplayer)
     tx = xray.v.x; ty = xray.v.y - 48; tz = 2.4; speed = 16;
   }
   const shipF = alive.find(f => f.action && f.action.type === 'shipUlt');
