@@ -9493,6 +9493,7 @@ function selfKO(f) {
 function finalExpReach(f, a) {                                     // how far the sphere reaches right now (by how long he's held it)
   const C = FINAL_EXP, cx = f.x, cy = f.y - 52;
   const rMax = Math.max(Math.hypot(stageL() - cx, STAGE.y - cy), Math.hypot(stageR() - cx, STAGE.y - cy)) + 40;   // (out to the farther ledge)
+  a.rMax = rMax;                                                    // (the STAGE size: it never grows past this)
   return lerp(C.r0, rMax, clamp(a.t / C.maxHold, 0, 1));
 }
 function stepFinalExplosion(f, a, dt, inp) {
@@ -9559,7 +9560,7 @@ function stepFinalExplosion(f, a, dt, inp) {
     painTexts.push({ x: cx, y: cy - 110, t: 1.2, max: 1.2, text: 'FINAL EXPLOSION!', big: true });
   }
   const t1 = a.t - a.boomAt;
-  const r = a.rBoom * (1 + 0.12 * easeOut(clamp(t1 / C.grow, 0, 1)));   // (the sphere he built up - bursting a little wider)
+  const r = Math.min(a.rBoom * (1 + 0.12 * easeOut(clamp(t1 / C.grow, 0, 1))), a.rMax || Infinity);   // (the sphere he built up - bursting a little wider, but never past the stage)
   a.r = r;
   a.poseOverride = pose({ lean: -0.38, bob: -12, armA: [1.0, 0.2], legA: [0.85, 0.5], legB: [-0.85, 0.5] });   // blown wide open
   if (t1 < C.grow + C.hold) {
@@ -9585,8 +9586,8 @@ function stepFxSac(f, a, dt) {
   a.songT += dt / uiRealRate();
   const C = FINAL_EXP, T = a.songT, k = clamp((T - C.maxHold) / (C.songLen - C.maxHold), 0, 1);
   a.pose = pose({ lean: -0.38 + 0.1 * k, bob: -12 + 6 * k, armA: [1.0 - 0.6 * k, 0.2], legA: [0.85, 0.5], legB: [-0.85, 0.5] });   // arms flung wide, slowly sagging
-  const zFit = clamp(H * 0.4 / Math.max(60, (a.r || 300) * 1.12), 0.3, 0.85);   // (pulled back far enough to see the WHOLE sphere he's in)
-  a.cam.x = a.x; a.cam.y = a.y - 52; a.cam.z = zFit * (1 + 0.15 * k); a.cam.speed = 1.5;
+  const zFit = clamp(H * 0.4 / Math.max(60, a.r || 300), 0.3, 0.85);   // (pulled back far enough to see the WHOLE sphere he's in)
+  a.cam.x = a.x; a.cam.y = a.y - 52; a.cam.z = zFit; a.cam.speed = 1.5;   // (held steady - the sphere stays the same size on screen)
   shake = Math.max(shake, 10 * (1 - k));
   if (Math.random() < dt * (30 + 60 * k)) particles.push({ x: a.x + (Math.random() - 0.5) * 50, y: a.y - Math.random() * 110, vx: (Math.random() - 0.5) * 40, vy: -120 - Math.random() * 200, life: 1.2, max: 1.2, size: 2 + Math.random() * 3, color: Math.random() < 0.5 ? '#ffffff' : '#ffe066', type: 'bit', grav: 0 });   // (burning away)
   if (T >= C.songLen) {                                         // gone
@@ -9627,7 +9628,7 @@ function drawFinalExplosions() {
     // (one solid sphere, start to finish - through the whole sacrifice too, only fading in the last moments of the song)
     const kS = sac ? clamp((a.songT - C.maxHold) / (C.songLen - C.maxHold), 0, 1) : 0;
     const fade = sac ? 0.85 * clamp((1 - kS) / 0.1, 0, 1) : a.boom ? clamp(1 - (t1 - C.grow - C.hold) / C.spent, 0, 1) * 0.85 : 0.8;
-    const r = (a.r || 0) * (sac ? 1.12 : 1) * (1 + 0.012 * Math.sin(now * 20));
+    const r = (a.r || 0) * (1 + 0.008 * Math.sin(now * 20));   // (full size = the stage's size, and it stays there)
     if (fade <= 0 || r < 2) continue;
     ctx.save();
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
