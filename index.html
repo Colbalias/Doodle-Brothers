@@ -14215,6 +14215,7 @@ function drawCrossFigure(c, v, x, y, k, alpha, jolt) {
   c.save(); c.globalAlpha = alpha; c.translate(x, y); c.scale(K, K); c.lineCap = 'round'; c.lineJoin = 'round';
   const seg = (x0, y0, x1, y1, w, col) => { c.strokeStyle = ink; c.lineWidth = w + 3; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
                                              c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); };
+  if (L.rage) drawBrolyFront(c, fig, L, jolt, 'back');                                                              // (Hunter: his mane, BEHIND him)
   for (const sd of [-1, 1]) seg(sd * 5, hipY, sd * (4 + jolt * 2), -2, muscle ? 9 : 7, pants);                          // legs, hanging
   const sides = L.oneArm ? [1] : [-1, 1];                                                                             // (Lance: one arm - a stump on the other side)
   for (const sd of sides) seg(sd * (sw - 3), shY + 2, sd * (sw + arm), shY + 1, muscle ? 9 : 6, skin);               // arms, out along the beam
@@ -14228,6 +14229,7 @@ function drawCrossFigure(c, v, x, y, k, alpha, jolt) {
   if (muscle) { c.strokeStyle = 'rgba(0,0,0,0.45)'; c.lineWidth = 1.6;                                                 // pecs + abs
     c.beginPath(); c.moveTo(-sw + 5, shY + 9); c.quadraticCurveTo(-5, shY + 14, 0, shY + 8); c.quadraticCurveTo(5, shY + 14, sw - 5, shY + 9); c.stroke();
     c.beginPath(); c.moveTo(0, shY + 9); c.lineTo(0, hipY - 2); c.stroke(); }
+  if (L.rage) { drawBrolyFront(c, fig, L, jolt, 'front'); c.restore(); return; }   // (Hunter: a real front-on face - see below)
   c.restore();
   // their own head + hair, from their real figure - only what's above the neck. Everyone's figure is drawn SIDE-ON, so to
   // face us it's drawn twice, mirrored: the left half from one side, the right half from the other - a symmetric,
@@ -14240,6 +14242,77 @@ function drawCrossFigure(c, v, x, y, k, alpha, jolt) {
     drawFigure({ ...fig, x: 0, y: 0, vx: 0, vy: 0, face: -sd, squash: 0, pose: hp }, { alpha });   // (the BACK of the hair on each side)
     c.restore();
   }
+}
+// HUNTER FACING US (Broly): a wild black mane bursting out all round his head and falling to his shoulders, jagged bangs
+// over his brow, the gold circlet with its gem, a hard stare, and the gold collar with its jewel across his chest.
+// (Drawn in drawCrossFigure's space: (0, 0) = his feet, shoulders at y = -71.)
+function drawBrolyFront(c, fig, L, jolt, part) {
+  const ink = '#111111', skin = fig.color || '#e2a882', hair = L.longHair || '#121212', gold = '#e8b82a', goldD = '#8a6510', gem = '#2fae8a';
+  const hx = 0, hy = -90 + jolt * 2;                              // the head's centre (dropped a touch on each stab)
+  const H = (i, s) => hash(i * 12.9898 + s * 78.233);
+  // 1) THE MANE, behind everything: a big wild mass - spiky on top, then heavy locks falling down both sides, behind his
+  //    shoulders, to his chest. Each side: a run of locks, each a curved point, from the crown out and down.
+  if (part === 'back') {
+    c.fillStyle = hair; c.strokeStyle = '#3a3a3a'; c.lineWidth = 1.4; c.lineJoin = 'round';
+    c.beginPath(); c.ellipse(hx, hy - 3, 19, 20, 0, 0, Math.PI * 2); c.fill();                  // (the bulk round the head)
+    for (const sd of [-1, 1]) {
+      c.beginPath(); c.moveTo(hx, hy - 20);
+      // [angle from straight up (rad), length] - the locks, crown to shoulders
+      const locks = [[0.15, 30], [0.55, 32], [0.95, 33], [1.35, 34], [1.75, 38], [2.15, 44], [2.5, 48], [2.8, 46]];
+      locks.forEach(([ang, len], i) => {
+        const a = ang + (H(i, sd + 3) - 0.5) * 0.15, l = len * (0.92 + 0.16 * H(i, sd + 7));
+        const bx = hx + sd * Math.sin(a - 0.2) * 16, by = hy - 3 - Math.cos(a - 0.2) * 17;       // (where it leaves the head)
+        const tx = hx + sd * Math.sin(a) * l * (ang > 1.6 ? 0.78 : 1), ty = hy - 3 - Math.cos(a) * l * (ang > 1.6 ? 1.25 : 1);
+        const mx = hx + sd * Math.sin(a + 0.22) * 19, my = hy - 3 - Math.cos(a + 0.22) * 19;    // (the notch before the next one)
+        c.lineTo(bx, by); c.quadraticCurveTo(lerp(bx, tx, 0.5) + sd * 4, lerp(by, ty, 0.5) - 2, tx, ty); c.lineTo(mx, my);
+      });
+      c.lineTo(hx + sd * 6, hy + 14); c.lineTo(hx, hy + 10); c.closePath(); c.fill(); c.stroke();
+    }
+    return;
+  }
+  // 2) the neck - thick
+  c.fillStyle = skin; c.strokeStyle = ink; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(-7, hy + 8); c.lineTo(-9, -70); c.lineTo(9, -70); c.lineTo(7, hy + 8); c.closePath(); c.fill(); c.stroke();
+  // 3) the face: square-jawed
+  c.beginPath();
+  c.moveTo(hx - 11, hy - 6); c.quadraticCurveTo(hx - 12, hy + 7, hx - 6, hy + 12); c.lineTo(hx + 6, hy + 12);
+  c.quadraticCurveTo(hx + 12, hy + 7, hx + 11, hy - 6); c.quadraticCurveTo(hx, hy - 17, hx - 11, hy - 6); c.closePath();
+  c.fillStyle = skin; c.fill(); c.lineWidth = 2; c.stroke();
+  for (const sd of [-1, 1]) {                                      // ears + gold earrings
+    c.fillStyle = skin; c.beginPath(); c.ellipse(hx + sd * 11.5, hy, 2.5, 4, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.fillStyle = gold; c.beginPath(); c.arc(hx + sd * 11.8, hy + 5, 1.6, 0, Math.PI * 2); c.fill();
+  }
+  // 4) the eyes: narrow, a hard stare, heavy brows angled down to the middle (shut tight while he's stabbed)
+  for (const sd of [-1, 1]) {
+    const ex = hx + sd * 4.8, ey = hy + 0.5;
+    if (jolt > 0.1) { c.strokeStyle = ink; c.lineWidth = 1.6; c.beginPath(); c.moveTo(ex - 3, ey); c.lineTo(ex + 3, ey + 0.5); c.stroke(); }
+    else {
+      c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(ex - sd * 3.4, ey); c.quadraticCurveTo(ex, ey - 2.4, ex + sd * 3.4, ey - 0.6); c.quadraticCurveTo(ex, ey + 1.6, ex - sd * 3.4, ey); c.fill();
+      c.fillStyle = ink; c.beginPath(); c.arc(ex - sd * 0.6, ey - 0.3, 1.1, 0, Math.PI * 2); c.fill();
+    }
+    c.strokeStyle = ink; c.lineWidth = 2.2; c.beginPath(); c.moveTo(hx + sd * 8.5, ey - 4.5); c.lineTo(hx + sd * 1.8, ey - 2.4); c.stroke();
+  }
+  c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1.2;            // nose + a grim mouth
+  c.beginPath(); c.moveTo(hx, hy + 1); c.lineTo(hx - 1, hy + 5.5); c.lineTo(hx + 1, hy + 6); c.stroke();
+  c.strokeStyle = ink; c.lineWidth = 1.5; c.beginPath(); c.moveTo(hx - 3.5, hy + 9); c.quadraticCurveTo(hx, hy + 8 + jolt * 2, hx + 3.5, hy + 9); c.stroke();
+  // 5) the bangs: jagged locks hanging over his forehead, and longer ones down past his cheeks
+  c.fillStyle = hair; c.strokeStyle = '#3a3a3a'; c.lineWidth = 1.2;
+  c.beginPath(); c.moveTo(hx - 13, hy - 4);
+  const bangs = [[-10, -1], [-8, -7], [-5.5, -2], [-3, -8], [0, -3], [3, -8], [5.5, -2], [8, -7], [10, -1]];
+  for (const [bx, by] of bangs) c.lineTo(hx + bx, hy + by);
+  c.lineTo(hx + 13, hy - 4); c.quadraticCurveTo(hx + 13, hy - 17, hx, hy - 18); c.quadraticCurveTo(hx - 13, hy - 17, hx - 13, hy - 4);
+  c.closePath(); c.fill(); c.stroke();
+  for (const sd of [-1, 1]) {                                      // side locks, down past the cheeks
+    c.beginPath(); c.moveTo(hx + sd * 10, hy - 8); c.lineTo(hx + sd * 14.5, hy + 13); c.lineTo(hx + sd * 12, hy + 2); c.lineTo(hx + sd * 11.5, hy + 16); c.lineTo(hx + sd * 8.5, hy - 2); c.closePath(); c.fill(); c.stroke();
+  }
+  // 6) the gold circlet across his brow, with its gem
+  c.strokeStyle = goldD; c.lineWidth = 4.2; c.beginPath(); c.moveTo(hx - 12.5, hy - 7.5); c.quadraticCurveTo(hx, hy - 11.5, hx + 12.5, hy - 7.5); c.stroke();
+  c.strokeStyle = gold; c.lineWidth = 2.8; c.beginPath(); c.moveTo(hx - 12.5, hy - 7.5); c.quadraticCurveTo(hx, hy - 11.5, hx + 12.5, hy - 7.5); c.stroke();
+  c.fillStyle = gem; c.strokeStyle = goldD; c.lineWidth = 1; c.beginPath(); c.ellipse(hx, hy - 9.7, 2.2, 2.6, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+  // 7) the gold collar across his chest, its jewel in the middle
+  c.fillStyle = gold; c.strokeStyle = goldD; c.lineWidth = 1.4;
+  c.beginPath(); c.moveTo(-17, -71); c.quadraticCurveTo(0, -60, 17, -71); c.lineTo(13, -66); c.quadraticCurveTo(0, -55, -13, -66); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = gem; c.beginPath(); c.arc(0, -59.5, 3, 0, Math.PI * 2); c.fill(); c.stroke();
 }
 // (drawing - over the world, or the whole screen once they're in the genjutsu)
 function drawTsukuyomi(f) {
