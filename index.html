@@ -9551,7 +9551,7 @@ function stepFinalExplosion(f, a, dt, inp) {
       impactFrame = 0.25; impactAt = { x: cx, y: cy, ang: 0, all: true, focus: true, invert: true };
       shake = 40; camPunch = 1; sfx.huge(); sfx.beam(1); sfx.clash(true);
       for (const t of a.hitSet) { t.fxHeld = { vx: t.vx, vy: t.vy, act: t.action }; t.action = { type: 'fxFrozen', t: 0, by: f }; t.vx = t.vy = 0; }   // (their launch waits for the end)
-      f.action = { type: 'fxSac', t: 0, songT: a.t, x: f.x, y: f.y, under: a.under, cam: { x: f.x, y: f.y - 120, z: 0.85, speed: 3 } };
+      f.action = { type: 'fxSac', t: 0, songT: a.t, x: f.x, y: f.y, under: a.under, r: a.r, cam: { x: f.x, y: f.y - 120, z: 0.85, speed: 3 } };
       return true;
     }
     impactFrame = 0.2; impactAt = { x: cx, y: cy, ang: 0, all: true, focus: true, invert: true };
@@ -9585,7 +9585,8 @@ function stepFxSac(f, a, dt) {
   a.songT += dt / uiRealRate();
   const C = FINAL_EXP, T = a.songT, k = clamp((T - C.maxHold) / (C.songLen - C.maxHold), 0, 1);
   a.pose = pose({ lean: -0.38 + 0.1 * k, bob: -12 + 6 * k, armA: [1.0 - 0.6 * k, 0.2], legA: [0.85, 0.5], legB: [-0.85, 0.5] });   // arms flung wide, slowly sagging
-  a.cam.x = a.x; a.cam.y = a.y - 120 + 40 * k; a.cam.z = 0.85 + 0.5 * k; a.cam.speed = 1.5;
+  const zFit = clamp(H * 0.4 / Math.max(60, (a.r || 300) * 1.12), 0.3, 0.85);   // (pulled back far enough to see the WHOLE sphere he's in)
+  a.cam.x = a.x; a.cam.y = a.y - 52; a.cam.z = zFit * (1 + 0.15 * k); a.cam.speed = 1.5;
   shake = Math.max(shake, 10 * (1 - k));
   if (Math.random() < dt * (30 + 60 * k)) particles.push({ x: a.x + (Math.random() - 0.5) * 50, y: a.y - Math.random() * 110, vx: (Math.random() - 0.5) * 40, vy: -120 - Math.random() * 200, life: 1.2, max: 1.2, size: 2 + Math.random() * 3, color: Math.random() < 0.5 ? '#ffffff' : '#ffe066', type: 'bit', grav: 0 });   // (burning away)
   if (T >= C.songLen) {                                         // gone
@@ -9601,7 +9602,7 @@ function drawFxSac(f) {
   const P = toScreen(a.x, a.y - 52), Z = camZ(), now = performance.now() / 1000;
   sctx.save();
   // the light: blinding at first, then a golden glow over everything, slowly fading out at the end
-  const glow = k < 0.08 ? 1 - k / 0.08 * 0.45 : k > 0.8 ? 0.55 * (1 - (k - 0.8) / 0.2) : 0.55;
+  const glow = k < 0.08 ? 1 - k / 0.08 * 0.75 : k > 0.8 ? 0.25 * (1 - (k - 0.8) / 0.2) : 0.25;   // (light enough that the sphere still shows)
   sctx.fillStyle = `rgba(255,248,220,${glow})`; sctx.fillRect(-OX, -OY, SW, SH);
   // the pillar of light he stands in
   const pw = (90 + 30 * Math.sin(now * 6)) * Z * (1 - 0.6 * k);
@@ -9619,11 +9620,14 @@ const LANCE_FINAL_EXPLOSION = { startup: 0, active: 99, endlag: 0, armor: true, 
 // (drawing, in the world) the dome of light - sitting on the floor if he's on the stage, a full sphere from under it
 function drawFinalExplosions() {
   for (const f of fighters) {
-    const a = f.action;
-    if (!a || a.type !== 'attack' || !a.move || !a.move.finalExp || (!a.boom && !a.charging)) continue;
-    const C = FINAL_EXP, t1 = a.t - (a.boomAt ?? C.charge), cx = f.x, cy = f.y - 52;
+    const a = f.action, sac = a && a.type === 'fxSac';
+    if (!a || (!sac && (a.type !== 'attack' || !a.move || !a.move.finalExp || (!a.boom && !a.charging)))) continue;
+    const C = FINAL_EXP, t1 = a.t - (a.boomAt ?? C.charge), cx = sac ? a.x : f.x, cy = (sac ? a.y : f.y) - 52;
     const now = performance.now() / 1000;
-    const fade = a.boom ? clamp(1 - (t1 - C.grow - C.hold) / C.spent, 0, 1) * 0.85 : 0.8, r = (a.r || 0) * (1 + 0.012 * Math.sin(now * 20));   // (one solid sphere, start to finish)
+    // (one solid sphere, start to finish - through the whole sacrifice too, only fading in the last moments of the song)
+    const kS = sac ? clamp((a.songT - C.maxHold) / (C.songLen - C.maxHold), 0, 1) : 0;
+    const fade = sac ? 0.85 * clamp((1 - kS) / 0.1, 0, 1) : a.boom ? clamp(1 - (t1 - C.grow - C.hold) / C.spent, 0, 1) * 0.85 : 0.8;
+    const r = (a.r || 0) * (sac ? 1.12 : 1) * (1 + 0.012 * Math.sin(now * 20));
     if (fade <= 0 || r < 2) continue;
     ctx.save();
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
