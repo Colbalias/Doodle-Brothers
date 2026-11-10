@@ -8309,6 +8309,62 @@ function haoriHem(bot1, bot2, up, h0) {
     ctx.lineTo(bot2.x, bot2.y); ctx.closePath(); ctx.fill();
   }
 }
+// COLBALIAS - MADARA'S CLOTHES: grey clothes (his body colour) under red Uchiha battle armour - a segmented chest plate,
+// a tall flared collar rising behind his neck, an armoured skirt of plates over his hips, white wraps round his shins and
+// dark sandals (no coat). (Armour colour: look.madara - a colour, or true = red.)
+const MADARA = { armor: '#9b2a20', wrap: '#ecebe6', sandal: '#2a2a2e' };
+function drawMadara(hip, shoulder, f, fig, opts, main, layer, pz) {
+  const L = fig.look || {}, M = MADARA, tint = opts.tint, sk = sketch;
+  const base = typeof L.madara === 'string' ? L.madara : M.armor;
+  const armor = tint || (sk ? PAPER : base), dark = tint || (sk ? main : shade(base, 0.6)), lite = tint || (sk ? PAPER : shade(base, 1.25));
+  const sway = clamp(-(fig.vx || 0) * 0.02, -20, 20), lift = clamp(-(fig.vy || 0) * 0.012, -12, 14);
+  const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO, px = -uy * f, py = ux * f;
+  const at = (o, up, fw) => ({ x: o.x + ux * up + px * fw, y: o.y + uy * up + py * fw });
+  const poly = (pts, fill, edge) => { ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill(); if (edge) { ctx.strokeStyle = edge; ctx.lineWidth = sk ? 2 : 1.2; ctx.stroke(); } };
+  const band = (a, b) => { if (tint) return; ctx.strokeStyle = dark; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  const w0 = ctx.lineWidth;
+  ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if (layer === 'back') {
+    // THE COLLAR: tall red plates flaring up behind his neck
+    poly([at(shoulder, -1, -3), at(shoulder, 15, -11), at(shoulder, 18, -4), at(shoulder, 4, 3)], armor, dark);
+    ctx.restore(); ctx.lineWidth = w0; return;
+  }
+  if (layer === 'legs') {                                       // shin wraps + sandals, on one leg (pz = that leg's pose)
+    const th = pz[0], bend = pz[1], mid = { x: hip.x + Math.sin(th) * LEG_UP * f, y: hip.y + Math.cos(th) * LEG_UP }, a2 = th - bend;
+    const end = { x: mid.x + Math.sin(a2) * LEG_LOW * f, y: mid.y + Math.cos(a2) * LEG_LOW };
+    const P = k => ({ x: lerp(mid.x, end.x, k), y: lerp(mid.y, end.y, k) });
+    const A = P(0.42), B = P(0.82);
+    ctx.strokeStyle = tint || (sk ? PAPER : M.wrap); ctx.lineWidth = 8.5; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+    if (!tint && !sk) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1;
+      const nx = -(B.y - A.y), ny = B.x - A.x, nl = Math.hypot(nx, ny) || 1;
+      for (const k of [0.5, 0.6, 0.7, 0.8]) { const c = P(k); ctx.beginPath(); ctx.moveTo(c.x + nx / nl * 4.2, c.y + ny / nl * 4.2 - 1); ctx.lineTo(c.x - nx / nl * 4.2, c.y - ny / nl * 4.2 + 1); ctx.stroke(); }
+    }
+    ctx.strokeStyle = tint || (sk ? main : M.sandal); ctx.lineWidth = 9.5; ctx.lineCap = 'round';   // the sandal
+    const C = P(0.84); ctx.beginPath(); ctx.moveTo(C.x, C.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+    ctx.restore(); ctx.lineWidth = w0; return;
+  }
+  // FRONT: the armoured skirt over his hips, then the chest plate over his torso
+  const s1 = at(hip, 3, 10), s2 = at(hip, 3, -11);
+  const s3 = { x: hip.x - f * (13 + sway * 0.3), y: hip.y + 17 - lift * 0.3 }, s4 = { x: hip.x + f * (12 + sway * 0.1), y: hip.y + 18 - lift * 0.2 };
+  poly([s1, s2, s3, s4], armor, dark);
+  for (const k of [0.35, 0.68]) band({ x: lerp(s2.x, s3.x, k), y: lerp(s2.y, s3.y, k) }, { x: lerp(s1.x, s4.x, k), y: lerp(s1.y, s4.y, k) });
+  band(at(hip, 3, -1), { x: lerp(s3.x, s4.x, 0.5), y: lerp(s3.y, s4.y, 0.5) });   // (the split between the plates)
+  const c1 = at(shoulder, 1, 9), c2 = at(shoulder, 2, -9), c3 = at(hip, 4, -9), c4 = at(hip, 4, 10);
+  poly([c1, c2, c3, c4], armor, dark);
+  for (const k of [0.25, 0.5, 0.75]) band({ x: lerp(c2.x, c3.x, k), y: lerp(c2.y, c3.y, k) }, { x: lerp(c1.x, c4.x, k), y: lerp(c1.y, c4.y, k) });
+  if (!tint && !sk) {                                          // a shine down the front edge + gold studs
+    ctx.strokeStyle = lite; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(lerp(c1.x, c2.x, 0.12), lerp(c1.y, c2.y, 0.12)); ctx.lineTo(lerp(c4.x, c3.x, 0.12), lerp(c4.y, c3.y, 0.12)); ctx.stroke();
+    ctx.fillStyle = '#d9a640';
+    for (const k of [0.25, 0.5, 0.75]) { const qx = lerp(lerp(c1.x, c4.x, k), lerp(c2.x, c3.x, k), 0.5), qy = lerp(lerp(c1.y, c4.y, k), lerp(c2.y, c3.y, k), 0.5); ctx.beginPath(); ctx.arc(qx, qy, 1.2, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // the shoulder guard on his near shoulder, over the top of the arm
+  poly([at(shoulder, 3, 6), at(shoulder, 4, -6), at(shoulder, -7, -8), at(shoulder, -8, 7)], armor, dark);
+  band(at(shoulder, -2, -7), at(shoulder, -3, 7));
+  ctx.restore(); ctx.lineWidth = w0;
+}
 function drawHaori(hip, shoulder, f, fig, opts, main, layer = 'back') {
   const sway = clamp(-(fig.vx || 0) * 0.016, -16, 16), lift = clamp(-(fig.vy || 0) * 0.01, -10, 12);
   const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO;     // up his spine
@@ -9259,7 +9315,9 @@ const CHARACTERS = {
     // The final boss: as fast as Lance on the ground, faster in the air, and sturdier than Colby
     stats: { runSpeed: 860, airSpeed: 700, jumpVel: 1270, doubleJumpVel: 1170, weight: 1.06 },   // (faster than anyone - he hits softest)
     look: {
-      body: '#7a0b0b',          // blood crimson (Colby's red, gone dark)
+      body: '#4b4549',          // MADARA'S CLOTHES: dark grey (see drawMadara) - under red Uchiha armour
+      headColor: '#7a0b0b',     // his head: blood crimson (Colby's red, gone dark)
+      madara: true,             // Madara's battle armour, shin wraps and sandals
       longHair: '#4a4248',      // Colby's long white hair, burnt to ash grey
       demonEyes: true,          // glowing red eyes (SAGE MODE: the toad eyes + orange markings)
       sage: true,               // his transformation is SAGE MODE (see SAGE)
@@ -9340,8 +9398,8 @@ const CHAR_ALTS = {
   LANCE:     { name: 'PURPLE', swatch: '#7b3fd1', look: { body: '#7b3fd1', gi: { main: '#f2761e', dark: '#c4560f', blue: '#5a2aa8' } } },
   SEVON:     { name: 'BLUE RANGER', swatch: '#1f55d6', look: { body: '#1f55d6', haori: false, flameHair: false, ranger: true } },
   COLBY:     [{ name: 'WHITE', swatch: '#ececec', look: { body: '#ececec' } }, { name: 'GREEN', swatch: '#2ef06a', look: { body: '#2ef06a' } }],   // (GREEN: bright)
-  COLBALIAS: [{ name: 'BLACK', swatch: '#161616', look: { body: '#161616' } },
-              { name: 'ALL WHITE', swatch: '#f6f6f6', look: { body: '#f6f6f6', longHair: '#ffffff', bossAura: '#f2f2f2', transformAura: '#ffffff' } }],
+  COLBALIAS: [{ name: 'BLACK', swatch: '#161616', look: { body: '#161616', headColor: '#161616', madara: '#2e2e2e' } },
+              { name: 'ALL WHITE', swatch: '#f6f6f6', look: { body: '#f6f6f6', headColor: '#f6f6f6', madara: '#dcdcdc', longHair: '#ffffff', bossAura: '#f2f2f2', transformAura: '#ffffff' } }],
   HUNTER:    [{ name: 'YELLOW', swatch: '#f2c230', look: { body: '#f2c230' } }, { name: 'RED', swatch: '#c4271f', look: { body: '#c4271f' } }],
   AIDEN:     { name: 'BLACK BONES', swatch: '#1e1e1e', look: { body: '#1e1e1e', detail: '#6b6b6b', eyepatchColor: '#f4f4f4', beard: '#3a3a3a',
                                                              hat: { main: '#f2f2f2', fold: '#dadada', pipe: '#141414', emblem: '#141414' } } },
@@ -20003,6 +20061,7 @@ function drawFigure(fig, opts = {}) {
   }
   if (look.rage) drawHunterHair(head, f, fig, look, opts, 'back', ink);   // HUNTER: his layered, spiky hair (the back layer)
   if (look.haori) drawHaori(hip, shoulder, f, fig, opts, main);   // SEVON: the flame-hemmed haori, behind his body
+  if (look.madara) drawMadara(hip, shoulder, f, fig, opts, main, 'back');   // COLBALIAS: Madara's collar, behind him
   if (look.odm) drawOdmGear(hip, f, opts, fig);                  // ...and the ODM gear on his hips (with its gas gauges)
 
   ctx.lineWidth = LW;
@@ -20106,6 +20165,8 @@ function drawFigure(fig, opts = {}) {
     limb(hip, pz.legA, LEG_UP, LEG_LOW, f);
   }
   if (look.haori) drawHaori(hip, shoulder, f, fig, opts, main, 'front');   // SEVON: the haori's front panel, over his torso and near leg
+  if (look.madara) { drawMadara(hip, shoulder, f, fig, opts, main, 'legs', pz.legB); drawMadara(hip, shoulder, f, fig, opts, main, 'legs', pz.legA);
+                     drawMadara(hip, shoulder, f, fig, opts, main, 'front'); }   // COLBALIAS: shin wraps + sandals, then the armour
   // FLAME BELT (Incineroar): a ring of flickering fire around his waist
   if (look.flameBelt) {
     const fl = sketch ? ['#e0a400'] : opts.tint ? [opts.tint] : ['#ff5a1a', '#ffb02e', '#ffe066'];
