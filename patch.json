@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.49",
+    "version":  "0.7.50",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "841c20c43695d8c418a57deaab72711ce92590a7f1060598d50969070d2c32d1",
-                                     "size":  1748289
+                                     "hash":  "9c8b480a02f4697f781e1c9b2cc96a3fe973000ad1cbb4017e157ffae7164d4b",
+                                     "size":  1815767
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -19,10 +19,18 @@
                                  "hash":  "69e060db2f07f57c6dcf754d0fed412b95863553533f06520457c15ad8070c9c",
                                  "size":  65677
                              },
+                  "sounds/battle/a-samurais-death.mp3":  {
+                                                             "hash":  "0fa2765a6f521e2154568fbc2ff61c08a726a9283388ea9e57a6065d9ba8752c",
+                                                             "size":  5334334
+                                                         },
                   "sounds/battle/awake.mp3":  {
-                                                  "hash":  "f2003ec001627c1328b59c937ea57103823686040c065585152f511e52d18501",
-                                                  "size":  5005852
+                                                  "hash":  "81b0d276ff862431cd7d572cb21594271ce37a139a357878739ac55d00c74dbe",
+                                                  "size":  4638857
                                               },
+                  "sounds/battle/battle-gym-leader.mp3":  {
+                                                              "hash":  "d8da719baa760f4494ea7b02c83df57683a2e5e703662f10d55b16b63a6afaf9",
+                                                              "size":  8388860
+                                                          },
                   "sounds/battle/battle-without-honor-or-humanity.mp3":  {
                                                                              "hash":  "eda0873dca9a6311e4534976a0744dbef308d28731e1b775be9f4cc1145694fc",
                                                                              "size":  3554280
@@ -39,10 +47,22 @@
                                                          "hash":  "65b0ec56aeed5bc980c69fafa7d482c24915eb1308579d54697704f433463df4",
                                                          "size":  4946057
                                                      },
+                  "sounds/battle/bring-me-to-life.mp3":  {
+                                                             "hash":  "cc33cf5756a3e3495024fc783d6f8efc31cf57cecc01f6be731c5e841f2504ec",
+                                                             "size":  5966141
+                                                         },
                   "sounds/battle/by-the-sword.mp3":  {
                                                          "hash":  "f71fd937ea290d9b260782bbdaab4ae2dbf4f8ea40129ae8ca7cafbe1443bc47",
                                                          "size":  3071278
                                                      },
+                  "sounds/battle/chop-suey.mp3":  {
+                                                      "hash":  "f500c381ce7f163de211dc4eb23bc08474eea6ae79eb94db466313457443b2f4",
+                                                      "size":  5023868
+                                                  },
+                  "sounds/battle/colby-lotus.mp3":  {
+                                                        "hash":  "0394fa7cd2d98b3450f21e25ddbcf6356ef5d3bc47f42f5935e828478ec388c6",
+                                                        "size":  1065024
+                                                    },
                   "sounds/battle/devils-never-cry.mp3":  {
                                                              "hash":  "e6d9384978008e9e153b8aa358e39c1d3f6933905b4f7082d5662f9c153a10c8",
                                                              "size":  4735073
@@ -55,6 +75,10 @@
                                                             "hash":  "cb8215b2cce6335c89824673c3dd0f5f64794fb2f813769b2d898e35e55cc168",
                                                             "size":  3729332
                                                         },
+                  "sounds/battle/gas-gas-gas.mp3":  {
+                                                        "hash":  "8633b693f12f22b3093ef00dc5a7f2747f00cedb2fc97bd88a839899b2e33b89",
+                                                        "size":  6180563
+                                                    },
                   "sounds/battle/getting-away-with-murder.mp3":  {
                                                                      "hash":  "4eed0285df623913c87549bf5cf98efa6bfda3207b68e312359cb6c75413003e",
                                                                      "size":  7563285
@@ -103,6 +127,10 @@
                                                            "hash":  "e839288c4f39a91df37b939c86f794f69ff26d003fd81a8d6d6d25adf2acb512",
                                                            "size":  274926
                                                        },
+                  "sounds/battle/master-of-puppets.mp3":  {
+                                                              "hash":  "394638d0218599b6af8d9cd85ef8869769d0ee4ee771edf0967ca8aab1340015",
+                                                              "size":  11666992
+                                                          },
                   "sounds/battle/mystery-0-16.mp3":  {
                                                          "hash":  "3e0b52fc42b4f89b51be127cd633142b3e6fce93eb89128fc8082b72f16d69ef",
                                                          "size":  4718546
@@ -155,6 +183,18 @@
                                                             "hash":  "88eb14b2264b16ff8499c5056792f1fde30da465ae691e63945fe9b272d81d7d",
                                                             "size":  5501384
                                                         },
+                  "sounds/battle/the-piano-before-cynthia.mp3":  {
+                                                                     "hash":  "42811ce95306127bbf55235c3b7bc047c82c82f2a9773f4014c71dccb9e51a1d",
+                                                                     "size":  3778597
+                                                                 },
+                  "sounds/battle/through-the-fire-and-flames.mp3":  {
+                                                                        "hash":  "4f2984d789d4e73e5bbade98b46396909cf20c39ae63f2e33de16c79978005f8",
+                                                                        "size":  9490510
+                                                                    },
+                  "sounds/battle/tsukuyomi.mp3":  {
+                                                      "hash":  "ea504a85cfcc1bdab117cd92db011d756203709fdce755fd4ce5bba29686923d",
+                                                      "size":  297706
+                                                  },
                   "sounds/battle/you-say-run.mp3":  {
                                                         "hash":  "ec59d90ccdf70219d312670fc4f7fd60841dc11f809e13b3e6a47a92b1c45c4c",
                                                         "size":  5567353
