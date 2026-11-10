@@ -17252,20 +17252,31 @@ function updateFighter(f, inp, dt) {
     // corner), out the NEAREST side. (It used to go by which way they were moving, so moving right just inside the
     // RIGHT edge threw them all the way over to the LEFT ledge.)
     const L = STAGE.x - f.w / 2, R = STAGE.x + STAGE.w + f.w / 2;
-    if (prevX <= L) f.x = L;
-    else if (prevX >= R) f.x = R;
-    else f.x = (f.x - L < R - f.x) ? L : R;
-    f.vx = 0;
+    if ((stageDef.pit || stageDef.walkoff || f.y - STAGE.y < 30) && prevX > L && prevX < R) {
+      // (only just INSIDE the top of the floor - or on a stage with no sides to fall off: THE PIT / the walk-off stage -
+      //  they're popped UP onto it. Shoving them out the side threw them off the end - or, on those stages, BELOW the floor.)
+      f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true;
+    } else {
+      if (prevX <= L) f.x = L;
+      else if (prevX >= R) f.x = R;
+      else f.x = (f.x - L < R - f.x) ? L : R;
+      f.vx = 0;
+    }
   }
 
   // Move Y
   f.y += f.vy * dt;
   f.ground = false;
   f.onPlatform = null;
-  if (overlapsStage(f)) {
+  const overX = f.x + f.w / 2 > STAGE.x && f.x - f.w / 2 < STAGE.x + STAGE.w;
+  if (overX && f.vy >= 0 && prevFeet <= STAGE.y + 1 && f.y >= STAGE.y) { f.y = STAGE.y; f.vy = 0; f.ground = true; }   // (the whole path checked - even a huge spike can't skip through the floor in one frame)
+  else if (overlapsStage(f)) {
     if (f.vy >= 0 && prevFeet <= STAGE.y + 1) { f.y = STAGE.y; f.vy = 0; f.ground = true; }
-    else if (f.vy < 0) { f.y = STAGE.y + STAGE.h + f.h; f.vy = 0; }
+    else if (f.vy < 0 && !stageDef.pit && !stageDef.walkoff) { f.y = STAGE.y + STAGE.h + f.h; f.vy = 0; }
   }
+  // THE PIT and the walk-off stage: the floor covers the whole place - there's no "under the stage" there, so anyone who ever
+  // ends up below the floor line (any move, any speed) is put straight back on top of it instead of falling forever
+  if ((stageDef.pit || stageDef.walkoff) && overX && f.y > STAGE.y) { f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true; }
   if (!f.ground && f.vy >= 0 && f.dropTimer <= 0) {
     for (const pl of PLATFORMS) {
       if (prevFeet <= pl.y + 1 && f.y >= pl.y && f.x > pl.x - 6 && f.x < pl.x + pl.w + 6) {
@@ -18595,6 +18606,12 @@ function updateSim(dt) {
   weaponWatchdog(dt);
   if (!RB.resim) updateAuraWaves(dt);
   updateRopes(dt);
+  // THE PIT / the walk-off stage: the floor covers the whole place, so NOBODY ends a frame below it - not even someone a
+  // move is carrying or dragging (a grab "down the wall", a throw that dips under the floor...): they're lifted onto it
+  if (stageDef.pit || stageDef.walkoff) for (const g of fighters) {
+    if (g.respawnTimer > 0 || g.y <= STAGE.y || g.x + g.w / 2 <= STAGE.x || g.x - g.w / 2 >= STAGE.x + STAGE.w) continue;
+    g.y = STAGE.y; if (g.vy > 0) g.vy = 0;
+  }
   updateCamera(dt);
 }
 
