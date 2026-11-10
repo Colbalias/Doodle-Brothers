@@ -709,7 +709,7 @@ const steadyCam = () => (typeof netActive === 'function' && netActive()) || play
 function updateCamera(dt) {
   camPunch = Math.max(0, camPunch - dt * 4.5);
   const steady = steadyCam();
-  const l3 = fighters.find(f => f.action && (f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'sgCut' || f.action.type === 'fxSac'));   // (Hunter's Legendary 3 cutscene: the camera's on him)
+  const l3 = fighters.find(f => f.action && (f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'sgCut' || f.action.type === 'fxSac' || f.action.type === 'leeUlt'));   // (Hunter's Legendary 3 cutscene: the camera's on him)
   const alive = l3 ? [l3] : fighters.filter(f => f.respawnTimer <= 0 && !f.minion);
   let tx = STAGE.x + STAGE.w / 2, ty = STAGE.y - 110, tz = CAM_ZOOM_MAX;
   if (alive.length) {
@@ -734,7 +734,7 @@ function updateCamera(dt) {
   if (shipF) {                                       // Aiden's pirate ship: pull out to show the whole ship
     const a = shipF.action; tx = a.x + a.dir * (a.t < SHIP.holdEnd ? 0 : SHIP.L * 0.45); ty = a.gy - 210; tz = 0.72; speed = 3;
   }
-  const uiF = alive.find(f => f.action && (f.action.type === 'uiTransform' || f.action.type === 'flameDragon' || f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'sgCut' || f.action.type === 'fxSac') && f.action.cam);   // (+ Hunter's Legendary 3)
+  const uiF = alive.find(f => f.action && (f.action.type === 'uiTransform' || f.action.type === 'flameDragon' || f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'sgCut' || f.action.type === 'fxSac' || f.action.type === 'leeUlt') && f.action.cam);   // (+ Hunter's Legendary 3)
   if (uiF) { const c = uiF.action.cam; tx = c.x; ty = c.y; tz = c.z; speed = c.speed; }   // Lance's Ultra Instinct: the cutscene's own camera
   if (typeof ult !== 'undefined' && ult) {          // ultimate: push in close on the action
     const u = ult.user, v = ult.target;
@@ -9752,6 +9752,7 @@ CHARACTERS.LANCE.throwKinds = { forward: 'masho', back: 'masho', up: 'godBind', 
 // Colby: GOD SPEED (Killua's Nen, Hunter x Hunter) - a crackling electric aura, he moves and attacks much faster,
 // EVERY hit he lands adds extra lightning damage, and his bare-handed K string blinks round them (see GOD_SPEED)
 CHARACTERS.COLBY.transformName = 'GOD SPEED';
+CHARACTERS.COLBY.sideUlt = { name: 'PRIMARY LOTUS', leeLotus: true };   // SIDE + I (transformed): see PRIMARY LOTUS
 CHARACTERS.COLBY.transformStats = { power: 1.1, speed: 1.3 };     // the lightning adds the damage - God Speed is about SPEED
 CHARACTERS.COLBALIAS.transformStats = { power: 1.3, speed: 1.22 };   // SAGE MODE: hits harder and moves faster than a normal transform (+ the auto dodge - see SAGE)
 CHARACTERS.COLBY.look.transformAura = '#7fd8ff';
@@ -10562,7 +10563,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -10921,7 +10922,7 @@ function startBattleSong() {
 }
 function updateBattleMusic(dt) {
   const fighting = scene === 'fight' && !matchOver;
-  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
+  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
   if (fighting && !battleMusic.el && soundOn && menuMusic.unlocked) startBattleSong();   // a new fight: a new song
   const el = battleMusic.el;
   if (!el) return;
@@ -10948,6 +10949,7 @@ function updateBattleMusic(dt) {
       else h.played = (h.played || 0) + 1 / 60;
       if (h.played >= TSUKU.len || (h.el && h.el.ended)) stopTsuSong(f);
     }
+    if (f.leeSong && !(f.action && f.action.type === 'leeUlt')) stopLeeSong(f);   // Colby's Primary Lotus: only while it plays
     if (f.sgSong) {                                              // Lance's Super Saiyan God song: fades out once the comeback's done
       const a = f.action, on = a && a.type === 'sgCut';
       if (!on) stopSsgSong(f);
@@ -10966,7 +10968,7 @@ function updateBattleMusic(dt) {
   }
   // turned down under an ultimate's own music / voice lines, and while the game's paused
   const ultMusic = ult || fighters.some(f => (f.action && f.action.type === 'shipUlt') || f.uiSong);   // (+ Lance's Ultra Instinct theme)
-  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
+  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
   el.volume = clamp(BATTLE_MUSIC.vol * battleMusic.level * duck * settings.master * settings.music * 1.6, 0, 1);
   if (el.paused && want) el.play().catch(() => {});
 }
@@ -11382,6 +11384,7 @@ playHunterL2Song = gateSound('l3Song', playHunterL2Song, (h, [f]) => { if (h && 
 playSs1Song = gateSound('ss1Song', playSs1Song, (h, [f]) => { if (h && f) f.ss1Song = h; });
 playSsgSong = gateSound('sgSong', playSsgSong, (h, [f]) => { if (h && f) f.sgSong = h; });
 playFxSong = gateSound('fxSong', playFxSong, (h, [f]) => { if (h && f) f.fxSong = h; });   // (Lance's Final Explosion song)   // (Lance's Super Saiyan God song)
+playLeeSong = gateSound('leeSong', playLeeSong, (h, [f]) => { if (h && f) f.leeSong = h; });   // (Colby's Primary Lotus)
 playTsuSong = gateSound('tsuSong', playTsuSong, (h, [f]) => { if (h && f) f.tsuSong = h; });   // (Colbalias's Tsukuyomi: the Mugen Tsukuyomi clip)
 playSharinganSfx = gateSound('sfx.sharingan', playSharinganSfx);   // (Colbalias's Tsukuyomi: the eye opening)   // (Lance's Super Saiyan song)   // (Hunter's Legendary 3 song)    // (Lance's Super Saiyan 2 song)
 
@@ -11401,7 +11404,7 @@ function isIntangible(f) {
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return true;   // (vanished: nothing can touch him)
   if (a && a.type === 'attack' && a.move && a.move.dragonFist && a.ph && a.ph !== 'wind' && a.ph !== 'dash') return true;   // (Hunter mid-Dragon Fist)
   if (a && a.type === 'attack' && a.move && a.move.finalExp) return true;   // (Lance's Final Explosion: NOTHING interrupts it - no hit, grab or throw)
-  if (a && ['thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
+  if (a && ['thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
   return !!a && (a.type === 'spot' || a.type === 'roll' || a.type === 'air') && a.t >= a.iStart && a.t <= a.iEnd;
 }
 // CROUCHING: hold down on the ground to duck. Your hurtbox shrinks to ~60% height, so HIGH attacks
@@ -12186,7 +12189,7 @@ let SHOW_FIGHT_TEXT = false;   // (on in SANDBOX: the controls list and the figh
 let sandbox = false;
 // ...plus these, which always show: CLASH text (the clash and its power-bar duel) and CRITICAL hits
 const KEEP_TEXTS = new Set(['CRITICAL!', 'WIN!', 'CLASH WON!', 'BROKEN!', 'YARRKO!']);
-const ultRunning = () => !!ult || fighters.some(f => f.action && ['shipUlt', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'sgCut', 'fxSac', 'ultStart', 'ultSeq'].includes(f.action.type));
+const ultRunning = () => !!ult || fighters.some(f => f.action && ['shipUlt', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'sgCut', 'fxSac', 'leeUlt', 'ultStart', 'ultSeq'].includes(f.action.type));
 painTexts.push = function (...items) { for (const p of items) if (p && p.ult === undefined) p.ult = ultRunning(); return Array.prototype.push.apply(this, items); };
 function drawCracks() {
   for (const c of cracks) {
@@ -12646,7 +12649,7 @@ const DOUBLE_ULT = { hold: 0.35 };   // Colbalias: hold I this long (with a full
 // played by a person (keyboard / controller / online) - not the CPU and not a clone
 const humanControlled = f => !f.minion && !!f.controller && (f.controller === 'keyboard' || f.controller === 'net' || f.controller.startsWith('pad'));
 
-function startUltimate(f, alt = false, up = false) {   // (up = UP was held: a third ultimate, if they have one - Lance's Final Explosion)          // alt = DOWN was held: the character's second ultimate (if they have one)
+function startUltimate(f, alt = false, up = false, side = false) {   // (side = LEFT/RIGHT held: a side ultimate, if they have one - Colby's Primary Lotus)   // (up = UP was held: a third ultimate, if they have one - Lance's Final Explosion)          // alt = DOWN was held: the character's second ultimate (if they have one)
   if (f.noScythe) returnScythe(f);                 // the scythe flies back to his hand for the ultimate
   // Power depends on how much meter is left: right after transforming = 100%, nearly drained = 50%
   f.ultPower = 0.5 + 0.5 * clamp((f.ult || 0) / ULT_MAX, 0, 1);
@@ -12656,7 +12659,7 @@ function startUltimate(f, alt = false, up = false) {   // (up = UP was held: a t
   } else f.ult = 0;
   f.ultBuf = 0; f.atkBuf = f.spcBuf = f.grabBuf = 0;
   f.shielding = false; f.ultNerfT = ULT_NERF.time;           // (half meter gain for a while - see ULT_NERF)
-  const C = CHARACTERS[f.char], def = (alt && C.altUlt) || (up && !alt && C.upUlt) || (f.hForm === 3 && C.l3Ult) || C.ult || {};   // (Hunter at Legendary 3: the Dragon Fist)
+  const C = CHARACTERS[f.char], def = (alt && C.altUlt) || (up && !alt && C.upUlt) || (side && !alt && !up && C.sideUlt) || (f.hForm === 3 && C.l3Ult) || C.ult || {};   // (Hunter at Legendary 3: the Dragon Fist)
   if (cage && cage.owner === f && !def.ship) breakCage();   // (Aiden's cage comes down when he goes for an ultimate - except the
                                                             //  PIRATE SHIP SLAM: it stays, so everyone caged is a guaranteed hit)
   heelSay(f, 'roar');
@@ -12665,6 +12668,7 @@ function startUltimate(f, alt = false, up = false) {   // (up = UP was held: a t
                          : { type: 'ultStart', t: 0, dur: def.rush ? 0.6 : def.godChidori ? 0.95 : 0.8, def };
   if (def.dragon) startFlameDragon(f);             // Sevon: the Flame Dragon
   if (def.ship) startShipUlt(f);                   // Aiden: the pirate ship
+  if (def.leeLotus) startLeeLotus(f);              // Colby: Primary Lotus (Rock Lee vs Gaara)
   ultBanner = { t: 1.1, name: def.name || 'ULTIMATE', color: f.color, who: f };
   hitstop = Math.max(hitstop, 0.4);                // dramatic freeze as it starts
   impactFrame = 0.12; impactAt = { x: f.x, y: f.y - 50, ang: 0, all: true, focus: true, invert: true };
@@ -14536,6 +14540,373 @@ function drawTsukuyomi(f) {
   if (T >= C.mass && T < C.mass + 0.5) { sc.fillStyle = `rgba(255,30,30,${0.8 * (1 - (T - C.mass) / 0.5)})`; sc.fillRect(-OX, -OY, SW, SH); }   // (the big hit: a red flash)
   if (T > C.back - 0.3) { sc.fillStyle = `rgba(255,255,255,${1 - fadeOut})`; sc.fillRect(-OX, -OY, SW, SH); }
   sc.fillStyle = '#000'; sc.fillRect(-OX, -OY, SW, 54 + OY); sc.fillRect(-OX, H - 54, SW, 54 + OY);   // letterbox
+  sc.restore();
+}
+
+// ---------------- COLBY: SIDE + I (transformed) - PRIMARY LOTUS (Rock Lee vs Gaara) ----------------
+// sounds/battle/colby-lotus.mp3 plays from the start (the whole 66s clip), and everything is timed to it, shot for shot:
+//   0 - 7.5    the match stops. He bends down and takes off his LEG WEIGHTS - drops the first (1.4: it craters the floor),
+//              then the second (4.8: another crater) - straightens up, and SMIRKS (6.2)
+//   7.5 - 12.75  Lee's stance: front hand out, palm up, the other behind his back (a glitch flickers across at 8.75)
+//   12.75      the match starts again - he POWERS UP (blue flashes)... and at 14.6 he's GONE: a dash, homing in on the nearest
+//              foe. They see it coming (a Z vanish / perfect block slips it). Miss = the song stops, that's it.
+//   HIT        the match stops again. 15 - 16.5 he blurs around them; 16.5 the first blow - a burst of dust off them; 17.5 -
+//              19.75 he circles them faster than they can turn; 20.75 a punch in the face; 23 a kick from above (the floor
+//              rings); 24 behind them - they swing at nothing; 25.25 a kick to the face; 26.75 / 29.25 he RICOCHETS round them,
+//              hitting them every pass; 31 a stomp drives them into the floor; 33 a kick sends them STRAIGHT UP, and he goes
+//              with them (Leaf Shadow Dance); 36 the bandage unwinds off his arm... 39 wraps them up tight; 43 he grabs hold,
+//              turns them upside down... 47 and they DRILL down, spinning, into the stage - 52.75 PRIMARY LOTUS
+//   53 - 66    a crater of dust. It settles; he leaps clear (60), red in the face, burning; they lie wrapped in the crater -
+//              and when the clip ends, they're launched out of it
+const LOTUS = { len: 65.9, vol: 1.0, drop1: 1.4, drop2: 4.8, smirk: 6.2, stance: 7.5, glitch: 8.75, power: 12.75, dash: 14.6, dashDur: 0.32, reach: 1700,
+  dmg: { blow: 3, punch: 4, axe: 4, face: 5, pass: 0.8, stomp: 4, up: 4, lotus: 10 },
+  final: { dmg: 6, base: 640, growth: 6.4, angle: 80, ultFinal: true, xray: 'SPINE' },
+  dust: '#d9c9a0', blue: '#7fd8ff', bandage: '#f4f1e8' };
+function playLeeSong(f) {
+  stopLeeSong(f);
+  if (!soundOn) return null;
+  let el; try { el = new Audio('sounds/battle/colby-lotus.mp3'); } catch (e) { return null; }
+  el.preload = 'auto'; el.volume = clamp(LOTUS.vol * settings.master * settings.music * 1.6, 0, 1);
+  el.play().catch(() => {});
+  const h = { el, at: performance.now() }; f.leeSong = h;
+  return h;
+}
+function stopLeeSong(f) { if (f && f.leeSong) { try { f.leeSong.el.pause(); } catch (e) {} f.leeSong = null; } }
+function startLeeLotus(f) {
+  f.vx = f.vy = 0; f.shielding = false; f.atkBuf = f.spcBuf = f.jumpBuf = f.grabBuf = 0;
+  const gy = f.ground ? f.y : STAGE.y;
+  f.action = { type: 'leeUlt', t: 0, songT: 0, freeze: true, ev: new Set(), weights: [], craters: [], x0: f.x, y0: f.y, gy,
+               cam: { x: f.x, y: f.y - 50, z: 1.5, speed: 4 } };
+  playLeeSong(f);
+}
+// (the leg weights: a dark block falls from his shin and craters the floor)
+function leeDropWeight(f, a, side) {
+  const x = f.x + side * 8 * f.face, y = f.y - 22;
+  a.weights.push({ x, y, vy: 0, side, landed: false });
+}
+function leeFoeFor(f) {
+  let best = null, bd = Infinity;
+  for (const o of fighters) {
+    if (o === f || o.minion || allies(f, o) || o.out || o.respawnTimer > 0 || o.dead || o.halo > 0) continue;
+    const d = Math.hypot(o.x - f.x, o.y - f.y); if (d < bd && d < LOTUS.reach) { bd = d; best = o; }
+  }
+  return best;
+}
+function stepLeeLotus(f, a, dt) {
+  a.songT += dt / uiRealRate();
+  const C = LOTUS, T = a.songT, ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
+  const pw = (f.ultPower || 1) * powerOf(f);
+  // ---- the leg weights falling (any time) ----
+  for (const w of a.weights) if (!w.landed) {
+    w.vy += 5200 * dt; w.y += w.vy * dt;
+    const floor = (w.x > stageL() - 10 && w.x < stageR() + 10) ? STAGE.y : Infinity;
+    if (w.y >= floor - 6) {
+      w.y = floor - 6; w.landed = true;
+      a.craters.push({ x: w.x, y: STAGE.y, r: 46 });
+      shake = Math.max(shake, 26); camPunch = 1; sfx.slam(); sfx.hit(1);
+      dust(w.x, STAGE.y, 26, 2.6); ring(w.x, STAGE.y - 6);
+      burst(w.x, STAGE.y - 4, ['#8a7d6a', '#5a5246', C.dust], 30, -Math.PI / 2, 1.3, 700, { grav: 1400 });
+      impactFrame = Math.max(impactFrame, 0.05); impactAt = { x: w.x, y: STAGE.y - 10, ang: 0, all: false, focus: true };
+    }
+  }
+  // ================= BEFORE THE DASH =================
+  if (!a.victim) {
+    f.vx = f.vy = 0;
+    const grounded = f.ground || f.y >= a.gy - 1;
+    const P = (lean, bob, legA, legB, armA, armB) => pose({ lean, bob, legA, legB, armA, armB });
+    if (T < C.drop2 + 0.4) {                                     // TAKING THEM OFF: bent double, both hands at his shin
+      const second = T > C.drop1 + 0.3, k = (T - (second ? C.drop1 + 0.3 : 0)) / ((second ? C.drop2 : C.drop1) - (second ? C.drop1 + 0.3 : 0));
+      a.pose = P(0.95, -18, second ? [0.15, 1.5] : [0.6, 1.3], second ? [-0.6, 1.4] : [-0.2, 1.6], [0.25 + 0.1 * Math.sin(T * 9), -0.3], [0.1, -0.2]);
+      if (T >= C.drop1 - 0.14 && ev('w1')) leeDropWeight(f, a, 1);
+      if (T >= C.drop2 - 0.14 && ev('w2')) leeDropWeight(f, a, -1);
+      a.cam.x = f.x; a.cam.y = f.y - 10; a.cam.z = 1.9 - 0.2 * clamp(k, 0, 1); a.cam.speed = 4;
+    } else if (T < C.stance) {                                    // straightening up... and that SMIRK
+      const k = clamp((T - C.drop2 - 0.4) / 0.9, 0, 1);
+      a.pose = P(0.95 * (1 - k) + 0.02, -18 * (1 - k) - 3, [0.3, 0.3], [-0.3, 0.3], [0.2, -0.3], [-0.2, -0.3]);
+      if (T >= C.smirk) { a.cam.x = f.x + f.face * 8; a.cam.y = f.y - 92; a.cam.z = 2.6; a.cam.speed = 9; if (ev('smirk')) { sfx.parry(); camPunch = 1; } }
+      else { a.cam.x = f.x; a.cam.y = f.y - 50; a.cam.z = 1.5; a.cam.speed = 3; }
+    } else if (T < C.power) {                                     // LEE'S STANCE: front hand out, palm up - the other behind his back
+      const bob = Math.sin(T * 3) * 1.5;
+      a.pose = P(0.18, -11 + bob, [0.95, 0.75], [-0.75, 0.6], [1.45, -0.35], [-1.25, -1.7]);
+      a.cam.x = f.x + f.face * 40; a.cam.y = f.y - 55; a.cam.z = 1.35; a.cam.speed = 2;
+      if (T >= C.glitch && ev('glitch')) { sfx.vanish(0.5); }
+    } else if (T < C.dash) {                                      // POWERING UP - and the world's free again: they can see it coming
+      if (ev('unfreeze')) { a.freeze = false; sfx.beam(0.5); }
+      const k = (T - C.power) / (C.dash - C.power);
+      a.pose = P(0.12, -13, [0.85, 0.85], [-0.85, 0.85], [0.55, -1.3], [-0.45, -1.3]);
+      if (Math.random() < dt * 30) bolt(f.x + (Math.random() - 0.5) * 50, f.y - Math.random() * 100, Math.random() * Math.PI * 2, 20 + 40 * k, 0.05, Math.random() < 0.5 ? '#ffffff' : C.blue);
+      if (Math.random() < dt * 40) particles.push({ x: f.x + (Math.random() - 0.5) * 60, y: f.y - Math.random() * 20, vx: 0, vy: -200 - Math.random() * 300, life: 0.4, max: 0.4, size: 2, color: C.blue, type: 'bit', grav: 0 });
+      for (const tq of [13.0, 13.5, 14.25]) if (T >= tq && ev('flash' + tq)) { impactFrame = Math.max(impactFrame, 0.05); impactAt = { x: f.x, y: f.y - 50, ang: 0, all: true, focus: true }; shake = Math.max(shake, 8); }
+      a.cam.x = f.x; a.cam.y = f.y - 50; a.cam.z = 1.25; a.cam.speed = 5;
+    } else {                                                      // THE DASH: gone - straight at them
+      if (!a.dashFrom) {
+        a.dashFrom = { x: f.x, y: f.y }; a.target = leeFoeFor(f);
+        ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#ffffff' });
+        burst(f.x, f.y - 50, ['#ffffff', C.blue], 20, 0, Math.PI, 600, { grav: 0 }); sfx.whoosh(true); sfx.vanish(1);
+        dust(f.x, f.y, 12, 1.6);
+        if (!a.target) { a.missed = true; }
+      }
+      const tg = a.target, u = clamp((T - C.dash) / C.dashDur, 0, 1);
+      if (tg && !a.missed) {
+        f.x = lerp(a.dashFrom.x, tg.x - Math.sign(tg.x - a.dashFrom.x || f.face) * 50, u); f.y = lerp(a.dashFrom.y, tg.y, u);
+        f.face = Math.sign(tg.x - a.dashFrom.x) || f.face;
+        a.pose = P(0.9, -4, [-0.3, 0.2], [-0.5, 0.3], [-1.2, 0.2], [-1.0, 0.3]);
+        if (Math.random() < dt * 60) ghosts.push({ fig: figureOf(f), life: 0.18, max: 0.18, color: C.blue });
+        a.cam.x = f.x; a.cam.y = f.y - 50; a.cam.z = 1.0; a.cam.speed = 10;
+        if (u >= 1) {
+          const hx = f.x + f.face * 30, hy = f.y - 55;
+          if (!fighters.includes(tg) || tg.respawnTimer > 0 || isIntangible(tg)) { tg.dodgedFlash = 0.35; a.missed = true; }
+          else if (dashUltParried(f, tg, hx, hy)) { a.missed = true; f.ult = Math.min(f.ult || 0, ULT_MAX / 2); }
+          else {                                                  // CAUGHT: the match stops again - and it all plays out
+            a.victim = tg; a.freeze = true; tg.shielding = false; tg.vx = tg.vy = 0;
+            tg.action = { type: 'leeVictim', t: 0, by: f };
+            const sL = stageL(), sR = stageR();
+            a.cx = clamp(tg.x, sL + 380, sR - 380); a.gy = STAGE.y;
+            impactFrame = 0.1; impactAt = { x: hx, y: hy, ang: 0, all: true, focus: true, invert: true };
+            shake = Math.max(shake, 14); sfx.hit(1);
+          }
+        }
+      } else a.missed = true;
+      if (a.missed) {                                             // MISSED: he skids to a stop - the song cuts out
+        if (ev('miss')) { stopLeeSong(f); sfx.whoosh(false); painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'MISSED', big: false }); }
+        f.action = { type: 'land', t: 0, dur: 0.4 };
+      }
+    }
+    if (!grounded && f.action === a) f.y = Math.min(f.y, a.gy);
+    return;
+  }
+  // ================= THE FIGHT (the match is stopped; every beat on the clip) =================
+  const v = a.victim;
+  if (!fighters.includes(v) || v.respawnTimer > 0) { stopLeeSong(f); f.action = { type: 'land', t: 0, dur: 0.3 }; return; }
+  if (v.action && v.action.type !== 'leeVictim') v.action = { type: 'leeVictim', t: 0, by: f };
+  const cx = a.cx, gy = a.gy, P = (lean, bob, legA, legB, armA, armB, extra) => ({ ...pose({ lean, bob, legA, legB, armA, armB }), ...(extra || {}) });
+  const put = (g, x, y) => { g.x = x; g.y = y; g.vx = g.vy = 0; g.ground = y >= gy - 1; g.onPlatform = null; };
+  const vPose = p => { if (v.action) v.action.pose = p; };
+  const STAND = P(0.02, -4, [0.3, 0.25], [-0.3, 0.25], [0.25, -0.4], [-0.25, -0.4]);
+  const STAG = P(-0.45, -6, [0.6, 0.5], [-0.5, 0.25], [-0.7, 0.7], [0.9, 0.6]);
+  const SWING = P(0.5, -6, [0.8, 0.4], [-0.7, 0.3], [2.2, -0.2], [-0.4, -0.6]);
+  const WRAP = P(0, 0, [0.06, 0.02], [-0.06, 0.02], [0.08, 0], [-0.08, 0]);
+  const hitV = (dmg, dir, big) => {
+    v.damage += dmg * pw; if (v.minion && v.owner && v.owner.respawnTimer <= 0) v.owner.damage += dmg * pw * CLONE.link;
+    v.hitFlash = 0.12; hitstop = Math.max(hitstop, big ? 0.08 : 0.04); shake = Math.max(shake, big ? 22 : 10); sfx.hit(1); if (big) sfx.clash(true);
+    burst(v.x, v.y - 55, ['#ffffff', C.blue, '#ffe066'], big ? 22 : 10, dir > 0 ? 0 : Math.PI, 0.9, 600, { grav: 0 });
+    particles.push({ x: v.x, y: v.y - 55, vx: 0, vy: 0, life: 0.1, max: 0.1, r: big ? 30 : 18, type: 'impact' });
+    if (big) { impactFrame = Math.max(impactFrame, 0.06); impactAt = { x: v.x, y: v.y - 55, ang: 0, all: true, focus: true, invert: true }; }
+  };
+  const blood = () => { for (let k = 0; k < 6; k++) particles.push({ x: v.x + (Math.random() - 0.5) * 10, y: v.y - 80, vx: (Math.random() - 0.5) * 200, vy: -100 - Math.random() * 200, life: 0.6, max: 0.6, size: 2, color: '#b0121a', type: 'bit', grav: 900 }); };
+  const trail = (col = C.blue) => { if ((a.ghostT = (a.ghostT || 0) - dt) <= 0) { a.ghostT = 0.02; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: col }); } };
+  const circle = (r, spd, y0) => { const ang = T * spd; put(f, cx + Math.cos(ang) * r, gy - Math.max(0, Math.sin(ang * 1.7)) * 70 - (y0 || 0)); f.face = Math.sign(cx - f.x) || f.face; a.pose = P(0.9, -4, [-0.3, 0.2], [-0.5, 0.3], [-1.2, 0.2], [-1.0, 0.3]); trail(); };
+  const camOn = (x, y, z, sp = 4) => { a.cam.x = x; a.cam.y = y; a.cam.z = z; a.cam.speed = sp; };
+  const side = a.side || (a.side = Math.sign(f.x - v.x) || -1);   // (which side of them he fights from)
+  // where they are: on their feet in the middle, unless the beat says otherwise (set below)
+  let vx = cx, vy = gy;
+  v.face = Math.sign(f.x - v.x) || v.face;
+  if (T < 16.5) {                                                  // BLUR: he's everywhere at once
+    put(v, vx, vy); vPose(STAND); circle(170, 22); camOn(cx, gy - 60, 1.3, 6);
+  } else if (T < 17.5) {                                           // 16.5: the FIRST BLOW - dust bursts off them
+    if (ev('b1')) { put(f, cx + side * 55, gy); f.face = -side; hitV(C.dmg.blow, -side, true); dust(cx, gy, 40, 3.5); burst(cx, gy - 40, [C.dust, '#c2b080', '#efe2bd'], 60, -Math.PI / 2, 1.6, 900, { grav: 600 }); a.vSlide = 0; }
+    a.vSlide = Math.min(70, (a.vSlide || 0) + dt * 400); put(v, cx - side * a.vSlide, gy); vPose(STAG);
+    a.pose = P(0.5, -6, [0.9, 0.4], [-0.8, 0.3], [1.6, 0], [-0.6, -0.8]); camOn(cx, gy - 60, 1.2, 5);
+    if (Math.random() < dt * 30) dust(cx + (Math.random() - 0.5) * 160, gy, 3, 2);
+  } else if (T < 19.75) {                                          // he circles them - faster than they can turn
+    vx = cx - side * 70; put(v, vx, gy); vPose(STAND); v.face = Math.floor(T * 2.5) % 2 ? 1 : -1;
+    const ang = T * 16; put(f, vx + Math.cos(ang) * 210, gy - Math.abs(Math.sin(ang)) * 40); f.face = Math.sign(vx - f.x) || 1;
+    a.pose = P(0.9, -4, [-0.3, 0.2], [-0.5, 0.3], [-1.2, 0.2], [-1.0, 0.3]); trail(); camOn(vx, gy - 70, 1.5, 4);
+  } else if (T < 20.75) {                                          // they swing at where he WAS
+    vx = cx - side * 70; put(v, vx, gy); v.face = side; vPose(SWING);
+    put(f, vx - side * 150, gy); f.face = side; a.pose = P(0.2, -10, [0.9, 0.7], [-0.7, 0.6], [1.45, -0.35], [-1.25, -1.7]); camOn(vx, gy - 60, 1.4, 5);
+  } else if (T < 22.0) {                                           // 20.75: a PUNCH in the face
+    vx = cx - side * 70;
+    if (ev('b2')) { put(f, vx - side * 50, gy); f.face = side; hitV(C.dmg.punch, side, true); blood(); }
+    put(v, vx + side * Math.min(40, (T - 20.75) * 200), gy); v.face = -side; vPose(STAG);
+    a.pose = P(0.55, -6, [0.9, 0.4], [-0.8, 0.3], [1.6, 0], [-0.6, -0.8]);
+    camOn(v.x, gy - 90, 2.1, 7);
+  } else if (T < 23.0) {                                           // he comes in again - from way out
+    vx = cx - side * 30; put(v, vx, gy); vPose(STAG);
+    const u = clamp((T - 22) / 0.9, 0, 1); put(f, lerp(cx + side * 600, vx + side * 40, u), gy - 140 * Math.sin(u * Math.PI));
+    f.face = -side; a.pose = P(0.9, -4, [-0.3, 0.2], [-0.5, 0.3], [-1.2, 0.2], [-1.0, 0.3]); trail(); camOn(lerp(cx + side * 300, vx, u), gy - 80, 1.0, 6);
+  } else if (T < 24.0) {                                           // 23: a KICK from above - the floor rings
+    vx = cx - side * 30;
+    if (ev('b3')) { hitV(C.dmg.axe, -side, true); for (let k = 0; k < 3; k++) auraWaves.push({ x: vx, y: gy - 4, t: -k * 0.12, dur: 0.5, max: 140 + 40 * k, color: '#ffffff' }); dust(vx, gy, 24, 2.4); }
+    put(v, vx, gy); vPose(P(0.6, -16, [0.8, 1.2], [-0.6, 1.0], [0.3, 0.4], [-0.2, 0.5]));
+    put(f, vx + side * 30, gy - 110 + Math.min(40, (T - 23) * 120)); f.face = -side; a.pose = P(0.3, -4, [0.3, -0.1], [-0.6, 1.2], [2.4, -0.4], [-2.2, -0.4]);
+    camOn(vx, gy - 80, 1.5, 6);
+  } else if (T < 24.5) {                                           // 24: he's BEHIND them - they swing round at nothing
+    vx = cx - side * 30; put(v, vx, gy); v.face = -side; vPose(SWING);
+    put(f, vx - side * 90, gy); f.face = side; a.pose = P(0.15, -12, [0.95, 0.75], [-0.75, 0.6], [1.45, -0.35], [-1.25, -1.7]); camOn(vx, gy - 60, 1.6, 6);
+  } else if (T < 25.25) {                                          // the blitz - blue streaks
+    vx = cx - side * 30; put(v, vx, gy); vPose(STAND);
+    const u = (T - 24.5) / 0.75; put(f, vx + Math.cos(u * Math.PI * 3) * 320, gy - 60 * Math.abs(Math.sin(u * Math.PI * 3))); f.face = Math.sign(vx - f.x) || 1;
+    a.pose = P(0.9, -4, [-0.3, 0.2], [-0.5, 0.3], [-1.2, 0.2], [-1.0, 0.3]); trail(); camOn(vx, gy - 60, 1.1, 6);
+  } else if (T < 26.75) {                                          // 25.25: a KICK to the face - it cracks
+    vx = cx - side * 30;
+    if (ev('b4')) { put(f, vx + side * 60, gy - 20); f.face = -side; hitV(C.dmg.face, -side, true); blood(); }
+    put(v, vx - side * Math.min(30, (T - 25.25) * 120), gy); v.face = side; vPose(STAG);
+    a.pose = P(-0.3, -8, [2.0, 0.1], [-0.4, 0.4], [-0.8, -0.6], [1.2, -0.4]);
+    if (T < 26.5) camOn(v.x, gy - 90, 2.2, 7); else camOn(cx, gy - 120, 0.9, 6);
+  } else if (T < 31.0) {                                           // THE RICOCHET: wall to wall, through them every time
+    vx = cx - side * 40; put(v, vx, gy); vPose(Math.floor(T * 6) % 2 ? STAG : P(0.4, -8, [0.6, 0.6], [-0.5, 0.4], [0.9, 0.5], [-0.8, 0.5]));
+    const pts = [[-1, 0.15], [1, 0.75], [-0.6, 1], [1, 0.25], [-1, 0.7], [0.5, 1]];   // [side, height] bounce points round them
+    const passT = T < 28.25 ? (T - 26.75) / 0.25 : T < 29.25 ? -1 : (T - 29.25) / 0.25;
+    if (passT < 0) {                                               // (28.25 - 29.25: a look at them, battered)
+      put(f, vx + side * 420, gy - 180); a.pose = P(0.2, -10, [0.9, 0.7], [-0.7, 0.6], [0.8, -0.8], [-0.8, -0.8]); camOn(vx, gy - 90, 2.0, 7);
+    } else {
+      const i = Math.floor(passT), u = passT - i, p0 = pts[i % pts.length], p1 = pts[(i + 1) % pts.length];
+      const P0 = { x: vx + p0[0] * 380, y: gy - 30 - p0[1] * 300 }, P1 = { x: vx + p1[0] * 380, y: gy - 30 - p1[1] * 300 };
+      put(f, lerp(P0.x, P1.x, u), lerp(P0.y, P1.y, u)); f.face = Math.sign(P1.x - P0.x) || 1;
+      a.pose = P(0.95, -2, [-0.4, 0.3], [-0.6, 0.4], [1.6, 0], [-1.0, 0.3]); trail();
+      if (ev('bounce' + (T < 28.25 ? 'a' : 'b') + i)) {
+        hitV(C.dmg.pass, f.face, false);
+        burst(P0.x, P0.y, ['#ffffff', '#cfd8e0', '#8a96a0'], 12, 0, Math.PI, 500, { grav: 300 }); ring(P0.x, P0.y);   // (the "wall" he pushed off)
+        sfx.whoosh(false);
+      }
+      camOn(vx, gy - 130, 0.85, 5);
+    }
+  } else if (T < 33.0) {                                           // 31: a STOMP drives them into the floor - it cracks
+    vx = cx - side * 40;
+    if (ev('b6')) { hitV(C.dmg.stomp, 1, true); a.craters.push({ x: vx, y: gy, r: 90 }); dust(vx, gy, 30, 3); shake = 30; sfx.slam(); }
+    put(v, vx, gy); vPose(P(0, 0, [1.4, 0.1], [1.5, 0.2], [1.6, 0.2], [1.4, 0.3], { spin: side * 1.45 }));   // (flat on their back)
+    put(f, vx + side * 24, gy - (T < 31.6 ? 40 : 0)); f.face = -side;
+    a.pose = T < 31.6 ? P(0.3, -4, [0.15, 0.05], [-0.6, 1.2], [2.4, -0.4], [-2.2, -0.4]) : P(0.7, -16, [0.8, 1.3], [-0.6, 1.0], [0.6, -0.6], [-0.4, -0.6]);
+    camOn(vx, gy - 40, 1.6, 6);
+  } else if (T < 36.0) {                                           // 33: a KICK sends them STRAIGHT UP - and he goes with them
+    vx = cx - side * 40;
+    if (ev('b7')) { hitV(C.dmg.up, 1, true); dust(vx, gy, 34, 3.2); auraWaves.push({ x: vx, y: gy - 10, t: 0, dur: 0.4, max: 160, color: '#ffffff' }); sfx.whoosh(true); }
+    const u = clamp((T - 33.0) / 1.6, 0, 1), up = (1 - Math.pow(1 - u, 2.2)) * 560;
+    put(v, vx, gy - up); vPose(P(-0.3, 0, [0.5, 0.6], [-0.4, 0.5], [-0.8, 0.5], [0.9, 0.4], { spin: Math.min(T - 33, 1.2) * -side * 2 }));
+    if (T < 33.25) { put(f, vx + side * 30, gy); f.face = -side; a.pose = P(-0.6, -14, [2.6, 0], [-0.3, 1.0], [-1.0, -0.3], [0.8, -0.5]); }
+    else { const w = clamp((T - 33.25) / 1.4, 0, 1); put(f, vx + side * lerp(30, 14, w), gy - (1 - Math.pow(1 - w, 2.2)) * 560 + 40); f.face = -side; a.pose = P(-0.2, -4, [0.4, 0.6], [-0.4, 0.8], [2.6, -0.3], [2.2, -0.5]); if (T < 34.8) trail(); }
+    camOn(vx, gy - 60 - up * 0.9, T < 34 ? 0.9 : 1.2, 5);
+  } else if (T < 47.0) {                                           // UP THERE: the bandage unwinds... wraps them up... he grabs hold, turns them over
+    vx = cx - side * 40; const top = gy - 560, drift = Math.sin(T * 1.3) * 8;
+    if (T < 43.0) {
+      put(v, vx, top + drift); vPose(T < 39 ? P(-0.3, 0, [0.5, 0.6], [-0.4, 0.5], [-0.8, 0.5], [0.9, 0.4], { spin: -side * 0.6 }) : { ...WRAP, spin: -side * 0.3 });
+      put(f, vx + side * 70, top - 50 + drift); f.face = -side;
+      a.pose = T < 39 ? P(-0.1, -6, [0.6, 0.8], [-0.4, 0.9], [1.2, -0.2], [-0.8, -0.5]) : P(0.2, -6, [0.6, 0.8], [-0.4, 0.9], [1.6, 0.1], [1.4, 0.2]);
+      if (T >= 39 && ev('wrap')) { sfx.whoosh(true); }
+      if (T < 39) camOn(f.x + f.face * 18, f.y - 50, 2.4, 6); else camOn(vx, top - 30, 1.5, 5);
+    } else {
+      if (ev('grab')) { sfx.hit(0.8); shake = Math.max(shake, 10); }
+      const k = clamp((T - 44.0) / 2.5, 0, 1), flip = Math.PI * easeOut(clamp((T - 43.5) / 1.2, 0, 1));
+      put(v, vx, top - 40 * k + drift); vPose({ ...WRAP, spin: -side * flip });
+      put(f, vx + side * 12, top - 40 * k - 70 + drift); f.face = -side;
+      a.pose = P(0, -2, [0.3, 0.4], [-0.3, 0.4], [2.5, -0.8], [2.3, -0.9], { spin: -side * flip });   // (hugging them, upside down above them)
+      camOn(vx, top - 60, 1.6 - 0.3 * k, 4);
+    }
+  } else if (T < 52.75) {                                          // THE DRILL: spinning, faster and faster, straight down
+    vx = cx - side * 40; const top = gy - 600, u = clamp((T - 47) / 5.75, 0, 1), e = u * u * u;
+    const yv = lerp(top, gy - 6, e), spin = (T - 47) * (6 + 30 * u);
+    put(v, vx, yv); vPose({ ...WRAP, spin: Math.PI + spin * 0.0 });
+    v.face = Math.cos(spin) > 0 ? 1 : -1;
+    put(f, vx, yv - 70); f.face = -v.face;
+    a.pose = P(0, -2, [0.3, 0.4], [-0.3, 0.4], [2.5, -0.8], [2.3, -0.9], { spin: Math.PI });
+    if (Math.random() < dt * 60) ghosts.push({ fig: figureOf(f), life: 0.25, max: 0.25, color: '#ff4a3a' });
+    if (Math.random() < dt * 40) particles.push({ x: vx + (Math.random() - 0.5) * 70, y: yv - Math.random() * 120, vx: 0, vy: -1600, life: 0.15, max: 0.15, size: 3, color: Math.random() < 0.5 ? '#ffffff' : '#ff4a3a', type: 'bit', grav: 0 });
+    shake = Math.max(shake, 4 + 10 * u); camOn(vx, lerp(top, gy - 80, Math.min(1, e * 1.2)), 1.0 - 0.15 * u, 8);
+  } else {                                                         // 52.75: PRIMARY LOTUS - and the dust
+    vx = cx - side * 40;
+    if (ev('lotus')) {
+      hitV(C.dmg.lotus, 1, true); a.craters.push({ x: vx, y: gy, r: 170 });
+      shake = 44; camPunch = 1; impactFrame = 0.25; impactAt = { x: vx, y: gy - 30, ang: 0, all: true, focus: true, invert: true };
+      sfx.huge(); sfx.slam(); sfx.clash(true); dust(vx, gy, 60, 5); ring(vx, gy - 10); ring(vx, gy - 50);
+      burst(vx, gy - 10, ['#8a7d6a', '#5a5246', C.dust, '#ffffff'], 80, -Math.PI / 2, 1.5, 1300, { grav: 1200 });
+      auraWaves.push({ x: vx, y: gy - 10, t: 0, dur: 0.6, max: 380, color: C.dust });
+    }
+    put(v, vx, gy); vPose({ ...WRAP, spin: side * 1.45 });       // (lying in the crater, still wrapped)
+    if (T < 60.0) { put(f, vx + side * 50, gy); f.face = -side; a.pose = P(0.8, -16, [0.8, 1.3], [-0.6, 1.0], [0.6, -0.6], [-0.4, -0.6]); }
+    else {                                                         // 60: he LEAPS clear - spent, red in the face, burning
+      const u = clamp((T - 60) / 0.9, 0, 1); put(f, vx + side * lerp(50, 300, u), gy - Math.sin(u * Math.PI) * 160); f.face = -side;
+      a.pose = u < 1 ? P(-0.2, -10, [0.9, 1.2], [-0.4, 1.4], [1.8, -0.4], [-1.6, -0.5]) : P(0.5, -14, [0.85, 0.9], [-0.7, 0.8], [0.6, -0.5], [-0.5, -0.5]);
+      if (Math.random() < dt * 30) particles.push({ x: f.x + (Math.random() - 0.5) * 40, y: f.y - Math.random() * 100, vx: 0, vy: -160, life: 0.4, max: 0.4, size: 2, color: Math.random() < 0.5 ? '#ff8a2a' : '#ffd23f', type: 'bit', grav: 0 });
+    }
+    if (Math.random() < dt * (T < 58 ? 20 : 6)) dust(vx + (Math.random() - 0.5) * 300, gy, 3, 2.5);
+    // the camera: the crater from above... the dust settling (a look round at everyone else)... him... them
+    const others = fighters.filter(o => o !== f && o !== v && !o.minion && o.respawnTimer <= 0);
+    if (T < 55) camOn(vx, gy - 140, 0.8, 3);
+    else if (T < 60) { const o = others.length ? others[Math.floor((T - 55) / (5 / others.length)) % others.length] : null; if (o) camOn(o.x, o.y - 60, 1.6, 4); else camOn(vx + (T - 57.5) * 60, gy - 100, 1.0, 1.5); }
+    else if (T < 62) camOn(f.x, f.y - 60, 1.7, 5);
+    else camOn(vx, gy - 40, T < 64.5 ? 1.8 : 1.0, 3);
+    if (T >= C.len) {                                              // the clip's over: they're LAUNCHED out of the crater
+      stopLeeSong(f);
+      v.action = null; f.action = { type: 'land', t: 0, dur: 0.3 };
+      knock(v, C.final, -side || 1, pw, v.x, v.y - 40);
+      dust(vx, gy, 40, 4); shake = Math.max(shake, 24); sfx.huge();
+      return;
+    }
+  }
+}
+// (drawing - over the world: the letterbox, the speed lines, the flashes, the weights, the craters, the bandage, the dust)
+function drawLeeCut(f) {
+  const a = f.action, C = LOTUS, T = a.songT || 0, Z = camZ(), now = performance.now() / 1000, sc = sctx, v = a.victim;
+  sc.save();
+  // the craters on the floor
+  for (const cr of a.craters) {
+    const p = toScreen(cr.x, cr.y), r = cr.r * Z;
+    sc.fillStyle = 'rgba(40,30,22,0.55)'; sc.beginPath(); sc.ellipse(p.x, p.y + 2, r, r * 0.22, 0, 0, Math.PI * 2); sc.fill();
+    sc.strokeStyle = 'rgba(30,22,16,0.8)'; sc.lineWidth = Math.max(1.5, 2 * Z);
+    for (let k = 0; k < 7; k++) { const an = hash(cr.x + k * 3.1) * Math.PI - Math.PI, l = r * (0.8 + hash(k * 7.7 + cr.r) * 0.7); sc.beginPath(); sc.moveTo(p.x, p.y); sc.lineTo(p.x + Math.cos(an) * l, p.y + Math.abs(Math.sin(an)) * l * 0.2); sc.stroke(); }
+  }
+  // the leg weights
+  for (const w of a.weights) {
+    const p = toScreen(w.x, w.y), s = Z;
+    sc.fillStyle = '#2a2a2e'; sc.strokeStyle = '#000'; sc.lineWidth = 2;
+    sc.beginPath(); sc.rect(p.x - 13 * s, p.y - 9 * s, 26 * s, 15 * s); sc.fill(); sc.stroke();
+    sc.fillStyle = '#5a5a62'; sc.fillRect(p.x - 13 * s, p.y - 9 * s, 26 * s, 3 * s);
+    sc.fillStyle = '#f0962e'; sc.fillRect(p.x - 4 * s, p.y - 9 * s, 8 * s, 15 * s);   // (the strap)
+  }
+  // the BANDAGE: unwinding off his arm (36 - 39), flying round them (39 - 41.5), wrapped tight (41.5 on)
+  if (v && T >= 36 && T < C.len) {
+    const hand = toScreen(f.x + f.face * 20, f.y - 70), vc = toScreen(v.x, v.y - 48);
+    sc.strokeStyle = C.bandage; sc.lineCap = 'round'; sc.lineWidth = Math.max(3, 5 * Z);
+    if (T < 41.5) {
+      const unw = clamp((T - 36) / 3, 0, 1), fly = clamp((T - 39) / 2.5, 0, 1);
+      sc.beginPath(); sc.moveTo(hand.x, hand.y);
+      const N = 40;
+      for (let i = 1; i <= N; i++) {
+        const u = i / N; if (u > unw + fly) break;
+        const wav = Math.sin(now * 9 + u * 14) * 18 * Z * (1 - fly);
+        let x = hand.x + (vc.x - hand.x) * u * fly + Math.cos(u * 6) * 40 * Z * (1 - fly) * u, y = hand.y + (vc.y - hand.y) * u * fly + wav - u * 40 * Z * (1 - fly);
+        if (fly > 0 && u > 0.6) { const sp = (u - 0.6) / 0.4 * fly * Math.PI * 6; x = vc.x + Math.cos(sp + now * 4) * 30 * Z; y = vc.y - 35 * Z + (u - 0.6) / 0.4 * 70 * Z; }
+        sc.lineTo(x, y);
+      }
+      sc.stroke();
+    }
+    if (T >= 40.5) {                                               // the wraps round them
+      const k = clamp((T - 40.5) / 1.0, 0, 1), sp = v.action && v.action.pose && v.action.pose.spin || 0;
+      sc.save(); sc.translate(vc.x, vc.y); sc.rotate(sp);
+      for (let i = 0; i < Math.round(6 * k); i++) { const yy = (-32 + i * 12) * Z; sc.beginPath(); sc.moveTo(-15 * Z, yy - 3 * Z); sc.lineTo(15 * Z, yy + 3 * Z); sc.stroke(); }
+      sc.restore();
+    }
+  }
+  // the DUST CLOUD after the Lotus
+  if (v && T >= 52.75) {
+    const p = toScreen(a.cx - (a.side || 1) * 40, a.gy), k = T < 55 ? 1 : clamp(1 - (T - 55) / 10.9, 0.25, 1);
+    for (let i = 0; i < 14; i++) {
+      const ang = i / 14 * Math.PI, rr = (140 + 60 * Math.sin(now * 0.7 + i)) * Z * (1 + 0.04 * (T - 52.75));
+      sc.fillStyle = `rgba(217,201,160,${0.55 * k})`; sc.beginPath(); sc.arc(p.x + Math.cos(ang + Math.PI) * rr * 1.2, p.y - Math.sin(ang) * rr * 0.6, (60 + 30 * hash(i)) * Z, 0, Math.PI * 2); sc.fill();
+    }
+  }
+  // the screen itself: speed lines while he blitzes, the red of the spin, the flashes, the glitch
+  const blitz = v && ((T > 15 && T < 16.5) || (T > 17.75 && T < 19.75) || (T > 22 && T < 22.9) || (T > 24.5 && T < 25.25) || (T > 33.25 && T < 34));
+  const dashing = !v && T >= C.dash && T < C.dash + C.dashDur;
+  if (blitz || dashing) {
+    sc.fillStyle = 'rgba(30,90,200,0.25)'; sc.fillRect(-OX, -OY, SW, SH);
+    sc.strokeStyle = 'rgba(190,235,255,0.55)'; sc.lineWidth = 3;
+    for (let i = 0; i < 22; i++) { const y = ((i * 97 + now * 2400) % (SH)) - OY, x = ((i * 211) % SW) - OX; sc.beginPath(); sc.moveTo(x, y); sc.lineTo(x + 260, y - 60); sc.stroke(); }
+  }
+  if (v && T > 44 && T < 52.75) {                                  // THE SPIN: red, streaking
+    const k = clamp((T - 44) / 2, 0, 1);
+    sc.fillStyle = `rgba(200,20,20,${0.4 * k})`; sc.fillRect(-OX, -OY, SW, SH);
+    sc.strokeStyle = `rgba(255,255,255,${0.5 * k})`; sc.lineWidth = 2;
+    for (let i = 0; i < 16; i++) { const x = ((i * 137 + now * 1500) % SW) - OX; sc.beginPath(); sc.moveTo(x, -OY); sc.lineTo(x - 300, H + OY); sc.stroke(); }
+  }
+  const flash = (t0, d, a0 = 1) => { if (T >= t0 && T < t0 + d) { sc.fillStyle = `rgba(255,255,255,${a0 * (1 - (T - t0) / d)})`; sc.fillRect(-OX, -OY, SW, SH); } };
+  if (v) { flash(16.5, 0.25); flash(26.5, 0.3); flash(31.0, 0.75, 0.85); flash(52.75, 0.6); }
+  if (!v) { flash(13.5, 0.3, 0.9); flash(C.drop1, 0.12, 0.5); flash(C.drop2, 0.12, 0.5); }
+  if (T >= C.glitch && T < C.glitch + 0.3) {                       // (the glitch)
+    for (let i = 0; i < 9; i++) { const y = hash(i * 3.3 + Math.floor(now * 30)) * H, h = 6 + hash(i * 5.1) * 26; sc.fillStyle = ['rgba(255,0,180,0.45)', 'rgba(0,255,220,0.45)', 'rgba(255,240,0,0.4)'][i % 3]; sc.fillRect(-OX + (hash(i) - 0.5) * 60, y, SW, h); }
+  }
+  if (a.freeze) { sc.fillStyle = '#000'; sc.fillRect(-OX, -OY, SW, 54 + OY); sc.fillRect(-OX, H - 54, SW, 54 + OY); }   // letterbox
   sc.restore();
 }
 
@@ -16929,7 +17300,9 @@ function stepAction(f, inp, dt) {
   if (a.type === 'ss1Cut') return stepSs1Cut(f, a, dt);
   if (a.type === 'tsukuyomi') return stepTsukuyomi(f, a, dt);      // Colbalias: Tsukuyomi
   if (a.type === 'sgCut') return stepSsgCut(f, a, dt);             // Lance: Super Saiyan God
-  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { f.sgUsed = false; startSsgCut(f); } return; }
+  if (a.type === 'leeUlt') return stepLeeLotus(f, a, dt);          // Colby: Primary Lotus
+  if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
+  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'leeUlt', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { f.sgUsed = false; startSsgCut(f); } return; }
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
   if (a.type === 'fxFrozen') { if (!a.by.action || a.by.action.type !== 'fxSac') { f.action = { type: 'hitstun', t: 0, dur: 0.5 }; } f.vx = f.vy = 0; return; }
   if (a.type === 'sgVictim') { if (!a.by.action || a.by.action.type !== 'sgCut') f.action = null; return; }
@@ -17264,11 +17637,11 @@ function freeControl(f, inp, dt) {
     // COLBALIAS - TWO BARS, the normal controls: a bar full = I TRANSFORMS (that bar drains while he's transformed);
     // transformed = I is the ULTIMATE (DOWN = Shadow Clone Rush), using up that bar. Then his second bar can do it all again.
     if (f.ultBuf > 0 && !ult) {
-      if (f.transformed && f.ult > (f.tfFloor || 0)) { startUltimate(f, !!inp.down, !!inp.up); return; }
+      if (f.transformed && f.ult > (f.tfFloor || 0)) { startUltimate(f, !!inp.down, !!inp.up, !!inp.dir); return; }
       if (!f.transformed && f.ult >= ULT_MAX / 2) startTransform(f);
     }
   } else if (f.ultBuf > 0) {
-    if (f.transformed && f.ult > 0) { startUltimate(f, !!inp.down, !!inp.up); return; }   // (holding DOWN = the second ultimate, if they have one)
+    if (f.transformed && f.ult > 0) { startUltimate(f, !!inp.down, !!inp.up, !!inp.dir); return; }   // (holding DOWN = the second ultimate, if they have one)
     if (!f.transformed && f.ult >= ULT_MAX) {
       if (CHARACTERS[f.char].uiTransform) { lanceTransform(f); return; }   // Lance: Super Saiyan -> Super Saiyan 2 -> Ultra Instinct
       startTransform(f);
@@ -17448,7 +17821,7 @@ function updateFighter(f, inp, dt) {
   f.opening = Math.max(0, (f.opening || 0) - dt);               // the window to punish after a perfect block
   syncKame(f);
   if (f.kiSnd && !(f.action && f.action.type === 'kiCharge')) stopKiChargeSound(f);
-  const inUlt = f.action && ['ultStart', 'ultSeq', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen'].includes(f.action.type);
+  const inUlt = f.action && ['ultStart', 'ultSeq', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim'].includes(f.action.type);
   if (f.transformed) {                                            // transformed: the meter slowly drains
     if (f.look && f.look.doubleUlt) {                            // Colbalias: only the bar he transformed on drains (same ~14s as anyone's)
       const fl = f.tfFloor || 0;
@@ -17526,7 +17899,7 @@ function updateFighter(f, inp, dt) {
   const a = f.action;
   const floating = a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
     (a.type === 'attack' && a.move.floatWhile && a.move.floatWhile(f, a)) ||
-    a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
+    a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
     (a.type === 'hitstun' && (a.impaled || (a.flat && a.t < a.flat))) ||
     (a.type === 'timeStop' && a.bind) ||                                    // held in Lance's God Bind   // skewered on the Red Chidori / launched dead flat (Hundred Clone Rush)
     a.type === 'odmReel' || a.type === 'odmSpin' || a.type === 'odmLedge' ||   // Sevon flying on his ODM gear
@@ -17635,9 +18008,9 @@ function updateFighter(f, inp, dt) {
   // Blast zones
   if (f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
-    if (f.action && ['sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen'].includes(f.action.type)) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
+    if (f.action && ['sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim'].includes(f.action.type)) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
     if (f.char === 'LANCE' && !f.sgUsed && !f.selfKO && isFinite(f.stocks) && f.stocks <= 1 && !f.out) {   // LANCE'S LAST STOCK: SUPER SAIYAN GOD (once a match - however he went out)
-      if (ult || fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
+      if (ult || fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'leeUlt', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
         // (someone's ultimate is still playing: he's HELD at the edge - untouchable - and it starts the moment that's over)
         f.sgUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
         f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0 }; return;
@@ -18726,7 +19099,7 @@ function updateSim(dt) {
   updateCannons(dt);
 
   // LANCE'S ULTRA INSTINCT: the whole match stops to watch - everyone but him and the one he's beating on is frozen
-  const uiCut = fighters.find(f => f.action && (f.action.type === 'uiTransform' || f.action.type === 'ssj2Cut' || f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'tsukuyomi' || f.action.type === 'sgCut' || f.action.type === 'fxSac' ||
+  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze) || f.action.type === 'uiTransform' || f.action.type === 'ssj2Cut' || f.action.type === 'hL3Cut' || f.action.type === 'ss1Cut' || f.action.type === 'tsukuyomi' || f.action.type === 'sgCut' || f.action.type === 'fxSac' ||
                                                  (f.action.type === 'flameDragon' && (f.action.phase === 'summon' || f.action.phase === 'release'))));   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
   for (const f of fighters) f.uiFrozen = !!uiCut && f !== uiCut && f !== uiCut.action.victim;
   for (const f of fighters.slice()) {
@@ -19505,7 +19878,7 @@ function getPose(p) { return withCarry(p, basePose(p)); }
 function basePose(p) {
   const a = p.action;
   if (a && a.odmPose) return { ...a.odmPose };                // Sevon on his ODM gear (reeling in / Levi spin)
-  if (a && (a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'fxSac') && a.pose) return { ...a.pose };   // Hunter powering up into Legendary 3
+  if (a && (a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'fxSac' || a.type === 'leeUlt' || a.type === 'leeVictim') && a.pose) return { ...a.pose };   // Hunter powering up into Legendary 3
   if (a && a.type === 'beamClash') { const q = { ...a.pose }; q.lean += Math.sin(p.anim * 70) * 0.04; return q; }   // pushing his beam, shaking
   if (a && a.type === 'attack') {
     const m = a.move;
@@ -20980,7 +21353,7 @@ function drawFighter(p) {
     if (a.bones) { drawBonePile(p, a); return; }
   }
   const tired = a && a.level > 0;
-  const intangible = isIntangible(p) && p.invuln <= 0 && !(a && ['clash', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen'].includes(a.type)) && !(a && a.move && (a.move.dragonFist || a.move.finalExp));   // not dodging
+  const intangible = isIntangible(p) && p.invuln <= 0 && !(a && ['clash', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim'].includes(a.type)) && !(a && a.move && (a.move.dragonFist || a.move.finalExp));   // not dodging
   const blink = p.invuln > 0 && Math.floor(p.invuln * 12) % 2 === 0;
   const charging = a && a.type === 'attack' && a.phase === 'charge';
   const chargeFlash = charging && Math.floor(p.anim * 16) % 2 === 0;
@@ -21760,6 +22133,8 @@ function drawHUD() {
   if (l3F) { if (l3F.action.l2) { drawHunterL2Cut(l3F); if (ultBanner) drawUltHUD(); } else drawHunterL3Cut(l3F); return; }
   const fxF = fighters.find(f => f.action && f.action.type === 'fxSac');
   if (fxF) { drawFxSac(fxF); return; }                               // Lance's Final Explosion - the sacrifice
+  const leeF = fighters.find(f => f.action && f.action.type === 'leeUlt');
+  if (leeF) { drawLeeCut(leeF); if (ultBanner) drawUltHUD(); return; }   // Colby's Primary Lotus
   const sgF = fighters.find(f => f.action && f.action.type === 'sgCut');
   if (sgF) { drawSsgCut(sgF); if (ultBanner) drawUltHUD(); return; }   // Lance's Super Saiyan God comeback
   const tsuF = fighters.find(f => f.action && f.action.type === 'tsukuyomi');
@@ -25036,7 +25411,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)
