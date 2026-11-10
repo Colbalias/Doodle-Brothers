@@ -10880,6 +10880,14 @@ const BATTLE_MUSIC = { vol: 0.42, fadeIn: 0.8, fadeOut: 1.4, songs: [
   { file: 'its-going-down-now.mp3', from: 0 },
   { file: 'paranoia.mp3', from: 0 },
   { file: 'pillar-men-theme.mp3', from: 0 },
+  // update 4
+  { file: 'bring-me-to-life.mp3', from: 0 },
+  { file: 'chop-suey.mp3', from: 0 },
+  { file: 'through-the-fire-and-flames.mp3', from: 0 },
+  { file: 'a-samurais-death.mp3', from: 0 },
+  { file: 'gas-gas-gas.mp3', from: 0 },
+  { file: 'the-piano-before-cynthia.mp3', from: 0 },
+  { file: 'battle-gym-leader.mp3', from: 0 },
 ] };
 const battleMusic = { el: null, song: -1, level: 0, t: 0 };
 const BAG_KEY = 'db-battle-bag';
@@ -10903,7 +10911,7 @@ function nextBattleSong() {
   return pick;
 }
 // THE FINAL BOSS THEME: plays ONLY in arcade mode's last fight (vs the boss Colbalias) - never in the shuffle. It loops.
-const BOSS_SONG = { file: 'devils-never-cry.mp3', from: 0 };
+const BOSS_SONG = { file: 'master-of-puppets.mp3', from: 0 };   // (Metallica - Master of Puppets)
 const ARCADE_BOSS = { taken: 0.68, kb: 0.72, dealt: 1.3, speed: 1.1 };   // the arcade boss Colbalias: hits harder, takes less damage + knockback, faster
 const bossFight = () => !!(arcade && arcade.active && fighters.some(f => f.arcadeBoss));
 // ONLINE: everyone plays the HOST'S song (sent with the match start), and if it ends mid-fight everyone moves on to
