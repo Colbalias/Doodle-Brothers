@@ -15039,8 +15039,17 @@ function spikyAuraPathOn(c, cx, cy, w, h, n, ph) {
 }
 
 function lanceTransform(f) {
-  const next = f.lanceForm === SSG_FORM ? 3 : Math.min(3, (f.lanceForm || 0) + 1);   // (from Super Saiyan God: Ultra Instinct)
   f.ultBuf = 0;
+  if (f.ssg || f.lanceForm === SSG_FORM) {                    // SUPER SAIYAN GOD is his last form: transforming KEEPS it (a full meter to spend on ults) -
+    setLanceForm(f, SSG_FORM); f.ssg = true; f.transformed = true;   // it never drops him back to base / into Ultra Instinct
+    ultBanner = { t: 1.2, title: 'TRANSFORM', name: 'SUPER SAIYAN GOD', color: SSG.color, who: f };
+    hitstop = Math.max(hitstop, 0.25); impactFrame = 0.08; impactAt = { x: f.x, y: f.y - 50, ang: 0, all: true, focus: true };
+    shake = Math.max(shake, 16); ring(f.x, f.y - 45); ring(f.x, f.y - 80);
+    burst(f.x, f.y - 45, [SSG.color, '#ffffff', '#ffb36b'], 60, 0, Math.PI, 900, { grav: 0 });
+    sfx.parry(); sfx.beam(0.8);
+    return;
+  }
+  const next = Math.min(3, (f.lanceForm || 0) + 1);
   if (next >= 3) { startUiDash(f); return; }                 // the third: ULTRA INSTINCT - a dash he has to land (see startUiDash)
   if (next === 1 && !f.ss1Seen) { startSs1Cut(f); return; }      // the first: SUPER SAIYAN - its moment plays the FIRST time each match only
   if (next === 2 && !f.ss2Seen) { startSsj2Cut(f); return; }   // the second: SUPER SAIYAN 2 - its cutscene plays the FIRST time each match only (after that: an instant power-up, keeps the match moving)
