@@ -23874,7 +23874,9 @@ function arcadeStartRound() {
   Object.assign(me, { off: false, cpu: false, dev: A.dev, char: arcadePicks()[A.sel], team: 0, name: 'YOU' });
   Object.assign(cpu, { off: false, cpu: true, dev: null, char: foe, level: 'AI ' + ARCADE_DIFFS[A.diff], team: 1, name: 'CPU' });
   for (let i = 2; i < players.length; i++) players[i].off = true;
-  gameOptions.stage = boss ? STAGE_LIST.findIndex(s => s.hell) : 0;   // the bonus boss fight is on HELLFIRE
+  // a RANDOM stage every tournament match (HELLFIRE is kept for the bonus boss fight)
+  const pool = STAGE_LIST.map((s, i) => i).filter(i => !STAGE_LIST[i].hell);
+  gameOptions.stage = boss ? STAGE_LIST.findIndex(s => s.hell) : pool[Math.floor(realRandom() * pool.length)];
   gameOptions.stocks = ARCADE_STOCKS; gameOptions.teams = false; watchMode = false;
   for (const f of fighterPool) f.arcadeBoss = false;
   startMatch();
