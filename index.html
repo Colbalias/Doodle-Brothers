@@ -10440,7 +10440,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -10799,7 +10799,7 @@ function startBattleSong() {
 }
 function updateBattleMusic(dt) {
   const fighting = scene === 'fight' && !matchOver;
-  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
+  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
   if (fighting && !battleMusic.el && soundOn && menuMusic.unlocked) startBattleSong();   // a new fight: a new song
   const el = battleMusic.el;
   if (!el) return;
@@ -10820,6 +10820,12 @@ function updateBattleMusic(dt) {
       const a = f.action, on = a && ((a.type === 'attack' && a.move && a.move.finalExp && !a.boom) || a.type === 'fxSac');
       if (!on) stopFxSong(f);
     }
+    if (f.tsuSong) {                                             // Colbalias's Tsukuyomi: the clip plays out to its end (just past the blast), then it's gone
+      const h = f.tsuSong, a = f.action;
+      if (a && a.type === 'tsukuyomi') h.played = a.songT;
+      else h.played = (h.played || 0) + 1 / 60;
+      if (h.played >= TSUKU.len || (h.el && h.el.ended)) stopTsuSong(f);
+    }
     if (f.sgSong) {                                              // Lance's Super Saiyan God song: fades out once the comeback's done
       const a = f.action, on = a && a.type === 'sgCut';
       if (!on) stopSsgSong(f);
@@ -10838,7 +10844,7 @@ function updateBattleMusic(dt) {
   }
   // turned down under an ultimate's own music / voice lines, and while the game's paused
   const ultMusic = ult || fighters.some(f => (f.action && f.action.type === 'shipUlt') || f.uiSong);   // (+ Lance's Ultra Instinct theme)
-  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
+  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
   el.volume = clamp(BATTLE_MUSIC.vol * battleMusic.level * duck * settings.master * settings.music * 1.6, 0, 1);
   if (el.paused && want) el.play().catch(() => {});
 }
@@ -11254,6 +11260,7 @@ playHunterL2Song = gateSound('l3Song', playHunterL2Song, (h, [f]) => { if (h && 
 playSs1Song = gateSound('ss1Song', playSs1Song, (h, [f]) => { if (h && f) f.ss1Song = h; });
 playSsgSong = gateSound('sgSong', playSsgSong, (h, [f]) => { if (h && f) f.sgSong = h; });
 playFxSong = gateSound('fxSong', playFxSong, (h, [f]) => { if (h && f) f.fxSong = h; });   // (Lance's Final Explosion song)   // (Lance's Super Saiyan God song)
+playTsuSong = gateSound('tsuSong', playTsuSong, (h, [f]) => { if (h && f) f.tsuSong = h; });   // (Colbalias's Tsukuyomi: the Mugen Tsukuyomi clip)
 playSharinganSfx = gateSound('sfx.sharingan', playSharinganSfx);   // (Colbalias's Tsukuyomi: the eye opening)   // (Lance's Super Saiyan song)   // (Hunter's Legendary 3 song)    // (Lance's Super Saiyan 2 song)
 
 
@@ -14104,7 +14111,12 @@ function drawHunterL3Cut(f) {
 // genjutsu: a blood-red sky, everything else black and white. The victim hangs on a great wooden cross like Kakashi,
 // arms tied out wide, while his CLONES - black shapes - step up one at a time and slowly run them through with swords
 // (the swords stay in). Then it snaps back to the stage and they're blasted away. The whole match stops for it.
-const TSUKU = { eye: 1.0, back: 7.0, stabs: [1.9, 2.7, 3.4, 4.0, 4.55, 5.05, 5.5], stabDmg: 2.4, lunge: 0.28,
+// It runs the whole of sounds/battle/tsukuyomi.mp3 (25.7s), on the clip's clock (songT):
+//   0 - 1.6    the eye opens            2.6 - 13.2  the clones stab, one at a time, slowly
+//   14.6       MORE clones close in     16.5        the big hit in the clip: every one of them stabs at once
+//   19.5 - 24.8  the moon's sharingan comes down and swallows the screen      24.8  back on the stage: BLASTED away
+const TSUKU = { eye: 1.6, back: 24.8, len: 25.68, vol: 0.9, stabs: [2.6, 4.2, 5.8, 7.5, 9.3, 11.2, 13.2], stabDmg: 2.0, lunge: 0.28,
+                swarm: 14.6, mass: 16.5, massDmg: 7, swallow: 19.5,
                 final: { dmg: 6, base: 560, growth: 6.6, angle: 50, ultFinal: true, xray: 'RIBS' } };
 let sharinganEl = null;                                         // (sounds/battle/sharingan-eyes.mp3 - the eye opening; NOT in the battle playlist)
 function playSharinganSfx() {
@@ -14115,6 +14127,16 @@ function playSharinganSfx() {
     return { el: c };
   } catch (e) { return null; }
 }
+function playTsuSong(f) {
+  stopTsuSong(f);
+  if (!soundOn) return null;
+  let el; try { el = new Audio('sounds/battle/tsukuyomi.mp3'); } catch (e) { return null; }
+  el.preload = 'auto'; el.volume = clamp(TSUKU.vol * settings.master * settings.sfx, 0, 1);
+  el.play().catch(() => {});
+  const h = { el, at: performance.now(), played: 0 }; f.tsuSong = h;
+  return h;
+}
+function stopTsuSong(f) { if (f && f.tsuSong) { try { f.tsuSong.el.pause(); } catch (e) {} f.tsuSong = null; } }
 function startTsukuyomi(f, v) {
   // (meter: like any ultimate - Colbalias cashes in the bar he's transformed on)
   if (f.look && f.look.doubleUlt) {
@@ -14123,15 +14145,17 @@ function startTsukuyomi(f, v) {
   } else { f.ultPower = 0.5 + 0.5 * clamp((f.ult || 0) / ULT_MAX, 0, 1); f.ult = 0; }
   f.ultBuf = 0; f.atkBuf = f.spcBuf = f.grabBuf = 0; f.shielding = false; f.ultNerfT = ULT_NERF.time;
   f.vx = f.vy = v.vx = v.vy = 0; v.shielding = false;
-  f.action = { type: 'tsukuyomi', t: 0, victim: v, stabbed: 0, home: { fx: f.x, fy: f.y, vx: v.x, vy: v.y } };
+  f.action = { type: 'tsukuyomi', t: 0, songT: 0, victim: v, stabbed: 0, home: { fx: f.x, fy: f.y, vx: v.x, vy: v.y } };
   v.action = { type: 'tsukuVictim', t: 0, by: f };
   ultBanner = { t: 1.3, name: CHARACTERS[f.char].grabUlt.name, color: '#ff1a1a', who: f };
   hitstop = Math.max(hitstop, 0.2); shake = Math.max(shake, 10);
   playSharinganSfx();                                            // (the eye opening - its own sound)
+  playTsuSong(f);                                                // (and the Mugen Tsukuyomi clip - the ult lasts all of it)
 }
 function stepTsukuyomi(f, a, dt) {
-  const v = a.victim, H0 = a.home, T = a.t, C = TSUKU;
-  if (!v || !fighters.includes(v) || v.respawnTimer > 0) { f.action = null; return; }
+  a.songT = (a.songT || 0) + dt / uiRealRate();
+  const v = a.victim, H0 = a.home, T = a.songT, C = TSUKU;
+  if (!v || !fighters.includes(v) || v.respawnTimer > 0) { f.action = null; stopTsuSong(f); return; }
   Object.assign(f, { x: H0.fx, y: H0.fy, vx: 0, vy: 0 }); Object.assign(v, { x: H0.vx, y: H0.vy, vx: 0, vy: 0 });
   if (v.action && v.action.type !== 'tsukuVictim') v.action = { type: 'tsukuVictim', t: T, by: f };
   a.pose = pose({ lean: 0.05, bob: -4, legA: [0.5, 0.3], legB: [-0.45, 0.25], armA: [0.9, -1.5], armB: [0.3, -0.6] });   // staring them down
@@ -14145,6 +14169,13 @@ function stepTsukuyomi(f, a, dt) {
     v.damage += d; v.hitFlash = 0.12; a.jolt = 0.25;
     shake = Math.max(shake, 8); hitstop = Math.max(hitstop, 0.05); sfx.hit(0.9);
   }
+  if (!a.massed && T >= C.mass) {                                 // THE BIG HIT: every clone at once
+    a.massed = true;
+    v.damage += C.massDmg * (f.ultPower || 1) * powerOf(f); v.hitFlash = 0.2; a.jolt = 0.6;
+    shake = Math.max(shake, 26); hitstop = Math.max(hitstop, 0.12); sfx.huge(); sfx.hit(1); sfx.clash(true);
+    impactFrame = 0.12; impactAt = { x: v.x, y: v.y - 50, ang: 0, all: true, focus: true, invert: true };
+  }
+  if (T > C.swallow) shake = Math.max(shake, 2 + 6 * clamp((T - C.swallow) / (C.back - C.swallow), 0, 1));   // (the world rumbling as the eye takes it)
   a.jolt = Math.max(0, (a.jolt || 0) - dt);
   if (T >= C.back) {                                              // back on the stage: and they're BLASTED away
     v.action = null; f.action = { type: 'land', t: 0, dur: 0.3 };
@@ -14207,7 +14238,7 @@ function drawCrossFigure(c, v, x, y, k, alpha, jolt) {
 }
 // (drawing - over the world, or the whole screen once they're in the genjutsu)
 function drawTsukuyomi(f) {
-  const a = f.action, v = a.victim, T = a.t, C = TSUKU, now = performance.now() / 1000, sc = sctx;
+  const a = f.action, v = a.victim, T = a.songT || 0, C = TSUKU, now = performance.now() / 1000, sc = sctx;
   sc.save();
   if (T < C.eye) {
     // THE EYE OPENS: a sphere of sharingan round the two of them, spinning, the world going red
@@ -14225,7 +14256,8 @@ function drawTsukuyomi(f) {
   sc.fillStyle = sky; sc.fillRect(-OX, -OY, SW, SH);
   sc.fillStyle = 'rgba(10,0,0,0.55)';
   for (let i = 0; i < 7; i++) { const cx = ((i * 271 + now * 12) % (W + 400)) - 200, cy = 60 + (i % 3) * 70; sc.beginPath(); sc.ellipse(cx, cy, 160, 26, 0, 0, Math.PI * 2); sc.fill(); }
-  sc.fillStyle = '#0a0000'; sc.beginPath(); sc.arc(W * 0.8, H * 0.2, 46, 0, Math.PI * 2); sc.fill();                       // the moon, black
+  if (T < C.mass) { sc.fillStyle = '#0a0000'; sc.beginPath(); sc.arc(W * 0.8, H * 0.2, 46, 0, Math.PI * 2); sc.fill(); }   // the moon, black...
+  else if (T < C.swallow) drawSharingan(sc, W * 0.8, H * 0.2, 46 + 14 * clamp((T - C.mass) / 0.4, 0, 1), now * 1.5, 1);        // ...until the big hit: then it's a SHARINGAN
   sc.fillStyle = '#1a0202'; sc.fillRect(-OX, H * 0.86, SW, H * 0.14 + OY);                                                     // dark ground
   // ---- the CROSS (black wood) ----
   const cx = W * 0.5, footY = H * 0.74, S = 2.7;
@@ -14267,9 +14299,35 @@ function drawTsukuyomi(f) {
       sc.strokeStyle = '#d8d8d8'; sc.lineWidth = 4; sc.beginPath(); sc.moveTo(x - sd * 15 * s, y - 60 * s); sc.lineTo(tipX, tipY); sc.stroke();
     }
   }
+  // ---- MORE CLONES: a whole ring of them closes in... and on the big hit, they ALL stab at once (their swords stay in too) ----
+  if (T >= C.swarm) {
+    const N = 10, appear = clamp((T - C.swarm) / 1.2, 0, 1), st = C.mass - C.lunge;
+    for (let i = 0; i < N; i++) {
+      const sd = i % 2 ? 1 : -1, row = Math.floor(i / 2), s = 1.5 + row * 0.35;
+      const k = clamp((T - st) / C.lunge, 0, 1), reach = easeOut(k);
+      const baseX = cx + sd * (300 + row * 95 + 40 * hash(i * 3.1)), x = lerp(baseX, cx + sd * (150 + row * 30), reach * 0.5);
+      const y = H * (0.8 + row * 0.035) + (1 - appear) * 120;
+      const hx = cx + (hash(i * 7.7) - 0.5) * 60 * S, hy = lerp(bodyTop, bodyBot, 0.15 + 0.7 * hash(i * 5.3));
+      if (T >= C.mass) {
+        sc.strokeStyle = '#8a8a8a'; sc.lineWidth = 4; sc.beginPath(); sc.moveTo(hx + sd * 8, hy + 5); sc.lineTo(hx - sd * 80, hy - 26 - row * 6); sc.stroke();
+      }
+      sc.save(); sc.translate(x, y); sc.scale(s, s);
+      const lunge = pose({ lean: 0.35 * reach + 0.05, bob: -4, legA: [0.6 + 0.4 * reach, 0.4], legB: [-0.6, 0.3], armA: [1.2 + 0.4 * reach, -0.4 + 0.4 * reach], armB: [0.8, -1.0] });
+      drawFigure({ ...figureOf(f), x: 0, y: 0, vx: 0, vy: 0, face: -sd, pose: lunge, squash: 0 }, { alpha: appear * fadeIn * fadeOut, tint: '#0c0c0c' });
+      sc.restore();
+    }
+  }
   ctx = ctx0;
+  // ---- the moon's SHARINGAN comes down and swallows everything ----
+  if (T >= C.swallow) {
+    const u = clamp((T - C.swallow) / (C.back - C.swallow - 0.3), 0, 1), e = u * u;
+    const R = lerp(60, Math.hypot(SW, SH) * 0.75, e), mx = lerp(W * 0.8, W * 0.5, easeOut(u)), my = lerp(H * 0.2, H * 0.48, easeOut(u));
+    sc.fillStyle = `rgba(0,0,0,${0.5 * u})`; sc.fillRect(-OX, -OY, SW, SH);
+    drawSharingan(sc, mx, my, R, now * (1.5 + 5 * e), 1);
+  }
   if (jolt > 0.15) { sc.fillStyle = `rgba(255,255,255,${(jolt - 0.15) * 1.2})`; sc.fillRect(-OX, -OY, SW, SH); }   // (each stab: a white flash)
   if (t < 0.3) { sc.fillStyle = `rgba(255,255,255,${1 - t / 0.3})`; sc.fillRect(-OX, -OY, SW, SH); }
+  if (T >= C.mass && T < C.mass + 0.5) { sc.fillStyle = `rgba(255,30,30,${0.8 * (1 - (T - C.mass) / 0.5)})`; sc.fillRect(-OX, -OY, SW, SH); }   // (the big hit: a red flash)
   if (T > C.back - 0.3) { sc.fillStyle = `rgba(255,255,255,${1 - fadeOut})`; sc.fillRect(-OX, -OY, SW, SH); }
   sc.fillStyle = '#000'; sc.fillRect(-OX, -OY, SW, 54 + OY); sc.fillRect(-OX, H - 54, SW, 54 + OY);   // letterbox
   sc.restore();
@@ -24730,7 +24788,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)
