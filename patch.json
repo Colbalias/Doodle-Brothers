@@ -1,0 +1,259 @@
+{
+    "version":  "0.7.47",
+    "shell":  "507033c97387faa1",
+    "android":  "2a63fd61f22e5cba",
+    "files":  {
+                  "build/icon.png":  {
+                                         "hash":  "645d2a649501e8209cda9abef113ac4591f5793f91447026663df69dc354a849",
+                                         "size":  232719
+                                     },
+                  "index.html":  {
+                                     "hash":  "5ea0e3280681e7e070eaa8c99c12f50cc0af0a7be2402ec923952a4ede68acfa",
+                                     "size":  1747297
+                                 },
+                  "lib/peerjs.min.js":  {
+                                            "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
+                                            "size":  92865
+                                        },
+                  "net.js":  {
+                                 "hash":  "69e060db2f07f57c6dcf754d0fed412b95863553533f06520457c15ad8070c9c",
+                                 "size":  65677
+                             },
+                  "sounds/battle/awake.mp3":  {
+                                                  "hash":  "f2003ec001627c1328b59c937ea57103823686040c065585152f511e52d18501",
+                                                  "size":  5005852
+                                              },
+                  "sounds/battle/battle-without-honor-or-humanity.mp3":  {
+                                                                             "hash":  "eda0873dca9a6311e4534976a0744dbef308d28731e1b775be9f4cc1145694fc",
+                                                                             "size":  3554280
+                                                                         },
+                  "sounds/battle/bauklotze.mp3":  {
+                                                      "hash":  "59ba66fa22d425a6dc41b1b270f58a372d8c2dd7db6ac6da970d035dec40571b",
+                                                      "size":  5260996
+                                                  },
+                  "sounds/battle/black-betty.mp3":  {
+                                                        "hash":  "9794d6d59adb1bd5f7f1f77594e21e9bcffd9ac13fd393a9e3c44dad998b0f04",
+                                                        "size":  4893913
+                                                    },
+                  "sounds/battle/blow-me-away.mp3":  {
+                                                         "hash":  "65b0ec56aeed5bc980c69fafa7d482c24915eb1308579d54697704f433463df4",
+                                                         "size":  4946057
+                                                     },
+                  "sounds/battle/by-the-sword.mp3":  {
+                                                         "hash":  "f71fd937ea290d9b260782bbdaab4ae2dbf4f8ea40129ae8ca7cafbe1443bc47",
+                                                         "size":  3071278
+                                                     },
+                  "sounds/battle/devils-never-cry.mp3":  {
+                                                             "hash":  "e6d9384978008e9e153b8aa358e39c1d3f6933905b4f7082d5662f9c153a10c8",
+                                                             "size":  4735073
+                                                         },
+                  "sounds/battle/f.mp3":  {
+                                              "hash":  "869e11c5aeb214d55e35536bc292797fcecb146f1970096c0d788ae5479f472c",
+                                              "size":  6329940
+                                          },
+                  "sounds/battle/find-your-flame.mp3":  {
+                                                            "hash":  "cb8215b2cce6335c89824673c3dd0f5f64794fb2f813769b2d898e35e55cc168",
+                                                            "size":  3729332
+                                                        },
+                  "sounds/battle/getting-away-with-murder.mp3":  {
+                                                                     "hash":  "4eed0285df623913c87549bf5cf98efa6bfda3207b68e312359cb6c75413003e",
+                                                                     "size":  7563285
+                                                                 },
+                  "sounds/battle/heads-will-roll.mp3":  {
+                                                            "hash":  "fc121da3565e8f7158ab48c98a15a4bd0be0249ef77b502b603563e4a0802eb0",
+                                                            "size":  4877340
+                                                        },
+                  "sounds/battle/hunter-l2-song.mp3":  {
+                                                           "hash":  "fc168e651060afc05a6bd4c699f302354046c67930edd65b2f935c08eea06e15",
+                                                           "size":  410490
+                                                       },
+                  "sounds/battle/hunter-l3-song.mp3":  {
+                                                           "hash":  "e59c4cbea30c8344e2200aff4fe259c3a5617434f1f1da2321220505e551560b",
+                                                           "size":  904911
+                                                       },
+                  "sounds/battle/intergalactic.mp3":  {
+                                                          "hash":  "fbc8b9bc9e2169a25e10bf79cfe2fea62eb60370a809839ee1e3c820d988b018",
+                                                          "size":  4735369
+                                                      },
+                  "sounds/battle/it-has-to-be-this-way.mp3":  {
+                                                                  "hash":  "e448c0f88630aa716f29e51217986f28f85c55f9861824ffcca405992c8e981e",
+                                                                  "size":  4213165
+                                                              },
+                  "sounds/battle/its-going-down-now.mp3":  {
+                                                               "hash":  "944c56a219a6616eecca4b9a7b56f08dc81bb4e34e45a27ab976d679c74bcd60",
+                                                               "size":  4136679
+                                                           },
+                  "sounds/battle/kakarot-vs-broly.mp3":  {
+                                                             "hash":  "a6375ebad4e7769a106340bf691eb062aa40a74461844135cd940464761920e3",
+                                                             "size":  4093014
+                                                         },
+                  "sounds/battle/killing-in-the-name.mp3":  {
+                                                                "hash":  "8eb701aecbe2536b6bf0266031bcf2aeba0eed0b5e0770e9f79cc50bd46c2fb5",
+                                                                "size":  6988050
+                                                            },
+                  "sounds/battle/lance-final-explosion.mp3":  {
+                                                                  "hash":  "7bde976c7b420ff91c4fffc0c695d94706fe3cf6053ef7bc590cfd81c7cf4429",
+                                                                  "size":  326464
+                                                              },
+                  "sounds/battle/lance-ssg-song.mp3":  {
+                                                           "hash":  "0119b26cdbfe9d50ea59685ae5fb7a1084e224ff27bfedea30975685e5487ce4",
+                                                           "size":  274583
+                                                       },
+                  "sounds/battle/lance-ssj-song.mp3":  {
+                                                           "hash":  "e839288c4f39a91df37b939c86f794f69ff26d003fd81a8d6d6d25adf2acb512",
+                                                           "size":  274926
+                                                       },
+                  "sounds/battle/mystery-0-16.mp3":  {
+                                                         "hash":  "3e0b52fc42b4f89b51be127cd633142b3e6fce93eb89128fc8082b72f16d69ef",
+                                                         "size":  4718546
+                                                     },
+                  "sounds/battle/mystery-0-20.mp3":  {
+                                                         "hash":  "4eed0285df623913c87549bf5cf98efa6bfda3207b68e312359cb6c75413003e",
+                                                         "size":  7563285
+                                                     },
+                  "sounds/battle/mystery-1-48.mp3":  {
+                                                         "hash":  "6e3d8d5122e3b4ae4d098679b55947a9ed325f195267f85e49dba9a02059ea8a",
+                                                         "size":  5326300
+                                                     },
+                  "sounds/battle/naruto-main-theme.mp3":  {
+                                                              "hash":  "6134fd66d14c3af114303975a0645c11a3f2fb10dc7c935a856b0dbb4c677734",
+                                                              "size":  5903605
+                                                          },
+                  "sounds/battle/paranoia.mp3":  {
+                                                     "hash":  "470701adc993521d9352b45dc6ffcfb4616ac7db38ee5f681b189c2f3ff705ce",
+                                                     "size":  2820107
+                                                 },
+                  "sounds/battle/pillar-men-theme.mp3":  {
+                                                             "hash":  "34db7d5cee6b13d955ce71c05c15739d4ee5fbc48b5300c8d59d5278de46eb0a",
+                                                             "size":  3103751
+                                                         },
+                  "sounds/battle/rollin.mp3":  {
+                                                   "hash":  "2452f3e25c155549d573ad1d8440a8ba03ffd300b6f0be7377da2647c3382b56",
+                                                   "size":  4963537
+                                               },
+                  "sounds/battle/seven-years.mp3":  {
+                                                        "hash":  "bebd92fcb96bd76ee7b4c6200ff49f742643b0dd800e0b4fda1ad52527dcf1fd",
+                                                        "size":  5152583
+                                                    },
+                  "sounds/battle/shame.mp3":  {
+                                                  "hash":  "5bddc74fd517ceffe689fac4135be2edae3eafc30696b4c6325b4fd482983b03",
+                                                  "size":  3968189
+                                              },
+                  "sounds/battle/sharingan-eyes.mp3":  {
+                                                           "hash":  "363861ecacc31ad89030dcd32d716483da01e71bc3dea105ed3eba412db436b0",
+                                                           "size":  33360
+                                                       },
+                  "sounds/battle/shiki-no-uta.mp3":  {
+                                                         "hash":  "7bdf0a3d699d75ae0327f2dd955c6945ecd9b21a6ee4ba3dc8d9dc91e7ff4b15",
+                                                         "size":  7020386
+                                                     },
+                  "sounds/battle/tank.mp3":  {
+                                                 "hash":  "fea5068d52dbac77ae1d263db9c22c1e45ea9a4a738d755ddd8ce2043bcaa79a",
+                                                 "size":  5258944
+                                             },
+                  "sounds/battle/techno-syndrome.mp3":  {
+                                                            "hash":  "88eb14b2264b16ff8499c5056792f1fde30da465ae691e63945fe9b272d81d7d",
+                                                            "size":  5501384
+                                                        },
+                  "sounds/battle/you-say-run.mp3":  {
+                                                        "hash":  "ec59d90ccdf70219d312670fc4f7fd60841dc11f809e13b3e6a47a92b1c45c4c",
+                                                        "size":  5567353
+                                                    },
+                  "sounds/battle/you-see-big-girl.mp3":  {
+                                                             "hash":  "049518102cf5bd7c93dcf7547fb5fa22d6c64aaddedbf96673a6d9a2f77961ee",
+                                                             "size":  4350252
+                                                         },
+                  "sounds/chidori-sfx.js":  {
+                                                "hash":  "3923fb7dd479ad68e0a20096ac4d95c025ab6596f112f6af5d9a6cd8cae23237",
+                                                "size":  54128
+                                            },
+                  "sounds/clone-poof-sfx.js":  {
+                                                   "hash":  "571b4fb114ed3db0180939b9bd935790062c3c7f87aa03e84dee76b4511d298b",
+                                                   "size":  155320
+                                               },
+                  "sounds/deck-ult-sfx.js":  {
+                                                 "hash":  "f3147ac6014a68f65f27e6acdf2bfab0b4d5f8221aad6e25788c125dce2c93b9",
+                                                 "size":  331760
+                                             },
+                  "sounds/fight-sfx.js":  {
+                                              "hash":  "dd55fe774ec7995725798bfff8f0c575d566b77906e106e8aaa116b17b7ee392",
+                                              "size":  243422
+                                          },
+                  "sounds/kame-sfx.js":  {
+                                             "hash":  "af18bde04e7797b592c7c2def45bef461810c25016413f2a0b1c7eee622b00e2",
+                                             "size":  212533
+                                         },
+                  "sounds/ki-charge-sfx.js":  {
+                                                  "hash":  "2f5c011bdf421c000669322a241b75aed4dea823d9745cc3051ac87d87034c10",
+                                                  "size":  164630
+                                              },
+                  "sounds/lance-my-turn-sfx.js":  {
+                                                      "hash":  "752a77509cbffa52b197f8f77697701c8982aa9c071989e6eea768f46b93a513",
+                                                      "size":  120863
+                                                  },
+                  "sounds/menu-mix-1.mp3":  {
+                                                "hash":  "0742ae6882d9133e78c3ebf571514b77c092946b53d7ed1f565a944c7c39dd22",
+                                                "size":  37213179
+                                            },
+                  "sounds/menu-mix-2.mp3":  {
+                                                "hash":  "606ca3f655a91cf1f692091024b7be6db49486a838c5f7e8d4afd0dc92d8437b",
+                                                "size":  37213074
+                                            },
+                  "sounds/menu-mix-3.mp3":  {
+                                                "hash":  "e8b92a4a192744788f24ae16e48ceab0eac58e595e891f250642b8f292ee7486",
+                                                "size":  37213255
+                                            },
+                  "sounds/netero-99-hands-sfx.js":  {
+                                                        "hash":  "14d58196a2f0317a292b909b55b8f596bdde6d172d3b9fe926f3c26c3ed1fae4",
+                                                        "size":  213422
+                                                    },
+                  "sounds/netero-hits-sfx.js":  {
+                                                    "hash":  "270a0a73ddb2d674604f5616e5f78553bbf30cad730079fba346035bedb03f67",
+                                                    "size":  200009
+                                                },
+                  "sounds/ninth-form-sfx.js":  {
+                                                   "hash":  "78a6c053bc4d2c2b70467e47310664b382067ea7fe3a6c139e2c55c6c648cef2",
+                                                   "size":  308763
+                                               },
+                  "sounds/rko-sfx.js":  {
+                                            "hash":  "53acdba5aee2a5dc57f00c6b8efa50a83e3e1e6c9bdccf5993e0e5f273134e3c",
+                                            "size":  100109
+                                        },
+                  "sounds/samus-charge-sfx.js":  {
+                                                     "hash":  "c6603c53a6741e8bbb42825e4877faa8b46e0cc2c52d30cf04e29a5a2218b33b",
+                                                     "size":  16447
+                                                 },
+                  "sounds/shield-sfx.js":  {
+                                               "hash":  "7042c614e212e7b34f407928aa6aa24a2a530aa6f28ce5a0535b7cafffdc3c80",
+                                               "size":  67084
+                                           },
+                  "sounds/ship-ult-sfx.js":  {
+                                                 "hash":  "82b9f4bf7f2b3330adf9548fb61d02c0464bdfb7fc03b2cc820887b1ef883997",
+                                                 "size":  251742
+                                             },
+                  "sounds/slash-sfx.js":  {
+                                              "hash":  "06586f991eb89f906312b185efc310d9a0678446629baab611f2ccedacaed17c",
+                                              "size":  67611
+                                          },
+                  "sounds/smash-hits-sfx.js":  {
+                                                   "hash":  "4f41daf922464e5dcf2b8a13b366a23195c692b6f17d8d6e832de025aa53bdf9",
+                                                   "size":  1018820
+                                               },
+                  "sounds/ssj2-song-sfx.js":  {
+                                                  "hash":  "7986f249a9bcef52483b58ee026cf4c2c438e927a997abb09635bc8b7f0db0f4",
+                                                  "size":  582566
+                                              },
+                  "sounds/teleport-sfx.js":  {
+                                                 "hash":  "b564bfb1f4152031882da1724a982cd40c1beaf28e122f96d1d49e0ab9040e83",
+                                                 "size":  349545
+                                             },
+                  "sounds/ui-awaken-sfx.js":  {
+                                                  "hash":  "192c2356cc25d4fbf09853325a5bc887e121f440b2c727468737c98d4e8e0294",
+                                                  "size":  949786
+                                              },
+                  "sounds/ui-note-sfx.js":  {
+                                                "hash":  "fea6638a100bdf83a17e542d548318748ab4db2a6e9b6ff88a3cb323044e7f8e",
+                                                "size":  32160
+                                            }
+              }
+}

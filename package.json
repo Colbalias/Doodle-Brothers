@@ -1,0 +1,54 @@
+{
+  "name": "stickman-brawl",
+  "productName": "Doodle Brothers",
+  "version": "0.7.47",
+  "description": "Doodle Brothers - a Smash-style stickman platform fighter with online play",
+  "author": "Colbalias",
+  "repository": { "type": "git", "url": "https://github.com/Colbalias/Doodle-Brothers.git" },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.colbyking.stickmanbrawl",
+    "productName": "Doodle Brothers",
+    "files": [
+      "main.js",
+      "preload.js",
+      "updater.js",
+      "index.html",
+      "net.js",
+      "lib/**/*",
+      "sounds/*.js",
+      "sounds/menu-mix-*.mp3",
+      "sounds/battle/*.mp3",
+      "build/icon.png"
+    ],
+    "extraResources": [{ "from": "pads/bin", "to": "pads", "filter": ["sdlpads.exe", "SDL3.dll"] }],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Doodle Brothers",
+      "artifactName": "Doodle-Brothers-Setup-${version}.${ext}"
+    },
+    "publish": [{ "provider": "github", "owner": "Colbalias", "repo": "Doodle-Brothers", "releaseType": "release" }]
+  }
+}
