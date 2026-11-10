@@ -23820,7 +23820,8 @@ function openArcade(dev) {
 function arcadeNewBracket(A) {
   const pool = arcadePicks(), me = pool[A.sel] || pool[0];
   const field = [{ c: me, me: true }];
-  for (let i = 1; i < ARCADE_SIZE; i++) field.push({ c: pool[Math.floor(realRandom() * pool.length)], me: false });
+  const foes = pool.filter(c => c !== 'COLBALIAS');            // (Colbalias is saved for the BONUS ROUND - he never turns up in the bracket)
+  for (let i = 1; i < ARCADE_SIZE; i++) field.push({ c: foes[Math.floor(realRandom() * foes.length)], me: false });
   for (let i = field.length - 1; i > 0; i--) { const j = Math.floor(realRandom() * (i + 1)); [field[i], field[j]] = [field[j], field[i]]; }
   A.br = { rounds: [field] };
   A.round = 0; A.bonusLost = false; A.lostTo = null;
