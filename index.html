@@ -11265,7 +11265,7 @@ function isIntangible(f) {
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return true;   // (vanished: nothing can touch him)
   if (a && a.type === 'attack' && a.move && a.move.dragonFist && a.ph && a.ph !== 'wind' && a.ph !== 'dash') return true;   // (Hunter mid-Dragon Fist)
   if (a && a.type === 'attack' && a.move && a.move.finalExp) return true;   // (Lance's Final Explosion: NOTHING interrupts it - no hit, grab or throw)
-  if (a && ['thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
+  if (a && ['thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
   return !!a && (a.type === 'spot' || a.type === 'roll' || a.type === 'air') && a.t >= a.iStart && a.t <= a.iEnd;
 }
 // CROUCHING: hold down on the ground to duck. Your hurtbox shrinks to ~60% height, so HIGH attacks
@@ -16626,6 +16626,7 @@ function stepAction(f, inp, dt) {
   if (a.type === 'ss1Cut') return stepSs1Cut(f, a, dt);
   if (a.type === 'tsukuyomi') return stepTsukuyomi(f, a, dt);      // Colbalias: Tsukuyomi
   if (a.type === 'sgCut') return stepSsgCut(f, a, dt);             // Lance: Super Saiyan God
+  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { f.sgUsed = false; startSsgCut(f); } return; }
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
   if (a.type === 'fxFrozen') { if (!a.by.action || a.by.action.type !== 'fxSac') { f.action = { type: 'hitstun', t: 0, dur: 0.5 }; } f.vx = f.vy = 0; return; }
   if (a.type === 'sgVictim') { if (!a.by.action || a.by.action.type !== 'sgCut') f.action = null; return; }
@@ -17221,7 +17222,7 @@ function updateFighter(f, inp, dt) {
   const a = f.action;
   const floating = a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
     (a.type === 'attack' && a.move.floatWhile && a.move.floatWhile(f, a)) ||
-    a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
+    a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
     (a.type === 'hitstun' && (a.impaled || (a.flat && a.t < a.flat))) ||
     (a.type === 'timeStop' && a.bind) ||                                    // held in Lance's God Bind   // skewered on the Red Chidori / launched dead flat (Hundred Clone Rush)
     a.type === 'odmReel' || a.type === 'odmSpin' || a.type === 'odmLedge' ||   // Sevon flying on his ODM gear
@@ -17319,8 +17320,15 @@ function updateFighter(f, inp, dt) {
   // Blast zones
   if (f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
-    if (f.action && ['sgCut', 'sgVictim', 'fxSac', 'fxFrozen'].includes(f.action.type)) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
-    if (f.char === 'LANCE' && !f.sgUsed && !f.selfKO && isFinite(f.stocks) && f.stocks <= 1 && !f.out && !(arcade && arcade.active)) { startSsgCut(f); return; }   // LANCE'S LAST STOCK: SUPER SAIYAN GOD (once a match)
+    if (f.action && ['sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen'].includes(f.action.type)) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
+    if (f.char === 'LANCE' && !f.sgUsed && !f.selfKO && isFinite(f.stocks) && f.stocks <= 1 && !f.out) {   // LANCE'S LAST STOCK: SUPER SAIYAN GOD (once a match - however he went out)
+      if (ult || fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
+        // (someone's ultimate is still playing: he's HELD at the edge - untouchable - and it starts the moment that's over)
+        f.sgUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
+        f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0 }; return;
+      }
+      startSsgCut(f); return;
+    }
     f.kos++; f.swapBonus = 0;                           // (a KO ends the Demon's Gaze swap bonus too)
     f.cshot = 0; stopShotCharge(f);                     // (a stored Hellfire Shot is lost on a KO)
     shake = 16;
