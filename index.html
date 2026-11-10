@@ -14229,12 +14229,17 @@ function drawCrossFigure(c, v, x, y, k, alpha, jolt) {
     c.beginPath(); c.moveTo(-sw + 5, shY + 9); c.quadraticCurveTo(-5, shY + 14, 0, shY + 8); c.quadraticCurveTo(5, shY + 14, sw - 5, shY + 9); c.stroke();
     c.beginPath(); c.moveTo(0, shY + 9); c.lineTo(0, hipY - 2); c.stroke(); }
   c.restore();
-  // their own head + hair, from their real figure - only what's above the neck
-  c.save(); c.globalAlpha = alpha;
-  c.beginPath(); c.rect(x - 90 * K, y - 260 * K, 180 * K, (260 - 76) * K); c.clip();
-  c.translate(x, y); c.scale(k, k);
-  drawFigure({ ...fig, x: 0, y: 0, vx: 0, vy: 0, face: 1, squash: 0, pose: pose({ lean: 0.12 + jolt * 0.15, bob: 0, legA: [0.05, 0.02], legB: [-0.05, 0.02], armA: [0.1, 0], armB: [-0.1, 0] }) }, { alpha });
-  c.restore();
+  // their own head + hair, from their real figure - only what's above the neck. Everyone's figure is drawn SIDE-ON, so to
+  // face us it's drawn twice, mirrored: the left half from one side, the right half from the other - a symmetric,
+  // front-on head with the hair sweeping out to both sides (head held straight up, so both halves meet in the middle)
+  const hp = pose({ lean: 0, bob: 0, legA: [0.05, 0.02], legB: [-0.05, 0.02], armA: [0.1, 0], armB: [-0.1, 0] });
+  for (const sd of [-1, 1]) {
+    c.save(); c.globalAlpha = alpha;
+    c.beginPath(); c.rect(sd < 0 ? x - 90 * K : x, y - 260 * K, 90 * K, (260 - 76) * K); c.clip();
+    c.translate(x, y + jolt * 3 * K); c.scale(k, k);
+    drawFigure({ ...fig, x: 0, y: 0, vx: 0, vy: 0, face: -sd, squash: 0, pose: hp }, { alpha });   // (the BACK of the hair on each side)
+    c.restore();
+  }
 }
 // (drawing - over the world, or the whole screen once they're in the genjutsu)
 function drawTsukuyomi(f) {
