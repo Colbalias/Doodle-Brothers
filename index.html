@@ -8365,9 +8365,9 @@ function drawMadara(hip, shoulder, f, fig, opts, main, layer, pz) {
   band(at(shoulder, -2, -7), at(shoulder, -3, 7));
   ctx.restore(); ctx.lineWidth = w0;
 }
-// COLBY - ROCK LEE'S CLOTHES: the green jumpsuit (his body colour), orange leg warmers over the shins, blue sandals, the
+// COLBY - ROCK LEE'S CLOTHES: the jumpsuit (his body colour - ivory), orange leg warmers over the shins, blue sandals, the
 // red forehead-protector belt round his waist (its metal plate at the front) and a dark holster strapped to his thigh.
-const LEE = { warmer: '#f0962e', warmerD: '#c26a14', sandal: '#2f4fa8', belt: '#c8322a', plate: '#b9c0c6', holster: '#2d3a4a', strap: '#f2f2f2' };
+const LEE = { warmer: '#f0962e', warmerD: '#c26a14', sandal: '#2f4fa8', belt: '#c8322a', plate: '#b9c0c6', holster: '#2d3a4a', strap: '#c8322a' };   // (the thigh strap: the same red as his belt)
 function drawLee(hip, shoulder, f, fig, opts, main, layer, pz) {
   const C = LEE, tint = opts.tint, sk = sketch, col = c => tint || (sk ? (c === C.sandal || c === C.holster ? main : PAPER) : c);
   const w0 = ctx.lineWidth;
@@ -9266,7 +9266,7 @@ const CHARACTERS = {
     moves: COLBY_MOVES,
     stats: { runSpeed: 690, airSpeed: 560, jumpVel: 1220, doubleJumpVel: 1100, weight: 0.83 },   // (0.95 -> 0.83: easier to knock out)
     look: {
-      body: '#2f8a46',        // ROCK LEE'S green jumpsuit (see drawLee)
+      body: '#e6dcc4',        // ROCK LEE'S jumpsuit (see drawLee) - in an IVORY white (warmer than his hair / his WHITE skin, so they stay apart)
       headColor: '#c4271f',   // his head: red
       lee: true,              // Rock Lee's leg warmers, sandals, belt and holster
       longHair: '#f2f2f2',    // long white hair, swept back
