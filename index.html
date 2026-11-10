@@ -14554,13 +14554,13 @@ function drawTsukuyomi(f) {
 //              19.75 he circles them faster than they can turn; 20.75 a punch in the face; 23 a kick from above (the floor
 //              rings); 24 behind them - they swing at nothing; 25.25 a kick to the face; 26.75 / 29.25 he RICOCHETS round them,
 //              hitting them every pass; 31 a stomp drives them into the floor; 33 a kick sends them STRAIGHT UP, and he goes
-//              with them (Leaf Shadow Dance); 36 the bandage unwinds off his arm... 39 wraps them up tight; 43 he grabs hold,
+//              with them (Leaf Shadow Dance); 36 the bandage unwinds off his arm... 37 wraps them up tight; 44 he grabs hold,
 //              turns them upside down... 47 and they DRILL down, spinning, into the stage - 52.75 PRIMARY LOTUS
 //   52.75 -    a crater of dust; he leaps clear (53.15), red in the face, burning - and at 54.3 they're launched out of it
 //              (the rest of the clip - the dust settling - is skipped: no dead air)
 // (the mp3 has 8.0 - 12.75 of the original clip CUT OUT - he doesn't stand there in his stance for 5 seconds: the times
 // below are the ORIGINAL clip's; leeClipT turns the song's own time into them)
-const leeClipT = s => s < 8.0 ? s : s + 4.75;
+const leeClipT = s => s < 8.0 ? s : s < 33.75 ? s + 4.75 : s + 4.75 + 5.5;   // (and 38.5 - 44.0: the bandage wrap, quicker)
 const LOTUS = { len: 54.3, vol: 1.0, drop1: 1.4, drop2: 4.8, smirk: 6.2, stance: 7.5, glitch: 7.85, power: 12.75, dash: 14.6, dashDur: 0.32, reach: 1700,
   dmg: { blow: 3, punch: 3.5, axe: 3.5, face: 4, pass: 0.45, blitz: 0.24, stomp: 3, up: 3, lotus: 7 },
   final: { dmg: 5, base: 640, growth: 6.4, angle: 80, ultFinal: true, xray: 'SPINE' },
@@ -14844,15 +14844,15 @@ function stepLeeLotus(f, a, dt) {
     camOn(vx, gy - 60 - up * 0.9, T < 34 ? 0.9 : 1.2, 5);
   } else if (T < 47.0) {                                           // UP THERE: the bandage unwinds... wraps them up... he grabs hold, turns them over
     vx = cx - side * 40; const top = gy - 560, drift = Math.sin(T * 1.3) * 8;
-    if (T < 43.0) {
-      put(v, vx, top + drift); vPose(T < 39 ? P(-0.3, 0, [0.5, 0.6], [-0.4, 0.5], [-0.8, 0.5], [0.9, 0.4], { spin: -side * 0.6 }) : { ...WRAP, spin: -side * 0.3 });
+    if (T < 44.0) {
+      put(v, vx, top + drift); vPose(T < 36.9 ? P(-0.3, 0, [0.5, 0.6], [-0.4, 0.5], [-0.8, 0.5], [0.9, 0.4], { spin: -side * 0.6 }) : { ...WRAP, spin: -side * 0.3 });
       put(f, vx + side * 70, top - 50 + drift); f.face = -side;
-      a.pose = T < 39 ? P(-0.1, -6, [0.6, 0.8], [-0.4, 0.9], [1.2, -0.2], [-0.8, -0.5]) : P(0.2, -6, [0.6, 0.8], [-0.4, 0.9], [1.6, 0.1], [1.4, 0.2]);
-      if (T >= 39 && ev('wrap')) { sfx.whoosh(true); }
-      if (T < 39) camOn(f.x + f.face * 18, f.y - 50, 2.4, 6); else camOn(vx, top - 30, 1.5, 5);
+      a.pose = T < 36.9 ? P(-0.1, -6, [0.6, 0.8], [-0.4, 0.9], [1.2, -0.2], [-0.8, -0.5]) : P(0.2, -6, [0.6, 0.8], [-0.4, 0.9], [1.6, 0.1], [1.4, 0.2]);
+      if (T >= 36.9 && ev('wrap')) { sfx.whoosh(true); }
+      if (T < 36.9) camOn(f.x + f.face * 18, f.y - 50, 2.2, 7); else camOn(vx, top - 30, 1.5, 6);
     } else {
       if (ev('grab')) { sfx.hit(0.8); shake = Math.max(shake, 10); }
-      const k = clamp((T - 44.0) / 2.5, 0, 1), flip = Math.PI * easeOut(clamp((T - 43.5) / 1.2, 0, 1));
+      const k = clamp((T - 44.4) / 2.0, 0, 1), flip = Math.PI * easeOut(clamp((T - 44.0) / 0.8, 0, 1));
       put(v, vx, top - 40 * k + drift); vPose({ ...WRAP, spin: -side * flip });
       put(f, vx + side * 12, top - 40 * k - 70 + drift); f.face = -side;
       a.pose = P(0, -2, [0.3, 0.4], [-0.3, 0.4], [2.5, -0.8], [2.3, -0.9], { spin: -side * flip });   // (hugging them, upside down above them)
@@ -14922,8 +14922,8 @@ function drawLeeCut(f) {
   if (v && T >= 36 && T < C.len) {
     const hand = toScreen(f.x + f.face * 20, f.y - 70), vc = toScreen(v.x, v.y - 48);
     sc.strokeStyle = C.bandage; sc.lineCap = 'round'; sc.lineWidth = Math.max(3, 5 * Z);
-    if (T < 41.5) {
-      const unw = clamp((T - 36) / 3, 0, 1), fly = clamp((T - 39) / 2.5, 0, 1);
+    if (T < 38.5) {
+      const unw = clamp((T - 36) / 0.9, 0, 1), fly = clamp((T - 36.9) / 1.1, 0, 1);
       sc.beginPath(); sc.moveTo(hand.x, hand.y);
       const N = 40;
       for (let i = 1; i <= N; i++) {
@@ -14935,8 +14935,8 @@ function drawLeeCut(f) {
       }
       sc.stroke();
     }
-    if (T >= 40.5) {                                               // the wraps round them
-      const k = clamp((T - 40.5) / 1.0, 0, 1), sp = v.action && v.action.pose && v.action.pose.spin || 0;
+    if (T >= 37.5) {                                               // the wraps round them
+      const k = clamp((T - 37.5) / 0.7, 0, 1), sp = v.action && v.action.pose && v.action.pose.spin || 0;
       sc.save(); sc.translate(vc.x, vc.y); sc.rotate(sp);
       for (let i = 0; i < Math.round(6 * k); i++) { const yy = (-32 + i * 12) * Z; sc.beginPath(); sc.moveTo(-15 * Z, yy - 3 * Z); sc.lineTo(15 * Z, yy + 3 * Z); sc.stroke(); }
       sc.restore();
@@ -25409,6 +25409,7 @@ function frame(now) {
     else {
       if (hitstop > 0) {
         hitstop -= STEP;              // freeze frame on hits (inputs are kept for after)
+        for (const f of fighters) if (f.action && f.action.type === 'leeUlt') f.action.songT += STEP / Math.max(0.01, speed());   // (Colby's Primary Lotus runs on its song - it doesn't pause)
       } else {
         update(STEP);
         for (const k in pressed) delete pressed[k];
