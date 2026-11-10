@@ -1439,7 +1439,7 @@ const LANCE_MOVES = {
 
   // ---------- K: KI ----------
   // KAMEHAMEHA: hold K to charge, release to fire a beam that hits repeatedly. Full charge = huge beam.
-  neutralRanged: { name: 'Kamehameha', startup: 0.22, active: 0.55, endlag: 0.3, charge: true, landLag: 0.12, beam: true,
+  neutralRanged: { name: 'Kamehameha', startup: 0.27, active: 0.55, endlag: 0.3, charge: true, landLag: 0.12, beam: true,
     chargeSfx: 'kame',                                                     // Kamehameha charge sound while charging
     chargeRate: 1.3,                                                       // charges 30% faster than other moves
     airHover: true,                                                        // in the air he floats while charging/firing (DBZ style)
@@ -5166,7 +5166,7 @@ function drawDeckScene(U) {                                        // replaces t
 //  K: neutral = HELL GRAB (lunging claw grab -> pick any of 4 throws)
 //     side    = SHOCK DASH (blazing dash; press J during it to cancel into any attack)
 //     up      = HELL UPPERCUT (rising recovery punch - SWEETSPOT right at the start)
-//     down    = full DEMON meter: HELLWAVE (dumps the meter: a shockwave that FREEZES them)
+//     down    = SHADOW CLONE (a full DEMON meter: one clone past his limit - see summonShadowClone)
 //               otherwise: SHADOW CLONE (a clone of him charges in and kicks)
 //  DEMON METER: landing hits lights up D-E-M-O-N. While it's full, his strong (chargeable) attacks hit 25% harder.
 //  Ultimate: LEGION OF HELL (his shadow clones join the flurry, then a pillar of hellfire)
@@ -6766,7 +6766,7 @@ function gainDemon(f) {
   const was = f.demon || 0;
   f.demon = Math.min(100, was + DEMON_METER.gain);
   if (was < 100 && f.demon >= 100) {                          // meter just filled: DEMON!
-    painTexts.push({ x: f.x, y: f.y - 140, t: 0.8, max: 0.8, text: 'DEMON!', big: true });
+    painTexts.push({ x: f.x, y: f.y - 140, t: 0.8, max: 0.8, text: 'DEMON CLONE READY!', big: true });
     hellBurst(f.x, f.y - 50, 30, 600); ring(f.x, f.y - 50); sfx.parry();
   }
 }
@@ -6902,7 +6902,7 @@ const cloneHitsMax = c => CLONE.hits + (c.owner && c.owner.transformed ? 1 : 0);
 const cloneStats = () => { const s = { ...DEFAULT_STATS, ...CHARACTERS.COLBALIAS.stats }; s.weight = (s.weight || 1) / CLONE.kbTaken; return s; };
 // While COLBALIAS IS TRANSFORMED his clones turn vicious: faster on their feet, faster attacks, and their
 // hits do more damage and knockback
-const CLONE_RAGE = { move: 1.3, attackSpeed: 1.3, power: 1.35 };
+const CLONE_RAGE = { move: 1.4, attackSpeed: 1.35, power: 1.5 };   // (his clones while he's in SAGE MODE: faster, quicker and harder-hitting too)
 // INVERSE NINJA LAW: the more clones he has out, the weaker EACH one is. A lone clone is a real threat;
 // three at once are disposable mooks you juggle and swat away while you fight him.
 //   [clones out] -> power = damage/knockback they deal, hp = how much % they can take before they burst
@@ -6971,11 +6971,18 @@ function getCloneMoves() {
 }
 const AI_FERAL = { think: 0.26, defend: 0, aggro: 1, combo: 0.5, mash: 5 };  // average-or-slower reactions, pure aggression
 function summonShadowClone(f) {
-  if ((f.cloneCD || 0) > 0 || cloneCount(f) >= cloneMax(f) || !canAirDodge(f)) {   // too soon / too many / no dodge dots left: just a puff of smoke
+  // a FULL D-E-M-O-N meter lets him go ONE past his limit - the meter's only spent when he actually does
+  const extra = cloneCount(f) >= cloneMax(f) && (f.demon || 0) >= 100 && !f.minion;
+  if ((f.cloneCD || 0) > 0 || (cloneCount(f) >= cloneMax(f) && !extra) || !canAirDodge(f)) {   // too soon / too many / no dodge dots left: just a puff of smoke
     burst(f.x, f.y - 50, ['#3a0000', '#6e6e78'], 8, 0, Math.PI, 200, { grav: 0 });
     return;
   }
   f.cloneCD = CLONE.cd;
+  if (extra) {                                                // DEMON CLONE: the extra one - the meter empties
+    f.demon = 0;
+    painTexts.push({ x: f.x, y: f.y - 140, t: 0.8, max: 0.8, text: 'DEMON CLONE!', big: true });
+    hellBurst(f.x, f.y - 50, 24, 500); ring(f.x, f.y - 50); sfx.parry();
+  }
   f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;   // (uses up a Z-vanish dot)
   const c = makeFighter({ name: 'CLONE', color: '#5a0a0a', energy: '#ff1a1a', x: f.x, controller: 'minion', char: 'COLBALIAS' });
   c.minion = true; c.owner = f;
@@ -8714,7 +8721,8 @@ const HUNTER_STOMP_SLOW = hStompMove(H_STOMP.n - 1, true);
 // TRACKING: after his side J (the Broly Express) lands, his next TWO shells home in on whoever it hit (a Z vanish shakes them).
 const H_SHELL = { gap: 0.1, again: 0.32, track: { turn: 7, time: 6 }, shot: { vx: 820, vy: 0, r: 11, rC: 8, dmg: 5, base: 260, growth: 3.4, angle: 35, life: 1.2 } };
 function hShellShot(f, mult, c, back) {
-  const S = hScale(f), x = (back ? 44 : 52) * S, y = (back ? -72 : -66) * S, P = H_SHELL.shot;
+  // (the HEIGHT only grows so far: in his giant forms - Legendary 3 - a shell from his real hand height flew over everyone's head)
+  const S = hScale(f), x = (back ? 44 : 52) * S, y = (back ? -72 : -66) * Math.min(S, 1.3), P = H_SHELL.shot;
   spawnShot(f, { x, y, vx: P.vx, vy: P.vy, r: P.r + P.rC * c, dmg: P.dmg, base: P.base, growth: P.growth, angle: P.angle, life: P.life }, mult);
   const sh = projectiles[projectiles.length - 1];
   sh.hShell = true;                                                  // (can BEAM CLASH)
@@ -9253,7 +9261,8 @@ const CHARACTERS = {
     look: {
       body: '#7a0b0b',          // blood crimson (Colby's red, gone dark)
       longHair: '#4a4248',      // Colby's long white hair, burnt to ash grey
-      demonEyes: true,          // glowing red eyes
+      demonEyes: true,          // glowing red eyes (SAGE MODE: the toad eyes + orange markings)
+      sage: true,               // his transformation is SAGE MODE (see SAGE)
       smoke: true,              // cigarette (like the Boss and Mr. Red)
       bossAura: '#ff1a1a',      // a dark red aura that never goes out
       demonMeter: true,         // D-E-M-O-N meter
@@ -9261,7 +9270,7 @@ const CHARACTERS = {
       airDodges: 7,             // 7 Z vanishes in the air (his clones cost dots, so he gets more)
       groundDodges: 6,          // 6 dodges on the ground before he tires
       glassJaw: true,           // takes the MOST base knockback in the game (see GLASS_JAW)
-      transformAura: '#ff1a1a',
+      transformAura: '#ff9a2a',  // (Sage Mode: an orange aura)
       // Colby's bowed-leg stance, but no scythe: one hand at his mouth with the cigarette, the other hanging loose
       idle: pose({ lean: 0.06, bob: -7, legA: [0.72, 0.45], legB: [-0.58, 0.05], armA: [1.15, -1.9], armB: [-0.15, -0.35] }),
     },
@@ -9271,7 +9280,7 @@ const CHARACTERS = {
     throwStats: {
       up: { dmg: 6, base: 1700, growth: 0, angle: 90, sky: true },
     },
-    transformName: 'TRUE DEMON',
+    transformName: 'SAGE MODE',
   },
   HUNTER: {
     moves: HUNTER_MOVES,
@@ -9442,7 +9451,7 @@ CHARACTERS.LANCE.altUlt = {
 // blast hits whatever's inside it when it goes off. On the stage it's a dome on the floor (the ledges / below are safe);
 // from UNDER the stage it's a full sphere - that's how he gets the ledges too.
 const FINAL_EXP = { charge: 1.0, maxHold: 6.0, powerMax: 1.7, grow: 0.45, hold: 0.5, spent: 0.7, R: 1500, songLen: 19.0, vol: 1.0, r0: 150,
-                    touch: { dmg: 2.5, base: 520, growth: 1.2 }, touchEvery: 0.45,   // (the DOME itself: anyone it touches is hit and thrown out of it)
+                    tick: 1.2, tickEvery: 0.2, holdAt: 0.72,   // (the SPHERE itself: anyone inside is TRAPPED - hit again and again, tumbling near its edge, until he lets go)
                     hit: { dmg: 20, base: 560, growth: 6.4, ultFinal: true, xray: 'RIBS' } };
 function playFxSong(f) {
   stopFxSong(f);
@@ -9460,9 +9469,8 @@ function finalExpHit(f, a, r, cx, cy) {
   for (const t of fighters) {
     if (t === f || allies(f, t) || a.hitSet.has(t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0) continue;
     const onLedge = t.action && t.action.type === 'ledge';
-    if (!a.under && (onLedge || t.y > STAGE.y + 10)) continue;
-    if (Math.hypot(t.x - cx, (t.y - 50) - cy) > r) continue;
-    if (isIntangible(t) && !(a.under && onLedge) && !(t.action && t.action.type === 'fxFrozen')) { t.dodgedFlash = 0.35; continue; }
+    if (Math.hypot(t.x - cx, (t.y - 50) - cy) > r + 20) continue;
+    if (isIntangible(t) && !onLedge && !(t.action && t.action.type === 'fxFrozen')) { t.dodgedFlash = 0.35; continue; }
     a.hitSet.add(t);
     const dx = t.x - cx, dy = (t.y - 50) - cy, dir = Math.sign(dx) || f.face;
     const ang = clamp(Math.atan2(-dy, Math.abs(dx)) * 180 / Math.PI, 25, 85);
@@ -9496,22 +9504,29 @@ function stepFinalExplosion(f, a, dt, inp) {
   if (!a.boom && (a.t < C.charge || (holding && a.t < C.maxHold))) {   // THE SCREAM: head back, chest out, his aura swelling white-gold - longer = more
     const k = Math.min(1, a.t / C.charge), hk = clamp((a.t - C.charge) / (C.maxHold - C.charge), 0, 1);   // (hk: how far into the long hold)
     a.r = finalExpReach(f, a); a.charging = true;
-    // THE DOME IS THE ATTACK: it's solid light - anyone it reaches is hit and THROWN OUT of it (again, if they come back in)
+    // THE SPHERE IS THE ATTACK: solid light. Anyone inside is CAUGHT - it hits them again and again (chained, they can't
+    // fall out or fight back) and holds them tumbling near its edge, until he lets go and it blasts them away
     a.touched = a.touched || new Map();
     for (const t of fighters) {
       if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.out || t.poofT > 0) continue;
       const onLedge = t.action && t.action.type === 'ledge';
-      if (!a.under && (onLedge || t.y > STAGE.y + 10)) continue;   // (on the stage: a dome on the floor - the ledges / below are safe)
-      if (Math.hypot(t.x - cx, (t.y - 50) - cy) > a.r + 20) continue;
-      if ((a.touched.get(t) || -9) > a.t - C.touchEvery) continue;
-      if (isIntangible(t) && !(a.under && onLedge)) continue;
-      a.touched.set(t, a.t);
-      const dx = t.x - cx, dy = (t.y - 50) - cy, dir = Math.sign(dx) || f.face;
-      const ang = clamp(Math.atan2(-dy, Math.abs(dx)) * 180 / Math.PI, 15, 80);
+      const dx = t.x - cx, dy = (t.y - 50) - cy, d = Math.hypot(dx, dy);
+      if (d > a.r + 20) continue;
+      if (isIntangible(t) && !onLedge) continue;                  // (a Z vanish still slips a hit - not the ledge)
       if (onLedge) t.action = null;
-      t.shielding = false;
-      knock(t, { ...C.touch, angle: ang }, dir, (f.ultPower || 1) * (tfStats(f).power || 1), t.x, t.y - 50);
-      burst(t.x, t.y - 50, ['#ffffff', '#ffe066'], 12, 0, Math.PI, 500, { grav: 0 }); sfx.hit(0.6);
+      t.shielding = false; t.ground = false;
+      if (!t.action || t.action.type !== 'hitstun') t.action = { type: 'hitstun', t: 0, dur: 0.35 };
+      else t.action.dur = Math.max(t.action.dur, t.action.t + 0.35);
+      const ux = d > 1 ? dx / d : (Math.sign(dx) || f.face), uy = d > 1 ? dy / d : 0;
+      const hold = Math.min(a.r * C.holdAt, Math.max(60, d));    // (they're held where they are - pushed out toward the edge, never out of it)
+      const tx = cx + ux * hold, ty = Math.min(cy + uy * hold + 50, t.y < STAGE.y + 4 ? STAGE.y - 45 : Infinity);   // (off the floor: held up in it, never landing)
+      t.vx = (tx - t.x) * 8 + (Math.random() - 0.5) * 120; t.vy = (ty - t.y) * 8 + (Math.random() - 0.5) * 120; t.y -= 1;
+      if ((a.touched.get(t) ?? -9) > a.t - C.tickEvery) continue;
+      a.touched.set(t, a.t);
+      const dmg = C.tick * (f.ultPower || 1) * (tfStats(f).power || 1);
+      t.damage += dmg; t.hitFlash = 0.08;
+      if (t.minion && t.owner && t.owner.respawnTimer <= 0) t.owner.damage += dmg * CLONE.link;
+      burst(t.x, t.y - 50, ['#ffffff', '#ffe066'], 6, 0, Math.PI, 380, { grav: 0 }); sfx.hit(0.4);
     }
     a.poseOverride = pose({ lean: -0.32 * k - 0.1 * hk + Math.sin(a.t * 70) * (0.02 + 0.05 * hk) * k, bob: -10 * k, armA: [0.45, -0.3], legA: [0.75, 0.55], legB: [-0.75, 0.55] });
     shake = Math.max(shake, 2 + 12 * k + 14 * hk);
@@ -9608,10 +9623,9 @@ function drawFinalExplosions() {
     if (!a || a.type !== 'attack' || !a.move || !a.move.finalExp || (!a.boom && !a.charging)) continue;
     const C = FINAL_EXP, t1 = a.t - (a.boomAt ?? C.charge), cx = f.x, cy = f.y - 52;
     const now = performance.now() / 1000;
-    const fade = a.boom ? clamp(1 - (t1 - C.grow - C.hold) / C.spent, 0, 1) : 0.42 + 0.1 * Math.sin(now * 14), r = (a.r || 0) * (a.boom ? 1 : 1 + 0.02 * Math.sin(now * 20));   // (charging: see-through, pulsing)
+    const fade = a.boom ? clamp(1 - (t1 - C.grow - C.hold) / C.spent, 0, 1) * 0.85 : 0.8, r = (a.r || 0) * (1 + 0.012 * Math.sin(now * 20));   // (one solid sphere, start to finish)
     if (fade <= 0 || r < 2) continue;
     ctx.save();
-    if (!a.under) { ctx.beginPath(); ctx.rect(cx - C.R - 50, cy - C.R - 50, 2 * C.R + 100, (STAGE.y + 6) - (cy - C.R - 50)); ctx.clip(); }   // (on the stage: only above the floor)
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0, `rgba(255,255,255,${0.95 * fade})`); g.addColorStop(0.55, `rgba(255,246,190,${0.85 * fade})`);
     g.addColorStop(0.85, `rgba(255,214,90,${0.7 * fade})`); g.addColorStop(1, `rgba(255,140,40,${0.4 * fade})`);
@@ -9631,7 +9645,8 @@ CHARACTERS.LANCE.throwKinds = { forward: 'masho', back: 'masho', up: 'godBind', 
 // Colby: GOD SPEED (Killua's Nen, Hunter x Hunter) - a crackling electric aura, he moves and attacks much faster,
 // EVERY hit he lands adds extra lightning damage, and his bare-handed K string blinks round them (see GOD_SPEED)
 CHARACTERS.COLBY.transformName = 'GOD SPEED';
-CHARACTERS.COLBY.transformStats = { power: 1.1, speed: 1.3 };   // the lightning adds the damage - God Speed is about SPEED
+CHARACTERS.COLBY.transformStats = { power: 1.1, speed: 1.3 };     // the lightning adds the damage - God Speed is about SPEED
+CHARACTERS.COLBALIAS.transformStats = { power: 1.3, speed: 1.22 };   // SAGE MODE: hits harder and moves faster than a normal transform (+ the auto dodge - see SAGE)
 CHARACTERS.COLBY.look.transformAura = '#7fd8ff';
 CHARACTERS.COLBY.look.godSpeed = true;
 // SCYTHELESS SIDE J - HWOARANG'S FLYING KICKS: three flying spinning kicks, each one carrying him FORWARD off his feet.
@@ -11300,8 +11315,14 @@ const parryRoll = t => t.controller !== 'dummy' ||
 // src = { fighter } for melee hits, { shot } for projectiles (used for perfect-block counters/reflects).
 function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (t.respawnTimer > 0) return false;
+  if (t.action && t.action.type === 'attack' && t.action.move && t.action.move.finalExp) {   // Lance's FINAL EXPLOSION: HYPER ARMOR - he takes the damage, nothing else
+    t.damage += h.dmg * mult; t.hitFlash = 0.08; shake = Math.max(shake, 4);
+    burst(hx, hy, ['#ffffff', '#ffe066'], 6, 0, Math.PI, 300, { grav: 0 }); sfx.block();
+    return true;
+  }
   if (isIntangible(t)) { t.dodgedFlash = 0.35; return false; }
   if (uiAutoDodge(t, hx)) return false;                    // Lance in ULTRA INSTINCT: his body dodges it on its own (spends a Z vanish dot)
+  if (sageAutoDodge(t, hx)) return false;                  // Colbalias in SAGE MODE: one auto dodge every 5 seconds
   const dmg = h.dmg * mult;
 
   // PERFECT BLOCK: shield went up just as the hit arrived
@@ -15695,6 +15716,29 @@ function drawUiBubble() {
     text(a.bubble, x + w / 2, y + 23, 10, '#111111', 'center', false);
   }
 }
+// SAGE MODE (Colbalias transformed): he SENSES the hit coming and slips it - once, then it needs SAGE.cd seconds to come
+// back (Ultra Instinct dodges everything while he has dots; this is one every 5 seconds - and it costs no dots)
+const SAGE = { cd: 5, dist: 90, invuln: 0.3, color: '#ff9a2a', eye: '#ffd23f' };
+function sageAutoDodge(t, hx) {
+  if (!t.transformed || !t.look || !t.look.sage || t.minion || t.respawnTimer > 0 || (t.sageCD || 0) > 0) return false;
+  t.sageCD = SAGE.cd;
+  const away = Math.sign(t.x - (hx ?? t.x)) || -t.face;
+  ghosts.push({ fig: figureOf(t), life: 0.3, max: 0.3, color: SAGE.color });
+  t.x += away * SAGE.dist;
+  if (t.ground && !t.onPlatform) t.x = clamp(t.x, STAGE.x + 12, STAGE.x + STAGE.w - 12);
+  t.invuln = Math.max(t.invuln || 0, SAGE.invuln);
+  t.dodgedFlash = 0.35;
+  if (t.action && t.action.type !== 'attack') t.action = null;
+  burst(t.x, t.y - 55, [SAGE.color, SAGE.eye, '#ffffff'], 14, 0, Math.PI, 320, { grav: 0 });
+  painTexts.push({ x: t.x, y: t.y - 140, t: 0.6, max: 0.6, text: 'SAGE DODGE', big: false });
+  sfx.vanish(0.6);
+  return true;
+}
+// (ready: orange sage chakra drifting up off him)
+function drawSageWisps(p) {
+  if (Math.random() < 0.35) particles.push({ x: p.x + (Math.random() - 0.5) * 44, y: p.y - 10 - Math.random() * 80, vx: (Math.random() - 0.5) * 30, vy: -90 - Math.random() * 80,
+                                             life: 0.4, max: 0.4, size: 2, color: Math.random() < 0.5 ? SAGE.eye : SAGE.color, type: 'bit', grav: 0 });
+}
 // AUTO DODGE: called when a hit is about to land on him. Returns true if his body dodged it on its own.
 function uiAutoDodge(t, hx) {
   if (!t.ui || !t.transformed || t.minion || t.respawnTimer > 0) return false;
@@ -16286,10 +16330,10 @@ function startAttack(f, inp, btn) {
   if (btn === 'spc' && f.look && f.look.odm && f.odm && !inp.dir && !inp.up && !inp.down && odmAdvance(f)) { f.spcBuf = 0; return; }
   const key = chooseMove(f, inp, btn);
   // COLBALIAS: summoning a shadow clone is INSTANT - no attack animation, he keeps running/jumping at full
-  // speed. (With a full D-E-M-O-N meter, down K is Hellwave instead, which is a normal move.)
-  if (key === 'downRanged' && f.look && f.look.demonMeter && !f.minion && (f.demon || 0) < 100) {
+  // speed. (With a full D-E-M-O-N meter he can summon ONE past his limit - see summonShadowClone.)
+  if (key === 'downRanged' && f.look && f.look.demonMeter && !f.minion) {
     f.spcBuf = 0;
-    summonShadowClone(f);                             // Colbalias: down K = SHADOW CLONE (full meter: Hellwave)
+    summonShadowClone(f);                             // Colbalias: down K = SHADOW CLONE (full meter: one extra)
     return;
   }
   if (key === 'upRanged' && f.look && f.look.demonMeter && !f.minion) {
@@ -17282,7 +17326,8 @@ function updateFighter(f, inp, dt) {
   }
   if (f.look && f.look.hype && !(f.action && f.action.type === 'taunt')) f.hype = Math.max(0, (f.hype || 0) - HYPE.drain * dt);   // Aiden's HYPE slowly drains (not while he's taunting)
   f.hypePulse = Math.max(0, (f.hypePulse || 0) - dt);
-  if (f.look && f.look.demonMeter) updateGaze(f, dt);            // Colbalias's gaze mark wears off
+  if (f.look && f.look.demonMeter) updateGaze(f, dt);
+  if (f.sageCD > 0) f.sageCD = Math.max(0, f.sageCD - dt);       // (Sage Mode's auto dodge coming back)            // Colbalias's gaze mark wears off
   f.tsCD = Math.max(0, (f.tsCD || 0) - dt);
   f.opening = Math.max(0, (f.opening || 0) - dt);               // the window to punish after a perfect block
   syncKame(f);
@@ -17976,10 +18021,6 @@ function aiDecide(f, o, ai, L) {
     ai.sac = { phase: 'mark', t: 0, target: o }; f.gazeFoe = true;
     ai.up = true; ai.tapSpc = true; return;
   }
-  // COLBALIAS: full D-E-M-O-N meter and they're close = HELLWAVE (freeze them), then go in for the kill
-  if (f.look && f.look.demonMeter && (f.demon || 0) >= 100 && adx < 180 && Math.abs(dy) < 120 && Math.random() < 0.6) {
-    ai.down = true; ai.tapSpc = true; return;
-  }
   // COLBALIAS fights at RANGE with his clones: summons whenever he can (more often when they get close, so a
   // clone is always between them), then hangs back and shoots while the clones do the up-close work
   if (f.look && f.look.demonMeter && !f.minion) {
@@ -17987,7 +18028,7 @@ function aiDecide(f, o, ai, L) {
     if (f.ground && adx < 160 && Math.abs(dy) < 60 && !(oa && (oa.type === 'hitstun' || oa.type === 'parried' || oa.type === 'dizzy')) &&
         !(f.opening > 0) && Math.random() < L.defend * 0.6) { f.face = toward; ai.dir = 0; return; }
     const n = cloneCount(f);
-    const canSummon = (f.cloneCD || 0) <= 0 && n < cloneMax(f) && f.dodgeCount <= airDodgeMax(f) - 2 && (f.demon || 0) < 100;   // (keeps 2 Z vanishes for getting home)
+    const canSummon = (f.cloneCD || 0) <= 0 && (n < cloneMax(f) || (f.demon || 0) >= 100) && f.dodgeCount <= airDodgeMax(f) - 2;   // (keeps 2 Z vanishes for getting home)
     if (canSummon && adx < 900 && Math.abs(dy) < 260 && Math.random() < (adx < 180 ? 0.55 : 0.3)) {   // (SPAMS them)
       f.face = toward; ai.down = true; ai.tapSpc = true; return;
     }
@@ -20143,7 +20184,14 @@ function drawFigure(fig, opts = {}) {
     drawHorn(-1);                                                // far horn (behind)
     drawHorn(1);                                                 // near horn
   }
-  if (look.demonEyes && !opts.tint) {
+  if (look.demonEyes && look.sage && fig.transformed && !opts.tint) {
+    // SAGE MODE: orange pigment round the eye, and a yellow toad eye with a flat bar of a pupil
+    ctx.fillStyle = sketch ? '#c46a10' : '#e8701a';
+    ctx.beginPath(); ctx.moveTo(head.x + f * 1, head.y - 6); ctx.quadraticCurveTo(head.x + f * 8, head.y - 9, head.x + f * 12, head.y - 4);
+    ctx.lineTo(head.x + f * 12, head.y + 2); ctx.quadraticCurveTo(head.x + f * 6, head.y + 4, head.x + f * 1, head.y + 1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = SAGE.eye; ctx.beginPath(); ctx.ellipse(head.x + f * 7, head.y - 2, 3.6, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111111'; ctx.fillRect(head.x + f * 7 - 2.8, head.y - 2.6, 5.6, 1.3);
+  } else if (look.demonEyes && !opts.tint) {
     // Glowing red eyes, slanted (angry)
     const glow = 0.35 + 0.2 * Math.sin(time * 6);
     ctx.fillStyle = `rgba(255,30,30,${glow})`;
@@ -20844,7 +20892,8 @@ function drawFighter(p) {
     const k = a.phase === 'startup' ? 0.3 : 0.3 + 0.7 * clamp(a.t / a.move.active, 0, 1);
     drawAura(p, kiColorNow(p), true, 1.3 + 1.6 * k, 1.0 - 0.3 * k);
   }
-  if (p.transformed && p.ui) drawUiWisps(p);                       // TRANSFORMED: big, constant aura (everyone)
+  if (p.transformed && p.ui) drawUiWisps(p);
+  if (p.transformed && p.look && p.look.sage && !p.minion && !(p.sageCD > 0) && !sketch) drawSageWisps(p);   // Sage Mode: the auto dodge is ready                       // TRANSFORMED: big, constant aura (everyone)
   if (godSpeed(p) && !sketch) drawGodSpeedArcs(p);                          // Colby's GOD SPEED: electricity crackling all over him
   else if (powered) drawAura(p);
   else if (p.look && p.look.bossAura) {                                     // the final boss always smoulders
@@ -23648,14 +23697,14 @@ const MOVESETS = {
       ['K (HOLD)', 'Hellfire Shot', 'A charge shot - hold to power it up.'],
       ['SIDE K', 'Hell Missile', 'A slow bolt of hellfire that crosses the whole stage - a hit STUNS them for a moment.'],
       ['UP K', "Demon's Gaze", 'His recovery: he LOOKS at someone and marks them (a clone first, if one is out). Up K again = SWAP PLACES with them: afterimages of them both flicker up where they are about to land, then they cross over. In the air it gives him a lift. Whoever he swaps into the air gets +3 Z vanishes until they land or are knocked out.'],
-      ['DOWN K', 'Shadow Clone', 'Summons a clone that fights on its own (costs one blue dodge dot). Up to 2 at once (3 transformed).'],
-      ['DOWN K (FULL D-E-M-O-N)', 'Hellwave', 'With a full D-E-M-O-N meter: a wave that FREEZES everyone near him.'] ] },
+      ['DOWN K', 'Shadow Clone', 'Summons a clone that fights on its own (costs one blue dodge dot). Up to 2 at once (3 in Sage Mode).'],
+      ['DOWN K (FULL D-E-M-O-N)', 'Demon Clone', 'With a full D-E-M-O-N meter he can summon ONE clone past his limit. The meter is only spent when he does - and he has to fill it again for the next one.'] ] },
     { title: 'GRAB (U) + DIRECTION', rows: [
       ['FWD / BACK', 'Volleyball Spike', 'A one-handed shoulder throw half the stage away - a clone SETS them, and he leaps up and SPIKES them.'],
       ['UP', 'Sky Throw', 'The highest throw in the game.'],
       ['DOWN', 'German Suplex', 'Drives them head-first into the floor - then four clones and him stomp them into the ground.'] ] },
     { title: 'TRANSFORM + ULTIMATES (I) - TWO BARS', rows: [
-      ['I (ONE BAR FULL)', 'TRUE DEMON', 'Transforms on one bar (the other stays saved). Transformed: +1 clone out at once, his clones take +1 hit and rage.'],
+      ['I (ONE BAR FULL)', 'SAGE MODE', 'Transforms on one bar (the other stays saved). Sage Mode: he and his clones hit harder and move faster, +1 clone out at once, his clones take +1 hit - and once every 5 seconds he AUTO DODGES a hit (orange chakra rises off him when it is ready).'],
       ['I (TRANSFORMED)', '100-Type Guanyin Bodhisattva', 'A giant hundred-armed statue rises behind him and pummels them. Locks on from anywhere.'],
       ['DOWN + I (TRANSFORMED)', 'Shadow Clone Rush', '25 clones fight them one exchange at a time - every clone comes in its own way (running, leaping, diving, vaulting over them, rising out of the ground, tornado-spinning in...) with its own combo, and every one gets countered with a move from THEIR OWN kit (weapon slashes, grapple slams, kicks, ki, fire) - then he teleports behind them for a dead-flat launching punch to the back of the head.'] ] },
     { title: 'WHAT MAKES HIM UNIQUE', notes: [
@@ -23664,7 +23713,7 @@ const MOVESETS = {
       'BIGGER MATCHES, SMARTER CLONES: with 3 fighters his clones fight like HARD CPUs, with 4 like MASTER - and they shield, roll and Z vanish to stay alive.',
       'MORE DODGES: 7 Z vanishes in the air and 6 ground dodges (everyone else: 5 / 4) - because summoning spends them.',
       'GLASS JAW: he takes the most knockback in the game - but his own hits do 15% more damage to make up for it. Keep your distance and let the clones work.',
-      'D-E-M-O-N METER: fills as he lands hits - full = Hellwave on down K.' ] } ] },
+      'D-E-M-O-N METER: fills as he lands hits - full = one extra clone past his limit on down K.' ] } ] },
   COLTEN: { blurb: 'The knight - MASTER OF ALL WEAPONS. The Dragonslayer in his hands, and his grab TAKES your weapon and fights you with your own moves.', sections: [
     { title: 'GROUND J', rows: [
       ['J J J', "Warlord Slash > Rising Backhand > Giant's Crash", 'A wide slash, a heavy rising backhand, then the sword brought straight down from overhead.'],
