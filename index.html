@@ -735,7 +735,7 @@ function updateCamera(dt) {
   if (shipF) {                                       // Aiden's pirate ship: pull out to show the whole ship
     const a = shipF.action; tx = a.x + a.dir * (a.t < SHIP.holdEnd ? 0 : SHIP.L * 0.45); ty = a.gy - 210; tz = 0.72; speed = 3;
   }
-  const uiF = alive.find(f => f.action && (f.action.type === 'flameDragon' || f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut') && f.action.cam);   // (+ Hunter's Legendary 3)
+  const uiF = alive.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut') && f.action.cam);   // (+ Hunter's Legendary 3)
   if (uiF) { const c = uiF.action.cam; tx = c.x; ty = c.y; tz = c.z; speed = c.speed; }   // Lance's Ultra Instinct: the cutscene's own camera
   if (typeof ult !== 'undefined' && ult) {          // ultimate: push in close on the action
     const u = ult.user, v = ult.target;
@@ -1966,6 +1966,7 @@ function startTimeStopAura(f, a) {
   shake = Math.max(shake, 8); sfx.parry(); sfx.beam(0.4);
 }
 function freezeInTime(t, dur, label = 'TIME STOP!', hell = false) {
+  if (powerUpLocked(t)) return;                                   // (a transformation / comeback plays out - time can't stop it)
   stopKameCharge(t);
   t.action = { type: 'timeStop', t: 0, dur, svx: 0, svy: 0, hits: 0, pose: { ...(t.disp || getPose(t)) }, hell };
   t.vx = 0; t.vy = 0; t.shielding = false;
@@ -6783,7 +6784,12 @@ function demonGaze(f) {
   if ((f.gazeCD || 0) > 0) return;
   f.gazeCD = GAZE.cd;
   const m = f.gazeMark;
-  if (m && m.t && m.t.respawnTimer <= 0 && fighters.includes(m.t)) { gazeSwap(f, m.t); return; }   // marked: SWAP
+  if (m && m.t && m.t.respawnTimer <= 0 && fighters.includes(m.t)) {   // marked: SWAP
+    if (powerUpLocked(m.t) || isIntangible(m.t)) {               // (not while they're transforming / mid-comeback / in an ult: it fizzles, the mark stays)
+      painTexts.push({ x: m.t.x, y: m.t.y - 150, t: 0.7, max: 0.7, text: 'CAN\u2019T SWAP', big: false }); sfx.whoosh(false); return;
+    }
+    gazeSwap(f, m.t); return;
+  }
   f.gazeMark = null;
   if (!f.ground && !f.upSpecialUsed) {                          // in the air: a lift, so it still works as a recovery
     f.upSpecialUsed = true; f.vy = -1150; f.vx *= 0.5;
@@ -11549,6 +11555,11 @@ const lerp = (a, b, k) => a + (b - a) * k;
 // land on him). (His ALOLAN WHIP dash grab used to be immune too - now projectiles CAN hit him out of it.)
 const projPhase = t => !!(t.char === 'AIDEN' && t.action && t.action.type === 'attack' &&
   t.action.key === 'neutralRanged' && t.action.phase !== 'end');
+// powering up (a transformation) or mid-COMEBACK: they can't be moved, swapped, frozen or stopped - it plays out
+function powerUpLocked(f) {
+  const a = f && f.action;
+  return !!a && (['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform', 'sgCut', 'sgWait'].includes(a.type) || (a.type === 'leeUlt' && a.comeback));
+}
 function isIntangible(f) {
   if (f.invuln > 0) return true;
   const a = f.action;
@@ -19827,8 +19838,8 @@ function updateSim(dt) {
   // LANCE'S ULTRA INSTINCT: the whole match stops to watch - everyone but him and the one he's beating on is frozen
   // (TRANSFORMATIONS - Lance's Super Saiyan / Super Saiyan 2 / Ultra Instinct, Hunter's Legendary / Legendary 3 - DON'T stop the
   //  match any more: they play out while everyone else keeps fighting. Ultra Instinct's victim is held by the scene itself.)
-  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac' ||
-                                                 (f.action.type === 'flameDragon' && (f.action.phase === 'summon' || f.action.phase === 'release'))));   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
+  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac'));
+  // (Sevon's NINTH FORM no longer stops the match: everyone keeps moving while he breathes in - run, or get ready to block)   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
   const TF_TYPES = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform'];
   const inTransform = f => !!(f.action && (TF_TYPES.includes(f.action.type) || (f.action.type === 'ultVictim' && fighters.some(g => g.action && g.action.type === 'uiTransform' && g.action.victim === f))));
   for (const f of fighters) f.uiFrozen = !!uiCut && f !== uiCut && f !== uiCut.action.victim && !inTransform(f);   // (a transformation keeps going through someone else's ultimate)
@@ -22854,11 +22865,6 @@ function drawHUD() {
     if (ultBanner) drawUltHUD();
     return;
   }
-  if (fighters.some(f => f.action && f.action.type === 'flameDragon' && f.action.phase !== 'follow')) {   // Sevon's NINTH FORM: letterbox
-    sctx.fillStyle = '#000'; sctx.fillRect(-OX, -OY, SW, 54 + OY); sctx.fillRect(-OX, H - 54, SW, 54 + OY);
-    if (ultBanner) drawUltHUD();
-    return;
-  }
   // TRANSFORMATIONS play out during the fight: their screen effects are drawn LIGHT (no letterbox) and the HUD stays up
   for (const tf of fighters) {
     const ty = tf.action && tf.action.type;
@@ -25236,11 +25242,29 @@ let arcade = null;   // { phase: 'pick' | 'vs' | 'lose' | 'win', sel, diff, roun
 // (one per difficulty, kept on this computer). The win screen tells you when you've earned a new one.
 const STARS_KEY = 'db-arcade-stars';
 let arcadeStars = (() => { try { const v = JSON.parse(localStorage.getItem(STARS_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })();
-function earnArcadeStar(diff) {
-  if (arcadeStars.includes(diff)) return false;
-  arcadeStars.push(diff);
-  try { localStorage.setItem(STARS_KEY, JSON.stringify(arcadeStars)); } catch (e) {}
+// ...and EVERY CHARACTER has their own five: { COLBY: ['EASY', 'HARD'], ... } (the home-screen row = beaten with anyone)
+const CHAR_STARS_KEY = 'db-arcade-stars-char';
+let arcadeCharStars = (() => { try { const v = JSON.parse(localStorage.getItem(CHAR_STARS_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } })();
+const charStars = ch => Array.isArray(arcadeCharStars[ch]) ? arcadeCharStars[ch] : [];
+function earnArcadeStar(diff, ch) {
+  if (!arcadeStars.includes(diff)) {
+    arcadeStars.push(diff);
+    try { localStorage.setItem(STARS_KEY, JSON.stringify(arcadeStars)); } catch (e) {}
+  }
+  if (!ch || charStars(ch).includes(diff)) return false;
+  arcadeCharStars[ch] = [...charStars(ch), diff];
+  try { localStorage.setItem(CHAR_STARS_KEY, JSON.stringify(arcadeCharStars)); } catch (e) {}
   return true;
+}
+// a fighter's five little stars (gold = beaten on that difficulty with them)
+function drawCharStars(ch, cx, cy, r, sk) {
+  const got = charStars(ch), gap = r * 2.6;
+  ARCADE_DIFFS.forEach((dn, k) => {
+    const x = cx + (k - 2) * gap;
+    starPath(sctx, x, cy, r);
+    if (got.includes(dn)) { sctx.fillStyle = dn === 'IMPOSSIBLE' ? '#ffe680' : '#ffd23f'; sctx.fill(); sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? '#1d1b2a' : '#8a5a00'; sctx.stroke(); }
+    else { sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? 'rgba(29,27,42,0.35)' : 'rgba(255,255,255,0.28)'; sctx.stroke(); }
+  });
 }
 // a 5-point star
 function starPath(c, x, y, r) {
@@ -25337,7 +25361,7 @@ function arcadeMatchOver(won) {
   const A = arcade;
   removeAllMinions();
   if (A.round >= ARCADE_BONUS) {                                // the BONUS ROUND: you're champion either way - the star needs the win
-    A.bonusLost = !won; A.newStar = won ? earnArcadeStar(ARCADE_DIFFS[A.diff]) : false;
+    A.bonusLost = !won; A.newStar = won ? earnArcadeStar(ARCADE_DIFFS[A.diff], arcadePicks()[A.sel]) : false;
     A.phase = 'win'; menuSfx(won ? 'go' : 'back');
   } else if (!won) { A.lostTo = arcadeFoe(A); A.phase = 'lose'; menuSfx('back'); }
   else { arcadeAdvance(A); A.round++; A.phase = 'vs'; menuSfx('go'); }
@@ -25470,8 +25494,10 @@ function drawArcade() {
         const r = arcadeTileRect(k), on = k === A.sel;
         if (sk) { if (on) { sctx.fillStyle = 'rgba(255,224,40,0.75)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 20, INK, on ? 3 : 1.5); }
         else slantRect(r.x, r.y, r.w, r.h, 10, on ? '#d62a22' : 'rgba(20,16,18,0.85)');
-        sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 38);
+        sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 34);
+        drawCharStars(c, r.x + r.w / 2, r.y + 50, 5, sk);
       });
+      sctx.textAlign = 'center';
       sctx.font = F(16, true); sctx.fillStyle = dim; sctx.fillText('DIFFICULTY', W / 2, 568);
       ARCADE_DIFFS.forEach((dn, k) => {
         const r = arcadeDiffRect(k), on = k === A.diff;
@@ -25513,9 +25539,11 @@ function drawArcade() {
         const dn = ARCADE_DIFFS[A.diff], pulse = 1 + 0.08 * Math.sin(A.t * 6), sx = W / 2 - 300, sy = 560;
         starPath(sctx, sx, sy, 30 * (A.newStar ? pulse : 1)); sctx.fillStyle = '#ffd23f'; sctx.fill(); sctx.lineWidth = 3; sctx.strokeStyle = sk ? INK : '#8a5a00'; sctx.stroke();
         sctx.textAlign = 'left'; sctx.font = F(26, true); sctx.fillStyle = A.newStar ? '#ffd23f' : ink;
-        sctx.fillText(A.newStar ? 'NEW STAR EARNED - ' + dn + '!' : 'You already have the ' + dn + ' star', sx + 46, sy + 4);
+        const who = charName(picks[A.sel]);
+        sctx.fillText(A.newStar ? 'NEW ' + who + ' STAR - ' + dn + '!' : who + ' already has the ' + dn + ' star', sx + 46, sy + 4);
         sctx.font = F(17); sctx.fillStyle = dim;
-        sctx.fillText(arcadeStars.length + ' OF ' + ARCADE_DIFFS.length + ' STARS  -  see them on the home screen', sx + 46, sy + 32);
+        sctx.fillText(charStars(picks[A.sel]).length + ' OF ' + ARCADE_DIFFS.length + ' STARS WITH ' + who + '  -  see them on the arcade fighter pick', sx + 46, sy + 32);
+        drawCharStars(picks[A.sel], sx + 46 + 70, sy + 58, 9, sk);
       }
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(picks[A.sel], W / 2 + 420, 680, 2.0, sk ? INK : (CHARACTERS[picks[A.sel]].look.body || '#fff'), menuTime);
