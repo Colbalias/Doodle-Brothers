@@ -24914,7 +24914,7 @@ function drawArcadeStars(th) {
     });
   });
 }
-const arcadePicks = () => ROSTER.filter(Boolean);
+const arcadePicks = () => ROSTER.filter(c => c && c !== 'STICKMAN');   // (no Stickman in arcade mode - not to play, not to fight)
 function openArcade(dev) {
   arcade = { phase: 'pick', sel: 0, diff: 1, round: 0, t: 0, dev: dev || 'keyboard', active: false, saved: null, br: null };
   scene = 'arcade';
