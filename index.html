@@ -14443,14 +14443,15 @@ function stepHunterL3Cut(f, a, dt) {
     f.hForm = 3; f.hairGrow = 1;
     if ((a.waveT -= dt) <= 0) { a.waveT = 1.1; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.8, max: 140, color: '#86e63c' }); }
   }
-  // STRAY KI BLASTS: while he SCREAMS, his power LEAKS out of him - green beams shooting off in every direction, every so
+  // STRAY KI BLASTS: from the moment he starts transforming until his scream ends, his power LEAKS out of him - green beams shooting off in every direction, every so
   // often, and wherever one comes down it goes off in a yellow dome. Anyone caught in one is hit (frozen until the match
   // starts again, then they go flying). Most come down on the stage; some just fly off into the sky.
   a.strays = a.strays || []; a.booms = a.booms || [];
-  if (ph === 'power') {                                          // (ONLY while he's screaming - the moment it stops, so do the beams)
-    a.strayT = (a.strayT ?? 0.1) - dt;
+  if (T < C.screamEnd) {                                         // (from the very START of the transformation - and the moment the scream stops, so do the beams)
+    a.strayT = (a.strayT ?? 0.3) - dt;
     if (a.strayT <= 0) {
-      a.strayT = 0.08 + Math.random() * 0.14;                   // (a barrage: several a second)
+      a.strayT = ph === 'power' ? 0.08 + Math.random() * 0.14   // (the scream: a barrage, several a second)
+                                : lerp(0.7, 0.18, clamp(T / C.power, 0, 1)) + Math.random() * 0.25;   // (before it: building up, faster and faster)
       const sL = stageL(), sR = stageR(), down = Math.random() < 0.75;
       const tx = down ? sL + Math.random() * (sR - sL) : f.x + (Math.random() - 0.5) * 2600, ty = down ? STAGE.y : f.y - 700 - Math.random() * 500;
       a.strays.push({ x0: f.x, y0: cy - 20, x1: tx, y1: ty, t: 0, dur: Math.hypot(tx - f.x, ty - cy) / 7000, down, hit: false });   // (fast - a blink and it's there)
