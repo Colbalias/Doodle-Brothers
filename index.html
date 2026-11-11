@@ -17725,11 +17725,16 @@ function coltenDisarm(f, t) {
   }
   hitstop = Math.max(hitstop, 0.1); shake = Math.max(shake, 8);
 }
-// KO: whatever he held goes back to its owner, and his own weapon comes back to him
+// KO: whatever he held goes back to its owner, and his own weapon comes back to him.
+// (MIRROR MATCHES: two Colbys = two scythes. Every weapon belongs to ONE fighter - nobody's ever left without their own
+//  because someone else with the same weapon died.)
+const hasOwnWeapon = o => o.weapon === nativeWeapon(o) || (o.gateSword && !!nativeWeapon(o)) || scythes.some(s => s.owner === o && s.weapon === nativeWeapon(o));
+const weaponCopies = w => fighters.filter(q => !q.minion && !q.out && (q.weapon === w || (q.gateSword && nativeWeapon(q) === w))).length + scythes.filter(s => s.weapon === w).length;
+const weaponOwners = w => fighters.filter(q => !q.minion && !q.out && nativeWeapon(q) === w).length;
 function giveWeaponBack(w) {
-  const o = fighters.find(q => !q.minion && nativeWeapon(q) === w);
+  // to an owner who's MISSING theirs (not just the first one with that weapon)
+  const o = fighters.find(q => !q.minion && !q.out && nativeWeapon(q) === w && !hasOwnWeapon(q));
   if (!o) return;
-  for (let i = scythes.length - 1; i >= 0; i--) if (scythes[i].weapon === w) scythes.splice(i, 1);
   equipWeapon(o, w);
 }
 function resetWeapons(f) {
@@ -17741,13 +17746,16 @@ function resetWeapons(f) {
     const s = scythes[i];
     if (s.owner === f) { scythes.splice(i, 1); if (s.weapon !== mine) giveWeaponBack(s.weapon); }
   }
-  if (held && held !== mine) giveWeaponBack(held);
+  if (held && held !== mine) { f.weapon = null; giveWeaponBack(held); }
   if (mine) {
-    for (const o of fighters) if (o !== f && o.weapon === mine) {                       // take his own back from whoever had it
-      if (o.gateSword) { o.gateSword = false; equipWeapon(o, nativeWeapon(o)); } else equipWeapon(o, null);
+    equipWeapon(f, mine);                                        // HE ALWAYS COMES BACK WITH HIS OWN WEAPON
+    // ...and if that leaves one too many of it in play (a RIVAL - Colten - was holding it), the rival lets it go.
+    // Never another fighter whose OWN weapon it is (the other Colby in a mirror match keeps his).
+    if (weaponCopies(mine) > weaponOwners(mine)) {
+      const o = fighters.find(q => q !== f && !q.minion && q.weapon === mine && nativeWeapon(q) !== mine);
+      if (o) { if (o.gateSword) { o.gateSword = false; equipWeapon(o, nativeWeapon(o)); } else equipWeapon(o, null); }
+      else { const k = scythes.findIndex(s => s.weapon === mine && (!s.owner || nativeWeapon(s.owner) !== mine)); if (k >= 0) scythes.splice(k, 1); }
     }
-    for (let i = scythes.length - 1; i >= 0; i--) if (scythes[i].weapon === mine) scythes.splice(i, 1);
-    equipWeapon(f, mine);
   }
 }
 function throwScythe(f) {
@@ -17807,15 +17815,16 @@ function weaponWatchdog(dt) {
     const sv = fighters.find(o => o.char === 'SEVON' && o.respawnTimer <= 0 && Math.hypot(o.x - q.x, (o.y - 30) - q.y) < 70);
     if (sv || q.stuckT > 12) { scythes.splice(i, 1); if (sv) { burst(q.x, q.y - 20, ['#ffffff', '#ff7a1a'], 10, -Math.PI / 2, 0.8, 260); sfx.shing ? sfx.shing() : sfx.block(); } }
   }
-  for (const w of Object.keys(WEAPONS)) {
-    const owner = fighters.find(f => !f.minion && nativeWeapon(f) === w && !f.out);
-    if (!owner) { weaponLost[w] = 0; continue; }
-    const held = fighters.some(f => !f.minion && !f.out && (f.weapon === w || (f.gateSword && nativeWeapon(f) === w)));   // (in Colten's GATE counts as held)
-    const inWorld = scythes.some(s => s.weapon === w);
-    if (held || inWorld) { weaponLost[w] = 0; continue; }
-    weaponLost[w] = (weaponLost[w] || 0) + dt;
-    if (weaponLost[w] < WEAPON_LOST_T) continue;
-    weaponLost[w] = 0;
+  for (const owner of fighters) {
+    const w = nativeWeapon(owner);
+    if (!w || owner.minion || owner.out || WEAPONS[w] && WEAPONS[w].spare) continue;
+    const key = w + owner.slot;
+    // missing = not in his hand, not out in the world as his, and there are fewer of it in play than fighters it belongs to
+    // (a rival holding it - Colten took it - still counts: it's in play)
+    if (hasOwnWeapon(owner) || weaponCopies(w) >= weaponOwners(w)) { weaponLost[key] = 0; continue; }
+    weaponLost[key] = (weaponLost[key] || 0) + dt;
+    if (weaponLost[key] < WEAPON_LOST_T) continue;
+    weaponLost[key] = 0;
     const x = clamp(owner.respawnTimer > 0 ? STAGE.x + STAGE.w / 2 : owner.x, STAGE.x + 90, STAGE.x + STAGE.w - 90);
     scythes.push({ owner, weapon: w, x, y: STAGE.y - 520, vx: 0, vy: 0, dir: owner.face || 1, ang: 0, state: 'fall', t: 0, hit: new Set(), lostT: 0 });
     hudToast = { text: WEAPONS[w].name + ' DROPPED BACK ONTO THE STAGE', t: 1.8 };
