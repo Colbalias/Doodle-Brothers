@@ -14364,7 +14364,7 @@ function drawHunterL2Cut(f) {
 //   17 - 20    he screams again                              20 - 23   his eyes again - and they go RED
 //   23 - 27    a GREEN ORB of power forms round him and lifts him
 //   27.08      it BURSTS - a green flash - and it's chaos: 28 - 33 screaming, the hair growing in all the way
-//   33 - 44    a giant PILLAR of green light, him in the middle of it (41 - 42: green beams crossing the sky)
+//   33 - 44    a giant PILLAR of green light, him in the middle of it (40.8 - 42.6: a BARRAGE of ki blasts pours out of him)
 //   44 - 47    calm: he hangs in a green sphere of his aura - and it bursts when this ends
 // STRAY KI BLASTS fly off him all through it - each one fired ON a blast sound in the clip (H_L3_CUT.blasts).
 // Like Lance's cutscenes it runs in REAL seconds, so it stays on the sound.
@@ -14431,6 +14431,13 @@ function stepHunterL3Cut(f, a, dt) {
   // STRAY KI BLASTS: one fired ON every blast sound in the clip (a burst of them on the big ones) - random, never aimed: they
   // land wherever they land, mostly on the stage (a yellow dome where they hit - anyone in it is hit), some off into the sky
   a.strays = a.strays || []; a.booms = a.booms || [];
+  if (inWin(T, C.cross) && (a.barT = (a.barT ?? 0) - dt) <= 0) {   // THE BARRAGE (where the clip's beams cross the sky): blasts POURING out of him
+    a.barT = 0.07 + Math.random() * 0.06;
+    const sL = stageL(), sR = stageR(), down = Math.random() < 0.7;
+    const tx = down ? sL + Math.random() * (sR - sL) : f.x + (Math.random() - 0.5) * 2600, ty = down ? STAGE.y : f.y - 700 - Math.random() * 500;
+    a.strays.push({ x0: f.x, y0: cy - 20, x1: tx, y1: ty, t: 0, dur: Math.hypot(tx - f.x, ty - cy) / 7000, down, hit: false });
+    if (Math.random() < 0.4) sfx.beam(0.3);
+  }
   C.blasts.forEach((bt, i) => {
     if (T < bt || !ev('blast' + i)) return;
     const n = C.bigBlasts.includes(bt) ? 4 : 1;
@@ -14510,14 +14517,6 @@ function drawHunterL3Cut(f) {
     const base = toScreen(f.x, STAGE.y), g = sc.createLinearGradient(base.x - w, 0, base.x + w, 0);
     g.addColorStop(0, 'rgba(77,255,106,0)'); g.addColorStop(0.3, `rgba(77,255,106,${0.45 * fade})`); g.addColorStop(0.5, `rgba(235,255,220,${0.9 * fade})`); g.addColorStop(0.7, `rgba(77,255,106,${0.45 * fade})`); g.addColorStop(1, 'rgba(77,255,106,0)');
     sc.globalCompositeOperation = 'lighter'; sc.fillStyle = g; sc.fillRect(base.x - w, -OY, w * 2, base.y + OY); sc.globalCompositeOperation = 'source-over';
-  }
-  // the green BEAMS crossing the sky (a cross of light round him)
-  if (inWin(T, C.cross)) {
-    const u = (T - C.cross[0]) / (C.cross[1] - C.cross[0]), al = Math.sin(u * Math.PI), rr = 260 * Z;
-    sc.strokeStyle = `rgba(120,255,120,${0.9 * al})`; sc.lineWidth = 6; sc.shadowColor = '#4dff6a'; sc.shadowBlur = 20;
-    sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.stroke();
-    sc.beginPath(); sc.arc(P.x, P.y, rr * 0.55, 0, Math.PI * 2); sc.stroke();
-    sc.beginPath(); sc.moveTo(-OX, P.y); sc.lineTo(SW - OX, P.y); sc.moveTo(P.x, -OY); sc.lineTo(P.x, SH - OY); sc.stroke(); sc.shadowBlur = 0;
   }
   // the SPHERE of his aura (the calm at the end) - it bursts when this ends
   if (T >= C.sphere) {
