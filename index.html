@@ -13144,7 +13144,7 @@ function drawDragonHead(x, y, ang, s, jaw, t) {
 //   16.9 / 18.7 / 20.8 / 22.6  SLAM, SLAM, SLAM, SLAM - side to side
 //   22.5 - 25.5  held up, screaming                       25.8  he LEAPS up with them, 27.6 ROARS in the air
 //   28.8  DIVES onto the stage by the edge - 29.6 SMASHES them face-first into the floor and DRAGS them across the WHOLE
-//         stage (never off it) - 32.4 hoists them overhead - 33.3 HURLS them away (the launch) - done
+//         stage, back, and across again - fast (never off it) - 32.4 hoists them overhead - 33.3 HURLS them away (the launch) - done
 const GRIND_CUT = { len: 33.7, vol: 1.0,
   slams: [[2.1, 'back'], [5.8, 'front'], [9.3, 'back'], [13.1, 'front'], [16.9, 'back'], [18.7, 'front'], [20.8, 'back'], [22.6, 'front']],
   screams: [[6.6, 7.8], [10.2, 11.4], [14.9, 16.2], [17.4, 18.1], [22.5, 25.5], [32.7, 33.1]],
@@ -13166,7 +13166,7 @@ function startHunterGrind(f, v) {
   v.shielding = false; v.drawZ = 0;
   v.action = { type: 'whipped', t: 0, holder: f, spin: 0 };
   const S = hScale(f), cx = clamp(f.x, stageL() + 300 * S, stageR() - 300 * S);
-  f.action = { type: 'hGrindCut', t: 0, songT: 0, victim: v, whipVictim: v, held: v, ev: new Set(), D: f.face, x0: f.x, y0: f.y, cx,
+  f.action = { type: 'hGrindCut', t: 0, songT: 0, victim: v, whipVictim: v, held: v, ev: new Set(), D: f.face, D0: f.face, x0: f.x, y0: f.y, cx,
                cam: { x: f.x, y: f.y - 80, z: 1.2, speed: 4 } };
   ultBanner = { t: 1.1, name: 'GLACIER GRIND', color: f.color, who: f };
   shake = Math.max(shake, 12);
@@ -13175,6 +13175,17 @@ function startHunterGrind(f, v) {
   playGrindSong(f);
 }
 function stepHunterGrindCut(f, a, dt) {
+  // (no teleporting: wherever a beat would SNAP them to a new spot - into / out of a whirl, round him when he turns - they're
+  //  swung there over a few frames instead. The big swings into the slams are left alone: those are meant to be that fast)
+  const v = a.victim, px = v ? v.x : 0, py = v ? v.y : 0;
+  a.fastOK = false;
+  stepHunterGrindCutBeat(f, a, dt);
+  if (v && f.action === a && !a.fastOK && v.action && v.action.type === 'whipped') {
+    const d = Math.hypot(v.x - px, v.y - py), max = 55;
+    if (d > max) { const k = Math.max(max / d, 0.3); v.x = px + (v.x - px) * k; v.y = py + (v.y - py) * k; }
+  }
+}
+function stepHunterGrindCutBeat(f, a, dt) {
   a.songT += dt / uiRealRate();
   const C = GRIND_CUT, T = a.songT, S = hScale(f), v = a.victim, gy = STAGE.y, L = LEG_UP + LEG_LOW - 1;
   const ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
@@ -13225,45 +13236,54 @@ function stepHunterGrindCut(f, a, dt) {
     return;
   }
   if (T < 25.8) { f.x = a.cx; f.y = gy; f.ground = true; }   // (in the middle for the slams - after that he moves)
-  // the floor slams: each one swings in from wherever the last one ended
+  // the floor slams: EVERY one lands in FRONT of him - between them he TURNS to face where the next one goes (stepping over
+  // to it), so they come off the floor behind him and go up and over his head to it
   const slamIdx = C.slams.findIndex(([t]) => T < t);
+  const Di = i => a.D0 * (i % 2 === 0 ? -1 : 1);
   if (T < 25.8) {
-    for (let i = 0; i < C.slams.length; i++) if (T >= C.slams[i][0] && ev('slam' + i)) slamAt(i, C.slams[i][1] === 'back' ? BACK : FRONT);
-    const prevEnd = slamIdx > 0 ? C.slams[slamIdx - 1] : null, cur = slamIdx >= 0 ? C.slams[slamIdx] : null;
-    const restTh = prevEnd ? (prevEnd[1] === 'back' ? BACK : FRONT) : DANGLE;
+    for (let i = 0; i < C.slams.length; i++) if (T >= C.slams[i][0] && ev('slam' + i)) { D = a.D = Di(i); f.face = D; slamAt(i, FRONT); }
+    const prevI = slamIdx > 0 ? slamIdx - 1 : slamIdx < 0 ? C.slams.length - 1 : -1;
+    const inImpact = prevI >= 0 && T - (a.lastSlam ?? -9) < 0.22;
+    const segI = inImpact || slamIdx < 0 ? prevI : slamIdx;
+    D = a.D = segI >= 0 ? Di(segI) : a.D0; f.face = D;
+    a.fxNow = approach(a.fxNow ?? a.cx, a.cx + D * 45, 300 * dt); f.x = a.fxNow;   // (shifting his feet toward each slam)
+    const mirror = (th, fromD) => fromD === D ? th : Math.PI - th;  // (an arm angle from his other facing, seen from this one)
+    const restTh = prevI >= 0 ? mirror(FRONT, Di(prevI)) : mirror(DANGLE, a.D0);
     // what he's doing between slams (special beats first)
     if (T >= 3.0 && T < 4.5) { whirl((T - 3.0) / 1.5, 2); camOn(f.x, gy - 170, 1.0, 4); return; }
     if (T >= 6.0 && T < 8.1) { whirl((T - 6.0) / 2.1, 3, Math.sin((T - 6) / 2.1 * Math.PI) * 30); camOn(v.x, v.y - 60, T > 6.6 && T < 7.8 ? 1.6 : 1.0, 5); return; }
     if (T >= 4.5 && T < 4.8) { hold(OVER, 0.5, -0.1, -8); camOn(f.x + D * 20, gy - 150, 2.2, 8); return; }   // (a look at his grip)
-    if (T >= 22.6 && T < 25.8) {                                   // held up high, screaming - shaken
-      const k = clamp((T - 22.6) / 0.4, 0, 1), sh = Math.sin(T * 30) * 0.12;
-      hold(lerp(FRONT, OVER, easeOut(k)) + sh, 0.5, -0.15, -10); camOn(v.x, v.y - 60, 1.6, 5); return;
-    }
-    if (!cur) { hold(restTh); return; }
-    // between slams: rest a beat (lifting them up - dangling if they're screaming), then the swing over his head and DOWN
-    const t0 = prevEnd ? prevEnd[0] : 0.9, t1 = cur[0], target = cur[1] === 'back' ? BACK : FRONT;
-    const swingDur = Math.min(1.2, (t1 - t0) * 0.75), sw0 = t1 - swingDur;
-    if (T - (a.lastSlam ?? -9) < 0.22) {                           // the IMPACT beat: they BOUNCE off the floor, he's bent right over it
+    if (inImpact) {                                                // the IMPACT beat: they BOUNCE off the floor, he's bent right over it
       const u = (T - a.lastSlam) / 0.22, bounce = Math.sin(u * Math.PI) * 0.35;
-      hold(restTh + (restTh > -Math.PI / 2 ? -bounce : bounce), 0.5, 0.55 * Math.sign(Math.cos(restTh)), -18);
+      hold(FRONT - bounce, 0.5, 0.55, -18);
       camOn(a.slamX ?? f.x, gy - 90, 1.2 + (a.zoomKick || 0) * (1 - u), 9);
       return;
     }
+    if (T >= 22.6 && T < 25.8) {                                   // held up high, screaming - shaken
+      const k = clamp((T - 22.6 - 0.22) / 0.4, 0, 1), sh = Math.sin(T * 30) * 0.12;
+      hold(lerp(FRONT, OVER, easeOut(k)) + sh, 0.5, -0.15, -10); camOn(v.x, v.y - 60, 1.6, 5); return;
+    }
+    if (slamIdx < 0) { hold(restTh); return; }
+    // between slams: lift them back up off the floor (they're BEHIND him now - he's turned), then up over his head and DOWN in front
+    const t0 = prevI >= 0 ? C.slams[prevI][0] + 0.22 : 0.9, t1 = C.slams[slamIdx][0];
+    const swingDur = Math.min(1.2, (t1 - t0) * 0.75), sw0 = t1 - swingDur;
+    const behind = restTh > Math.PI / 2, liftTo = behind ? Math.PI + 0.5 : -0.5;
     if (T < sw0) {                                                 // lifting them back up off the floor
-      const k = easeOut(clamp((T - t0) / 0.5, 0, 1)), sh = scr >= 0 ? Math.sin(T * 26) * 0.1 : 0;
-      const liftTo = restTh > -Math.PI / 2 ? -0.5 : -Math.PI + 0.5;   // (up off the floor, on the side they came down)
+      const k = easeOut(clamp((T - t0) / Math.max(0.1, Math.min(0.5, sw0 - t0)), 0, 1)), sh = scr >= 0 ? Math.sin(T * 26) * 0.1 : 0;
       hold(lerp(restTh, liftTo, k) + sh);
       camOn(f.x, gy - 130, scr >= 0 ? 1.5 : 1.15, 4);
-    } else {                                                       // UP over his head... and DOWN, accelerating all the way
-      const k = (T - sw0) / swingDur, up = 0.45, idx = slamIdx;
-      // (no two alike: odd ones he HOPS up into the swing and drives them down from the top of the jump; every 3rd is a full
-      //  360 round over his head first; the rest are straight whips)
+    } else {                                                       // UP over his head... and DOWN in front of him, accelerating all the way
+      const k = (T - sw0) / swingDur, up = 0.45, idx = slamIdx; a.fastOK = k > 0.08;
+      // (no two alike: odd ones he HOPS up into the swing and drives them down from the top of the jump; every 3rd goes a
+      //  full extra turn round over his head first; the rest are straight whips)
       const spin360 = idx % 3 === 2, hopUp = idx % 2 === 1;
-      const thUp = spin360 ? lerp(restTh, OVER - Math.PI * 2 * Math.sign(Math.cos(restTh) || 1), easeOut(k / up)) : lerp(restTh, OVER, easeOut(k / up));
-      const th = k < up ? thUp : lerp(OVER, target, ((k - up) / (1 - up)) ** 2.6);
+      const rot = behind ? 1 : -1;                                 // (behind him: round over the top forwards; in front: straight up)
+      const over = (behind ? Math.PI * 1.5 : -Math.PI / 2) + (spin360 ? rot * Math.PI * 2 : 0);
+      const target = (behind ? Math.PI * 2 : 0) + (spin360 ? rot * Math.PI * 2 : 0) + FRONT;
+      const th = k < up ? lerp(liftTo, over, easeOut(k / up)) : lerp(over, target, ((k - up) / (1 - up)) ** 2.6);
       const hop = hopUp ? Math.sin(clamp(k, 0, 1) * Math.PI) * 70 : 0;
       f.y = gy - hop; f.ground = hop < 1;
-      const lean = k < up ? -0.25 : 0.55 * Math.sign(Math.cos(target));   // (rearing back... then throwing his whole body into it)
+      const lean = k < up ? -0.25 : 0.55;                          // (rearing back... then throwing his whole body into it)
       hold(th, Math.cos(th) < 0 ? -0.5 : 0.5, lean, k < up ? -4 : -14);
       if (k > up) { if (Math.random() < dt * 60) burst(v.x, v.y - 40, ['#ffffff', '#cfefff'], 1, 0, Math.PI, 220, { grav: 0 }); if (Math.random() < dt * 40) ghosts.push({ fig: figureOf(v), life: 0.15, max: 0.15, color: '#cfefff' }); }
       camOn(f.x, gy - 140 - hop * 0.5, k < up ? 1.0 : 0.92, 6);
@@ -13298,9 +13318,12 @@ function stepHunterGrindCut(f, a, dt) {
   if (T < 32.4) {                                                  // SMASHED face-first into the floor - and DRAGGED across the whole stage
     if (ev('wall')) { painfulSlam(v, f.x + D * 60, gy, 5, false); v.damage += (C.slamDmg - BROLY.slamHit.dmg) * pw; shake = 34; camPunch = 1; burst(f.x, gy, ['#cfefff', '#ffffff', '#8fd8ff'], 40, -Math.PI / 2, 1.4, 800, { grav: 700 }); }
     a.tickT = (a.tickT || 0) - dt;
-    D = a.D = -dirE; f.face = D;
-    const k = clamp((T - 29.6) / 2.8, 0, 1), far = D > 0 ? sR : sL, from = edgeX - dirE * 140;   // (from where he dove in, by one edge...)
-    f.x = lerp(from, far, k);                                     // (...right across to the other) f.y = gy; f.ground = true;   // (exactly as far as the stage goes - never off it)
+    // THREE passes, FAST - across, a whip round, back across, round again, across once more (never off the stage)
+    const passes = 3, per = 2.8 / passes, pi = Math.min(passes - 1, Math.floor((T - 29.6) / per)), pu = clamp((T - 29.6 - pi * per) / (per * 0.82), 0, 1);
+    D = a.D = (pi % 2 === 0 ? -dirE : dirE); f.face = D;
+    const from = D > 0 ? sL : sR, far = D > 0 ? sR : sL;
+    f.x = lerp(pi === 0 ? edgeX - dirE * 140 : from, far, pu * pu * (3 - 2 * pu) * 0.25 + pu * 0.75);   // (a quick burst up to speed)
+    if (pu >= 1 && ev('turn' + pi)) { sfx.whoosh(true); dust(f.x, gy, 16, 2.2); shake = Math.max(shake, 14); }   // (skidding round at the end of a pass) f.y = gy; f.ground = true;   // (exactly as far as the stage goes - never off it)
     v.vx = v.vy = 0; v.x = f.x + D * (24 * S + 46); v.y = gy - 30; v.action.spin = D * Math.PI / 2; v.face = -D;
     const run = Math.sin(T * 26);
     a.pose = P(0.75, -16, [run * 1.1, 0.6], [-run * 1.1, 0.6], { grip: [44, -52], armB: [-1.0, -0.4] });
