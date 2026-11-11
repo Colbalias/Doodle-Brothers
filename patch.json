@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.50",
+    "version":  "0.7.51",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "9c8b480a02f4697f781e1c9b2cc96a3fe973000ad1cbb4017e157ffae7164d4b",
-                                     "size":  1815767
+                                     "hash":  "d014f436b6a32992a509b2baa32b36f34f64eacdcb47ff7832ade4be0d7d4775",
+                                     "size":  1841975
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -87,6 +87,14 @@
                                                             "hash":  "fc121da3565e8f7158ab48c98a15a4bd0be0249ef77b502b603563e4a0802eb0",
                                                             "size":  4877340
                                                         },
+                  "sounds/battle/hunter-gigantic-roar.mp3":  {
+                                                                 "hash":  "b38e274071a876e13b1d251f5c843920ae963f4556479b778c73fa3517651f10",
+                                                                 "size":  109172
+                                                             },
+                  "sounds/battle/hunter-grind.mp3":  {
+                                                         "hash":  "4352885e52ef04bae2ae317614cbbd55f17bc8627405bd6075c29ce70124a976",
+                                                         "size":  811008
+                                                     },
                   "sounds/battle/hunter-l2-song.mp3":  {
                                                            "hash":  "fc168e651060afc05a6bd4c699f302354046c67930edd65b2f935c08eea06e15",
                                                            "size":  410490
