@@ -9279,6 +9279,7 @@ const CHARACTERS = {
       headColor: '#c4271f',   // his head: red
       lee: true,              // Rock Lee's leg warmers, sandals, belt and holster
       longHair: '#f2f2f2',    // long white hair, swept back
+      widowPeak: true,        // ...with a WIDOW'S PEAK at the front of the hairline
       timeStop: true,         // builds a TIME meter by landing hits (down K with a full meter = Time Stop - scythe or not)
       bleed: true,            // scythe hits stack BLEED on them (see BLEED)
       weapon: 'scythe',       // his own weapon (Colten's is the greatsword) - see WEAPONS
@@ -20978,6 +20979,14 @@ function drawFigure(fig, opts = {}) {
     ctx.arc(head.x - f * 1, head.y - 1, 13, mir(-0.95), mir(2.75), f > 0);
     ctx.lineTo(head.x - f * 3, head.y + 2);
     ctx.fill();
+    if (look.widowPeak) {                      // COLBY: a WIDOW'S PEAK - the hairline dips to a point on his forehead
+      ctx.beginPath();
+      ctx.moveTo(head.x + f * 6.5, head.y - 11.6);          // (the front of the hairline)
+      ctx.quadraticCurveTo(head.x + f * 8.6, head.y - 8.5, head.x + f * 9.4, head.y - 4.6);   // down to the point...
+      ctx.quadraticCurveTo(head.x + f * 5.2, head.y - 8.2, head.x + f * 1.5, head.y - 13.4);  // ...and back up into the crown
+      ctx.closePath(); ctx.fill();
+      if (ink) { ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.stroke(); }
+    }
     if (ink) {                                 // outline + a couple of pen strokes for strands
       ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(head.x + f * 4, head.y - 11); ctx.quadraticCurveTo(head.x - f * 6, head.y - 10, head.x - f * 11, head.y + 2); ctx.stroke();
