@@ -9243,7 +9243,16 @@ function stepHunterChain(f, a, dt) {
 // mouth. I WHILE HOLDING SOMEONE = GLACIER GRIND (see below).
 const H_ERASER = { grow: 0.6, release: 0.74, end: 1.15, speed: 640, r: 34, blastR: 200, life: 1.6,
                    blast: { dmg: 24, base: 540, growth: 6.4, angle: 55 } };
-const H_ROAR = { wind: 0.75, beam: 1.7, end: 0.35 };
+const H_ROAR = { wind: 1.38, beam: 3.3, end: 0.3 };   // (timed to sounds/battle/hunter-gigantic-roar.mp3: the charge, then the ROAR at 1.3s - the beam lasts the rest of the clip)
+let roarSfxEl = null;
+function playRoarSfx() {                                        // the Gigantic Roar clip (Broly's, 0:25 - 0:30 - the mp3 itself is cut)
+  if (!soundOn) return null;
+  try {
+    if (!roarSfxEl) { roarSfxEl = new Audio('sounds/battle/hunter-gigantic-roar.mp3'); roarSfxEl.preload = 'auto'; }
+    const c = roarSfxEl.cloneNode(); c.volume = clamp(1.0 * settings.master * settings.sfx, 0, 1); c.play().catch(() => {});
+    return { el: c };
+  } catch (e) { return null; }
+}
 const H_GRIND = { grip: 0.28, leap: 0.32, margin: 150, drag: 1.15, speed: 1350, tick: 0.08, tickDmg: 0.6, wall: 0.42, wallSpeed: 900, rise: 0.25,
                   iceW: 44, iceH: 150,                          // (the ice wall's blocks)
                   slams: 8, swing: 0.24, slamT: 0.14, whip: 0.2, hop: 70, turns: 1.5, slamDmg: 1.2, final: { dmg: 10, base: 560, growth: 6.5, angle: 72, ultFinal: true, xray: 'SPINE' } };
@@ -11395,7 +11404,8 @@ playSsgSong = gateSound('sgSong', playSsgSong, (h, [f]) => { if (h && f) f.sgSon
 playFxSong = gateSound('fxSong', playFxSong, (h, [f]) => { if (h && f) f.fxSong = h; });   // (Lance's Final Explosion song)   // (Lance's Super Saiyan God song)
 playLeeSong = gateSound('leeSong', playLeeSong, (h, [f]) => { if (h && f) f.leeSong = h; });   // (Colby's Primary Lotus)
 playTsuSong = gateSound('tsuSong', playTsuSong, (h, [f]) => { if (h && f) f.tsuSong = h; });   // (Colbalias's Tsukuyomi: the Mugen Tsukuyomi clip)
-playSharinganSfx = gateSound('sfx.sharingan', playSharinganSfx);   // (Colbalias's Tsukuyomi: the eye opening)   // (Lance's Super Saiyan song)   // (Hunter's Legendary 3 song)    // (Lance's Super Saiyan 2 song)
+playSharinganSfx = gateSound('sfx.sharingan', playSharinganSfx);
+playRoarSfx = gateSound('sfx.hroar', playRoarSfx);   // (Hunter's Gigantic Roar clip)   // (Colbalias's Tsukuyomi: the eye opening)   // (Lance's Super Saiyan song)   // (Hunter's Legendary 3 song)    // (Lance's Super Saiyan 2 song)
 
 
 // ---------------- Helpers ----------------
@@ -12854,29 +12864,30 @@ function eraserBlast(s) {
 }
 function stepHunterRoar(f, a, dt) {
   const S = hScale(f), R = H_ROAR;
+  a.rt = (a.rt || 0) + dt / uiRealRate();                          // (REAL seconds - it's timed to the clip)
   f.vx = approach(f.vx, 0, FRICTION * dt); if (!f.ground) f.vy = 0; a.air = false;
   if (!a.fired) {
-    if (!a.aimed) { a.aimed = true; const o = nearestFoe(f); if (o) f.face = Math.sign(o.x - f.x) || f.face; }
-    const k = clamp(a.t / R.wind, 0, 1), m = hunterMouth(f);
+    if (!a.aimed) { a.aimed = true; const o = nearestFoe(f); if (o) f.face = Math.sign(o.x - f.x) || f.face; playRoarSfx(); }
+    const k = clamp(a.rt / R.wind, 0, 1), m = hunterMouth(f);
     a.poseOverride = pose({ lean: -0.35 * k, bob: -10 * k, armA: [-0.7, -1.4], armB: [0.7, -1.4], legA: [0.8, 0.8], legB: [-0.7, 0.5] });   // chest out, head thrown back
     shake = Math.max(shake, 3 + 10 * k);
     if (Math.random() < dt * 40) burst(m.x, m.y, ['#4dff6a', '#ffffff'], 2, -Math.PI / 2, 1.2, 160, { grav: -100 });
     if (Math.random() < dt * 12) bolt(f.x + (Math.random() - 0.5) * 60 * S, f.y - Math.random() * 100 * S, Math.random() * Math.PI * 2, 50, 0.08, '#4dff6a');
-    if (a.t >= R.wind) {
-      a.fired = true; a.t0 = a.t;
+    if (a.rt >= R.wind) {
+      a.fired = true; a.t0 = a.rt;
       projectiles.push({ owner: f, kind: 'beam', ult: true, mouth: true, ultHit: true, x: m.x, y: m.y, dir: f.face, vdir: 0, len: 0, grow: 6500,
-        maxLen: 3000, w: 118 * S / HS, life: R.beam, max: R.beam, tickT: 0, mult: (f.ultPower || 1) * (f.hForm ? HUNTER_FORMS[f.hForm].power : 1),
+        maxLen: 3000, w: 118 * S / HS, life: R.beam * uiRealRate(), max: R.beam * uiRealRate(), tickT: 0, mult: (f.ultPower || 1) * (f.hForm ? HUNTER_FORMS[f.hForm].power : 1),
         color: '#4dff6a', hit: new Set(), trail: [],
-        tick: { dmg: 1.1, base: 120, growth: 0, angle: 12, noStop: true }, final: { dmg: 10, base: 540, growth: 6.2, angle: 30, ultFinal: true } });
+        tick: { dmg: 0.56, base: 120, growth: 0, angle: 12, noStop: true }, final: { dmg: 10, base: 540, growth: 6.2, angle: 30, ultFinal: true } });   // (tick halved: the beam lasts twice as long now)
       impactFrame = 0.15; impactAt = { x: m.x, y: m.y, ang: 0, all: true, focus: true, invert: true };
-      hitstop = Math.max(hitstop, 0.15); shake = 26; camPunch = 1; sfx.beam(1); sfx.huge();
+      shake = 26; camPunch = 1; sfx.huge();   // (the roar itself is in the clip - and no hit-freeze: it would put it out of step)
     }
   } else {
     a.poseOverride = pose({ lean: 0.1, bob: -12, armA: [0.9, -0.6], armB: [-0.9, -0.6], legA: [0.9, 0.8], legB: [-0.8, 0.5] });   // ROARING it out, arms flung wide
     shake = Math.max(shake, 14);
     if (Math.random() < dt * 20) bolt(f.x + (Math.random() - 0.5) * 70 * S, f.y - Math.random() * 110 * S, Math.random() * Math.PI * 2, 60, 0.08, Math.random() < 0.5 ? '#4dff6a' : '#ffffff');
     if (f.ground && Math.random() < dt * 30) dust(f.x + (Math.random() - 0.5) * 60, f.y, 2, 1.6);
-    if (a.t - a.t0 >= R.beam + R.end) f.action = { type: 'land', t: 0, dur: 0.25 };
+    if (a.rt - a.t0 >= R.beam + R.end) f.action = { type: 'land', t: 0, dur: 0.25 };
   }
   return true;
 }
