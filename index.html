@@ -22675,7 +22675,15 @@ function drawHUD() {
     liveCutDraw = true; sctx.save(); sctx.globalAlpha = (ty === 'hL3Cut' && !tf.action.l2) ? 1 : cb ? 0.6 : 0.35;
     if (ty === 'sgCut') drawSsgCut(tf); else if (ty === 'leeUlt') drawLeeCut(tf);
     else if (ty === 'hL3Cut') { if (tf.action.l2) drawHunterL2Cut(tf); else drawHunterL3Cut(tf); }
-    else if (ty === 'ss1Cut') drawSs1Cut(tf); else if (ty === 'ssj2Cut') drawSsj2Cut(tf);
+    else if (ty === 'ss1Cut') drawSs1Cut(tf);
+    else if (ty === 'ssj2Cut') {                                     // (Super Saiyan 2 is a full-screen painted cinematic: shown in a
+      sctx.globalAlpha = 1;                                          //  PICTURE-IN-PICTURE window at the top, the fight carrying on under it)
+      const k = 0.34, bw = W * k, bh = H * k, bx = (W - bw) / 2, by = 12;
+      sctx.fillStyle = '#000'; sctx.fillRect(bx - 4, by - 4, bw + 8, bh + 8);
+      sctx.beginPath(); sctx.rect(bx, by, bw, bh); sctx.clip();
+      sctx.translate(bx, by); sctx.scale(k, k);
+      drawSsj2Cut(tf);
+    }
     sctx.restore(); if (ty === 'uiTransform') drawUiBubble();
     liveCutDraw = false;
   }
