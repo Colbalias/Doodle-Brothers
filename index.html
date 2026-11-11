@@ -14355,121 +14355,103 @@ function drawHunterL2Cut(f) {
   sctx.restore();
 }
 
-// When his rage takes him to Legendary 3, the whole match stops to watch, to sounds/battle/hunter-l3-song.mp3 (NOT in the
-// battle playlist), trimmed to start at exactly 3:00 (the mp3 itself is cut - seeking didn't work in the apps). Seconds in:
-//   0 - 24      THE STRUGGLE / BLACK HOLE: the transformation is so taxing he starts DRAWING THE STAGE INTO HIMSELF - rocks,
-//               chunks of floor and dust pulled into him, a dark vortex round him, the shaking building. His hair doesn't
-//               start growing until 14, then creeps in slowly right up to the scream
-//   24 - 26.5   the BLACK closes in on him like an iris - the stage, then him - a ring of green light round its edge
-//   26.5 - 28   ALL BLACK: nothing but his aura burning in the dark, bigger and brighter
-//   28 - 32     THE SCREAM: a white flash, he's full Legendary 3, arms flung wide - the whole screen GREEN with his power
-//   32 - 40.6   the screaming stops, the green fades: he stands there loose and leaning back, gloating, to the song's end
-// Like Lance's cutscenes it runs in REAL seconds, so it stays on the music.
-const H_L3_CUT = { from: 0, hairFrom: 14, iris: 24, dark: 26.5, power: 28, screamEnd: 32, greenFade: 1.2, len: 40.6, fadeOut: 1.5, vol: 1.0 };
+// When his rage takes him to Legendary 3, the whole match stops to watch - the BROLY TRANSFORMATION from Dragon Ball Super:
+// Broly (0:54 - 1:41 of the clip, with its own sound - sounds/battle/hunter-l3-song.mp3, the mp3 itself is cut), beat for beat,
+// the camera on HIM the whole way (no cutaways). Seconds in:
+//   0 - 3      straining, shaking, his aura flickering       3.04  a GREEN FLASH blows out of him
+//   6 - 11     he SCREAMS - the aura surging, his hair starting to rise and grow
+//   11 - 14    his eyes, close up - burning white            14 - 17.5  a PURPLE DOME of energy swells out over the land
+//   17 - 20    he screams again                              20 - 23   his eyes again - and they go RED
+//   23 - 27    a GREEN ORB of power forms round him and lifts him
+//   27.08      it BURSTS - a green flash - and it's chaos: 28 - 33 screaming, the hair growing in all the way
+//   33 - 44    a giant PILLAR of green light, him in the middle of it (41 - 42: green beams crossing the sky)
+//   44 - 47    calm: he hangs in a green sphere of his aura - and it bursts when this ends
+// STRAY KI BLASTS fly off him all through it - each one fired ON a blast sound in the clip (H_L3_CUT.blasts).
+// Like Lance's cutscenes it runs in REAL seconds, so it stays on the sound.
+const H_L3_CUT = { from: 0, len: 47.0, fadeOut: 1.2, vol: 1.0, hairFrom: 6, hairFull: 33, flash1: 3.04, flash2: 27.08,
+  screams: [[6, 11], [17, 20], [28, 33]], eyes: [[11, 14], [20, 23]], redEyes: 21.4, dome: [14, 17.5], orb: [23, 27.08], pillar: [33, 44], cross: [40.8, 42.6], sphere: 44,
+  blasts: [1.2, 3.04, 7.72, 8.04, 8.72, 11.56, 12.16, 15.68, 16.0, 16.68, 17.48, 18.44, 19.4, 20.0, 23.12, 23.4, 27.08, 32.12, 35.44, 41.68],
+  bigBlasts: [3.04, 12.16, 27.08] };
 let hL3SongEl = null;                                           // (a fresh element each time - see playHunterL3Song)
 function startHunterL3Cut(f) {
   f.ultBuf = 0; f.vx = f.vy = 0; f.atkBuf = f.spcBuf = f.jumpBuf = f.grabBuf = 0; f.shielding = false;
-  f.action = { type: 'hL3Cut', t: 0, songT: 0, waveT: 0, rockT: 0, cam: { x: f.x, y: f.y - 70, z: 1.2, speed: 3 } };
+  f.action = { type: 'hL3Cut', t: 0, songT: 0, waveT: 0, rockT: 0, ev: new Set(), y0: f.y, cam: { x: f.x, y: f.y - 70, z: 1.2, speed: 3 } };
   f.hairGrow = 0;
   playHunterL3Song(f);
 }
 function playHunterL3Song(f) {
   stopHunterL3Song(f);
   if (!soundOn) return null;
-  let el; try { el = hL3SongEl = new Audio('sounds/battle/hunter-l3-song.mp3#t=' + H_L3_CUT.from); } catch (e) { return null; }
+  let el; try { el = hL3SongEl = new Audio('sounds/battle/hunter-l3-song.mp3'); } catch (e) { return null; }
   el.preload = 'auto';
-  const seek = () => { if (Math.abs(el.currentTime - H_L3_CUT.from) > 1) try { el.currentTime = H_L3_CUT.from; } catch (e) {} };   // (in case the #t didn't take)
-  el.addEventListener('loadedmetadata', seek, { once: true }); seek();
   el.volume = clamp(H_L3_CUT.vol * settings.master * settings.music * 1.6, 0, 1);
   el.play().catch(() => {});
   const h = { el, at: performance.now() }; f.l3Song = h;
   return h;
 }
 function stopHunterL3Song(f) { if (f && f.l3Song) { try { f.l3Song.el.pause(); } catch (e) {} f.l3Song = null; } }
-const hL3Phase = T => T < H_L3_CUT.iris ? 'hole' : T < H_L3_CUT.dark ? 'iris' : T < H_L3_CUT.power ? 'dark' : T < H_L3_CUT.screamEnd ? 'power' : 'gloat';
+const inWin = (T, w) => T >= w[0] && T < w[1];
+const hL3Phase = T => { const C = H_L3_CUT;
+  if (T >= C.sphere) return 'sphere'; if (inWin(T, C.pillar)) return 'pillar'; if (inWin(T, [C.flash2, C.pillar[0]])) return 'chaos';
+  if (inWin(T, C.orb)) return 'orb'; if (C.eyes.some(w => inWin(T, w))) return 'eyes'; if (C.screams.some(w => inWin(T, w))) return 'scream';
+  if (inWin(T, C.dome)) return 'dome'; return T < C.flash1 ? 'strain' : 'after'; };
 function stepHunterL3Cut(f, a, dt) {
   f.vx = 0; f.vy = 0;
   a.songT += dt / uiRealRate();
-  const C = H_L3_CUT, T = a.songT, S = hScale(f), cy = f.y - 55 * S, ph = hL3Phase(T);
-  const k = clamp(T / C.iris, 0, 1), g = clamp((T - C.hairFrom) / (C.power - C.hairFrom), 0, 1);
-  const headY = f.y - 86 * S;                                    // (his face)
-  // ---- the hair: nothing for a long while (the STRUGGLE), then it creeps in, slowly, right up to the scream ----
-  if (T >= C.hairFrom && !a.growing) { a.growing = true; f.hForm = 3; impactFrame = Math.max(impactFrame, 0.08); impactAt = { x: f.x, y: headY, ang: 0, all: true, focus: true, invert: true }; sfx.huge(); }
-  if (a.growing && !a.burst) f.hairGrow = g;
-  // ---- the pose + the camera ----
-  const sh = Math.sin(T * 60) * (0.03 + 0.06 * k + 0.05 * g);
-  const cam = a.cam;
-  if (ph === 'power') {                                          // THE SCREAM: arms flung wide, chest out
-    a.pose = pose({ lean: -0.22 + sh * 0.3, bob: -6, armA: [2.0, -0.2], armB: [-2.0, 0.2], legA: [0.7, 0.4], legB: [-0.7, 0.4] });
-    cam.x = f.x; cam.y = f.y - 75 * S; cam.z = 1.3; cam.speed = 4;
-  } else if (ph === 'gloat') {                                   // TRANSFORMED: loose, leaning back, arms hanging - gloating
-    const br = Math.sin((T - C.screamEnd) * 2.2);
-    a.pose = pose({ lean: -0.12 + br * 0.015, bob: br * 1.5, armA: [0.5, -0.2], armB: [-0.45, -0.15], legA: [0.36, 0.08], legB: [-0.34, 0.06] });
-    cam.x = f.x; cam.y = f.y - 70 * S; cam.z = 1.35; cam.speed = 2;
-  } else {                                                       // THE STRUGGLE: hunched over, fists up, shaking
-    a.pose = pose({ lean: -0.18 - 0.12 * k + sh, bob: -12 - 6 * k, armA: [0.55, -1.9], armB: [-0.55, -1.9], legA: [0.75, 0.75], legB: [-0.75, 0.75] });
-    cam.x = f.x; cam.y = f.y - 70 * S; cam.z = ph === 'hole' ? 1.1 + 0.45 * k : 1.6; cam.speed = 2;
-  }
+  const C = H_L3_CUT, T = a.songT, S = hScale(f), ph = hL3Phase(T);
+  const ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
+  // ---- the hair: rising from his first scream, growing in all the way by the pillar ----
+  if (T >= C.hairFrom) { f.hForm = 3; f.hairGrow = clamp((T - C.hairFrom) / (C.hairFull - C.hairFrom), 0, 1); }
+  // ---- the ORB lifts him a little off the floor; the sphere lets him down ----
+  const lift = T < C.orb[0] ? 0 : T < C.sphere ? 46 * easeOut(clamp((T - C.orb[0]) / 2, 0, 1)) : 46 * (1 - clamp((T - C.sphere) / 2.5, 0, 1));
+  f.y = a.y0 - lift; f.ground = lift < 1;
+  const cy = f.y - 55 * S, headY = f.y - 86 * S;
+  const sh = Math.sin(T * 60), cam = a.cam;
+  const SCREAM = pose({ lean: -0.24 + sh * 0.02, bob: -6, armA: [2.0, -0.2], armB: [-2.0, 0.2], legA: [0.75, 0.45], legB: [-0.75, 0.45] });   // arms flung wide, chest out
+  const STRAIN = pose({ lean: -0.18 + sh * 0.05, bob: -14, armA: [0.55, -1.9], armB: [-0.55, -1.9], legA: [0.8, 0.8], legB: [-0.8, 0.8] });   // hunched, fists clenched, shaking
+  // ---- his pose + the camera: ON HIM the whole time ----
+  if (ph === 'strain' || ph === 'after' || ph === 'eyes') a.pose = STRAIN;
+  else if (ph === 'sphere') { const br = Math.sin((T - C.sphere) * 2.2); a.pose = pose({ lean: -0.12 + br * 0.015, bob: br * 1.5, armA: [0.5, -0.2], armB: [-0.45, -0.15], legA: [0.36, 0.08], legB: [-0.34, 0.06] }); }
+  else a.pose = SCREAM;
+  if (ph === 'eyes') { cam.x = f.x + f.face * 6 * S; cam.y = headY; cam.z = 2.8; cam.speed = 6; }
+  else if (ph === 'scream' || ph === 'chaos') { cam.x = f.x; cam.y = f.y - 80 * S; cam.z = 1.6; cam.speed = 4; }
+  else if (ph === 'dome' || ph === 'pillar' || ph === 'orb') { cam.x = f.x; cam.y = f.y - 140; cam.z = 0.95; cam.speed = 3; }
+  else { cam.x = f.x; cam.y = f.y - 70 * S; cam.z = 1.3; cam.speed = 3; }
   // ---- the effects ----
-  if (ph === 'hole' || ph === 'iris') {
-    shake = Math.max(shake, 2 + 10 * k + 4 * g);
-    // THE BLACK HOLE: the stage pulled into him - rocks, chunks of floor, dust, from further and further away
-    const n = dt * (20 + 70 * k);
-    for (let i = 0; i < n || (i === 0 && Math.random() < n); i++) {
-      const ang = Math.random() * Math.PI * 2, d = 220 + Math.random() * (260 + 520 * k);
-      const fromFloor = Math.random() < 0.55, sx = f.x + Math.cos(ang) * d, sy = fromFloor ? STAGE.y - 2 : cy + Math.sin(ang) * d * 0.7;
-      const life = 0.5 + Math.random() * 0.45, swirl = 0.9;     // (curving in, like water down a drain)
-      const dx = f.x - sx, dy = cy - sy;
-      particles.push({ x: sx, y: sy, vx: dx / life - dy * swirl, vy: dy / life + dx * swirl * 0.4, life, max: life, size: 2 + Math.random() * (fromFloor ? 6 : 3),
-                       color: fromFloor ? (Math.random() < 0.5 ? '#806b5a' : '#b4b4bb') : (Math.random() < 0.5 ? '#2a3a2a' : '#4dff6a'), type: 'bit', grav: 0 });
-    }
-    if (Math.random() < dt * 8 * k) cracks.push({ x: f.x + (Math.random() - 0.5) * 500, y: STAGE.y, life: 2, max: 2, seed: Math.random() * 1000, size: 0.8 + k });   // (the floor splitting)
-    if ((a.waveT -= dt) <= 0) { a.waveT = 0.7 - 0.35 * k; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.6, max: 110 + 80 * k + 60 * g, color: g > 0 ? '#86e63c' : '#1f5a24' }); }
-    if (Math.random() < dt * (4 + 14 * k)) bolt(f.x + (Math.random() - 0.5) * 90 * S, f.y - Math.random() * 120 * S, Math.random() * Math.PI * 2, 40 + 50 * k, 0.06, Math.random() < 0.5 ? '#ffffff' : '#86e63c');
-  }
-  if (ph === 'dark') shake = Math.max(shake, 6 + 10 * clamp((T - C.dark) / (C.power - C.dark), 0, 1));   // (nothing but his aura - building)
-  if (ph === 'power') {                                          // FULL POWER - he SCREAMS it out
-    if (!a.burst) {
-      a.burst = true; f.hForm = 3; f.hairGrow = 1;
-      impactFrame = 0.16; impactAt = { x: f.x, y: cy, ang: 0, all: true, focus: true, invert: true };
-      burst(f.x, cy, ['#86e63c', '#ffffff', '#e6ff86'], 90, 0, Math.PI, 1200, { grav: 0 }); ring(f.x, cy); ring(f.x, cy - 40);
-      shake = 32; camPunch = 1; sfx.huge(); sfx.clash(true);
-    }
-    shake = Math.max(shake, 18);
-    if ((a.waveT -= dt) <= 0) { a.waveT = 0.22; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.6, max: 260, color: '#86e63c' }); }
-    if (Math.random() < dt * 40) burst(f.x, cy, ['#86e63c', '#ffffff', '#e6ff86'], 2, -Math.PI / 2, Math.PI, 600, { grav: -100 });
-  }
-  if (ph === 'gloat') {                                          // calm now - just the aura humming round him
-    f.hForm = 3; f.hairGrow = 1;
-    if ((a.waveT -= dt) <= 0) { a.waveT = 1.1; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.8, max: 140, color: '#86e63c' }); }
-  }
-  // STRAY KI BLASTS: from the moment he starts transforming until his scream ends, his power LEAKS out of him - green beams shooting off in every direction, every so
-  // often, and wherever one comes down it goes off in a yellow dome. Anyone caught in one is hit (frozen until the match
-  // starts again, then they go flying). Most come down on the stage; some just fly off into the sky.
+  const gr = ['#86e63c', '#ffffff', '#e6ff86'];
+  shake = Math.max(shake, { strain: 3 + 4 * (T / C.flash1), after: 4, scream: 14, eyes: 6, dome: 10, orb: 12, chaos: 22, pillar: 12, sphere: 2 }[ph] || 0);
+  if (ph !== 'sphere' && Math.random() < dt * (ph === 'strain' || ph === 'after' || ph === 'eyes' ? 8 : 26)) bolt(f.x + (Math.random() - 0.5) * 90 * S, f.y - Math.random() * 120 * S, Math.random() * Math.PI * 2, 40 + 50 * Math.random(), 0.06, Math.random() < 0.5 ? '#ffffff' : '#86e63c');
+  if ((ph === 'scream' || ph === 'chaos' || ph === 'pillar') && (a.waveT -= dt) <= 0) { a.waveT = ph === 'chaos' ? 0.18 : 0.3; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.6, max: ph === 'chaos' ? 300 : 220, color: '#86e63c' }); }
+  if ((ph === 'scream' || ph === 'chaos' || ph === 'pillar' || ph === 'orb') && Math.random() < dt * 30) particles.push({ x: f.x + (Math.random() - 0.5) * 420, y: STAGE.y - 2, vx: 0, vy: -300 - Math.random() * 500, life: 0.7, max: 0.7, size: 2 + Math.random() * 5, color: Math.random() < 0.5 ? '#806b5a' : '#b4b4bb', type: 'bit', grav: 0 });   // (rocks lifting off the floor)
+  if (ph === 'pillar' && Math.random() < dt * 60) particles.push({ x: f.x + (Math.random() - 0.5) * 120, y: f.y - Math.random() * 60, vx: 0, vy: -1400 - Math.random() * 600, life: 0.5, max: 0.5, size: 3, color: Math.random() < 0.5 ? '#e6ff86' : '#ffffff', type: 'bit', grav: 0 });   // (up the pillar)
+  if (ph === 'dome' && (a.waveT -= dt) <= 0) { a.waveT = 0.4; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.7, max: 260, color: '#b86bff' }); }
+  if (T >= C.flash1 && ev('flash1')) { impactFrame = 0.16; impactAt = { x: f.x, y: cy, ang: 0, all: true, focus: true, invert: true }; burst(f.x, cy, gr, 90, 0, Math.PI, 1200, { grav: 0 }); ring(f.x, cy); ring(f.x, cy - 40); auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.5, max: 380, color: '#86e63c' }); shake = 28; camPunch = 1; sfx.huge(); sfx.clash(true); }
+  if (T >= C.flash2 && ev('flash2')) { f.hForm = 3; impactFrame = 0.18; impactAt = { x: f.x, y: cy, ang: 0, all: true, focus: true, invert: true }; burst(f.x, cy, gr, 120, 0, Math.PI, 1400, { grav: 0 }); ring(f.x, cy); ring(f.x, cy - 40); ring(f.x, cy - 80); shake = 34; camPunch = 1; sfx.huge(); sfx.clash(true); }
+  if (T >= C.redEyes && ev('red')) { impactFrame = Math.max(impactFrame, 0.06); impactAt = { x: f.x, y: headY, ang: 0, all: false, focus: true }; sfx.parry(); }
+  // STRAY KI BLASTS: one fired ON every blast sound in the clip (a burst of them on the big ones) - random, never aimed: they
+  // land wherever they land, mostly on the stage (a yellow dome where they hit - anyone in it is hit), some off into the sky
   a.strays = a.strays || []; a.booms = a.booms || [];
-  if (T < C.screamEnd) {                                         // (from the very START of the transformation - and the moment the scream stops, so do the beams)
-    a.strayT = (a.strayT ?? 0.3) - dt;
-    if (a.strayT <= 0) {
-      a.strayT = ph === 'power' ? 0.08 + Math.random() * 0.14   // (the scream: a barrage, several a second)
-                                : lerp(0.7, 0.18, clamp(T / C.power, 0, 1)) + Math.random() * 0.25;   // (before it: building up, faster and faster)
+  C.blasts.forEach((bt, i) => {
+    if (T < bt || !ev('blast' + i)) return;
+    const n = C.bigBlasts.includes(bt) ? 4 : 1;
+    for (let k = 0; k < n; k++) {
       const sL = stageL(), sR = stageR(), down = Math.random() < 0.75;
       const tx = down ? sL + Math.random() * (sR - sL) : f.x + (Math.random() - 0.5) * 2600, ty = down ? STAGE.y : f.y - 700 - Math.random() * 500;
-      a.strays.push({ x0: f.x, y0: cy - 20, x1: tx, y1: ty, t: 0, dur: Math.hypot(tx - f.x, ty - cy) / 7000, down, hit: false });   // (fast - a blink and it's there)
-      sfx.beam(0.25);
+      a.strays.push({ x0: f.x, y0: cy - 20, x1: tx, y1: ty, t: 0, dur: Math.hypot(tx - f.x, ty - cy) / 7000, down, hit: false });
     }
-  }
+    sfx.beam(n > 1 ? 0.7 : 0.35);
+  });
   for (const b of a.strays) {
     b.t += dt;
     if (!b.hit && b.t >= b.dur) {
       b.hit = true;
-      if (b.down) {                                                // KABOOM - a dome of yellow light where it lands
+      if (b.down) {
         a.booms.push({ x: b.x1, y: b.y1, t: 0, r: 95 + Math.random() * 50 });
         dust(b.x1, b.y1, 14, 2); shake = Math.max(shake, 12); sfx.slam();
         cracks.push({ x: b.x1, y: b.y1, life: 3, max: 3, seed: Math.random() * 1000, size: 0.9 });
         for (const o of fighters) {
           if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
           if (Math.hypot(o.x - b.x1, (o.y - 40) - (b.y1 - 40)) > 110) continue;
-          // (no cap: they land wherever they land - never aimed at anyone - and if one lands on you, that's on you)
           applyHit(o, { dmg: 4, base: 320, growth: 2.2, angle: 70 }, Math.sign(o.x - b.x1) || 1, 1, o.x, o.y - 40, { fighter: f });
         }
       }
@@ -14478,20 +14460,85 @@ function stepHunterL3Cut(f, a, dt) {
   a.strays = a.strays.filter(b => b.t < b.dur + 0.35);
   for (const m of a.booms) m.t += dt;
   a.booms = a.booms.filter(m => m.t < 0.8);
-  if (T >= C.len) {                                              // back to the fight - the power-up blows anyone near him away
-    delete f.hairGrow; f.action = null;
+  if (T >= C.len) {                                              // back to the fight - the sphere BURSTS: anyone near him is blown away
+    delete f.hairGrow; f.hForm = 3; f.y = a.y0; f.action = null;
+    burst(f.x, cy, gr, 60, 0, Math.PI, 900, { grav: 0 }); ring(f.x, cy); shake = Math.max(shake, 20); sfx.huge();
     for (const o of fighters) {
       if (o === f || allies(f, o) || o.respawnTimer > 0 || isIntangible(o)) continue;
       if (Math.abs(o.x - f.x) < 220 * S / HS && Math.abs(o.y - f.y) < 200) applyHit(o, { dmg: 3, base: 560, growth: 0, angle: 40 }, Math.sign(o.x - f.x) || f.face, 1, o.x, o.y - 50, { fighter: f });
     }
   }
 }
-// (drawing, over the world) the black hole's dark swirl, the BLACK closing in on him, his aura alone in the dark, the green flood
+// (drawing, over the world) the flashes, the green flooding the screen, his eyes, the purple dome, the green orb, the pillar,
+// the crossing beams, the sphere - and the stray blasts with their yellow domes
 function drawHunterL3Cut(f) {
-  const a = f.action, C = H_L3_CUT, T = a.songT, ph = hL3Phase(T), k = clamp(T / C.iris, 0, 1);
-  const P = toScreen(f.x, f.y - 55 * hScale(f)), Z = camZ();
-  const R = Math.hypot(SW, SH);
-  sctx.save();
+  const a = f.action, C = H_L3_CUT, T = a.songT, ph = hL3Phase(T), S = hScale(f);
+  const P = toScreen(f.x, f.y - 55 * S), Z = camZ(), now = performance.now() / 1000, sc = sctx;
+  sc.save();
+  const fill = (col) => { sc.fillStyle = col; sc.fillRect(-OX, -OY, SW, SH); };
+  // the green FLOODING the screen with his power (heaviest in the chaos)
+  const flood = { scream: 0.22 + 0.06 * Math.sin(T * 25), chaos: 0.42 + 0.08 * Math.sin(T * 30), pillar: 0.18, orb: 0.12, dome: 0.06, after: 0.25 * clamp(1 - (T - C.flash1) / 1.5, 0, 1) }[ph] || 0;
+  if (flood > 0) fill(`rgba(134,230,60,${flood})`);
+  // the glow round him
+  if (ph !== 'eyes') {
+    const rr = ({ strain: 90, after: 120, scream: 200, dome: 160, orb: 140, chaos: 260, pillar: 200, sphere: 150 }[ph] || 100) * Z * (0.9 + 0.1 * Math.sin(T * 20));
+    const gl = sc.createRadialGradient(P.x, P.y, 0, P.x, P.y, rr);
+    gl.addColorStop(0, 'rgba(230,255,180,0.5)'); gl.addColorStop(0.4, 'rgba(134,230,60,0.3)'); gl.addColorStop(1, 'rgba(20,80,20,0)');
+    sc.globalCompositeOperation = 'lighter'; sc.fillStyle = gl; sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.fill(); sc.globalCompositeOperation = 'source-over';
+  }
+  // the PURPLE DOME swelling out over the land
+  if (T >= C.dome[0] - 0.2 && T < C.dome[1] + 1) {
+    const u = clamp((T - C.dome[0]) / 1.4, 0, 1), fade = clamp((C.dome[1] + 1 - T) / 1, 0, 1), g0 = toScreen(f.x, STAGE.y), rr = 700 * Z * easeOut(u);
+    if (rr > 2) {
+      const g = sc.createRadialGradient(g0.x, g0.y, rr * 0.2, g0.x, g0.y, rr);
+      g.addColorStop(0, `rgba(240,200,255,${0.15 * fade})`); g.addColorStop(0.85, `rgba(184,107,255,${0.35 * fade})`); g.addColorStop(1, `rgba(120,40,200,${0.55 * fade})`);
+      sc.fillStyle = g; sc.beginPath(); sc.arc(g0.x, g0.y, rr, Math.PI, 0); sc.closePath(); sc.fill();
+      sc.strokeStyle = `rgba(255,220,255,${0.8 * fade})`; sc.lineWidth = 3; sc.beginPath(); sc.arc(g0.x, g0.y, rr, Math.PI, 0); sc.stroke();
+    }
+  }
+  // the GREEN ORB forming round him and lifting him
+  if (inWin(T, C.orb)) {
+    const u = clamp((T - C.orb[0]) / (C.orb[1] - C.orb[0]), 0, 1), rr = (80 + 200 * easeOut(u)) * Z * (1 + 0.03 * Math.sin(T * 24));
+    const g = sc.createRadialGradient(P.x, P.y, rr * 0.2, P.x, P.y, rr);
+    g.addColorStop(0, 'rgba(210,255,200,0.12)'); g.addColorStop(0.8, 'rgba(77,255,106,0.3)'); g.addColorStop(1, 'rgba(10,80,20,0.6)');
+    sc.fillStyle = g; sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.fill();
+    sc.strokeStyle = 'rgba(200,255,180,0.85)'; sc.lineWidth = 3; sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.stroke();
+  }
+  // the PILLAR of green light, him in the middle of it
+  if (inWin(T, C.pillar) || (T >= C.pillar[1] && T < C.pillar[1] + 0.8)) {
+    const u = clamp((T - C.pillar[0]) / 0.5, 0, 1), fade = T < C.pillar[1] ? 1 : 1 - (T - C.pillar[1]) / 0.8, w = (150 + 30 * Math.sin(T * 18)) * Z * easeOut(u);
+    const base = toScreen(f.x, STAGE.y), g = sc.createLinearGradient(base.x - w, 0, base.x + w, 0);
+    g.addColorStop(0, 'rgba(77,255,106,0)'); g.addColorStop(0.3, `rgba(77,255,106,${0.45 * fade})`); g.addColorStop(0.5, `rgba(235,255,220,${0.9 * fade})`); g.addColorStop(0.7, `rgba(77,255,106,${0.45 * fade})`); g.addColorStop(1, 'rgba(77,255,106,0)');
+    sc.globalCompositeOperation = 'lighter'; sc.fillStyle = g; sc.fillRect(base.x - w, -OY, w * 2, base.y + OY); sc.globalCompositeOperation = 'source-over';
+  }
+  // the green BEAMS crossing the sky (a cross of light round him)
+  if (inWin(T, C.cross)) {
+    const u = (T - C.cross[0]) / (C.cross[1] - C.cross[0]), al = Math.sin(u * Math.PI), rr = 260 * Z;
+    sc.strokeStyle = `rgba(120,255,120,${0.9 * al})`; sc.lineWidth = 6; sc.shadowColor = '#4dff6a'; sc.shadowBlur = 20;
+    sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.stroke();
+    sc.beginPath(); sc.arc(P.x, P.y, rr * 0.55, 0, Math.PI * 2); sc.stroke();
+    sc.beginPath(); sc.moveTo(-OX, P.y); sc.lineTo(SW - OX, P.y); sc.moveTo(P.x, -OY); sc.lineTo(P.x, SH - OY); sc.stroke(); sc.shadowBlur = 0;
+  }
+  // the SPHERE of his aura (the calm at the end) - it bursts when this ends
+  if (T >= C.sphere) {
+    const u = clamp((T - C.sphere) / 0.6, 0, 1), rr = 190 * Z * (S / HS) * easeOut(u) * (1 + 0.03 * Math.sin(now * 20));
+    const g = sc.createRadialGradient(P.x, P.y, rr * 0.2, P.x, P.y, rr);
+    g.addColorStop(0, 'rgba(210,255,200,0.08)'); g.addColorStop(0.8, 'rgba(77,255,106,0.22)'); g.addColorStop(1, 'rgba(10,60,20,0.55)');
+    sc.fillStyle = g; sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.fill();
+    sc.strokeStyle = 'rgba(160,255,160,0.8)'; sc.lineWidth = 3; sc.beginPath(); sc.arc(P.x, P.y, rr, 0, Math.PI * 2); sc.stroke();
+  }
+  // his EYES, close up: burning white... then RED
+  if (ph === 'eyes') {
+    const H0 = toScreen(f.x + f.face * 7 * S, f.y - 88 * S), red = T >= C.redEyes, er = 5 * Z;
+    sc.shadowColor = red ? '#ff3a1a' : '#ffffff'; sc.shadowBlur = 18 * Z;
+    sc.fillStyle = red ? '#ff4a1a' : '#ffffff'; sc.beginPath(); sc.ellipse(H0.x, H0.y, er * 1.6, er, 0, 0, Math.PI * 2); sc.fill();
+    if (red) { sc.fillStyle = '#ffd23f'; sc.beginPath(); sc.arc(H0.x, H0.y, er * 0.55, 0, Math.PI * 2); sc.fill(); }
+    sc.shadowBlur = 0;
+  }
+  // the FLASHES
+  const flash = (t0, d) => { if (T >= t0 && T < t0 + d) fill(`rgba(255,255,255,${1 - (T - t0) / d})`); };
+  flash(C.flash1, 0.45); flash(C.flash2, 0.6);
+  if (T >= C.flash2 && T < C.flash2 + 1.2) fill(`rgba(134,230,60,${0.5 * (1 - (T - C.flash2) / 1.2)})`);
   // the STRAY KI BLASTS: green beams streaking out of him... and the yellow domes where they land
   {
     const Zs = camZ();
@@ -14511,52 +14558,6 @@ function drawHunterL3Cut(f) {
     }
   }
   const bar = 70 * clamp(T / 0.6, 0, 1) * clamp((C.len - T) / 0.6, 0, 1);
-  if (ph === 'hole' || ph === 'iris') {
-    // the vortex: the world dimming toward the edges, dark spiral arms wheeling into him
-    const v = sctx.createRadialGradient(P.x, P.y, 60, P.x, P.y, Math.max(W, H) * 0.75);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(4,10,6,${0.35 + 0.45 * k})`);
-    sctx.fillStyle = v; sctx.fillRect(-OX, -OY, SW, SH);
-    sctx.lineCap = 'round';
-    for (let i = 0; i < 7; i++) {
-      const base = i / 7 * Math.PI * 2 + T * (1.4 + 2.2 * k);
-      sctx.strokeStyle = `rgba(${i % 2 ? '30,90,36' : '8,20,10'},${0.25 + 0.35 * k})`; sctx.lineWidth = 10 + 16 * k;
-      sctx.beginPath();
-      for (let s = 0; s <= 1.0001; s += 0.05) { const r = 70 + s * (Math.max(W, H) * 0.6), ang = base + s * 3.2; const x = P.x + Math.cos(ang) * r, y = P.y + Math.sin(ang) * r * 0.75; s ? sctx.lineTo(x, y) : sctx.moveTo(x, y); }
-      sctx.stroke();
-    }
-  }
-  if (ph === 'iris') {
-    // the BLACK closes in on him - swallowing the stage, then him - a ring of his green light round the edge
-    const u = clamp((T - C.iris) / (C.dark - C.iris), 0, 1), r = R * Math.pow(1 - u, 2.2);
-    sctx.fillStyle = '#000'; sctx.beginPath(); sctx.rect(-OX, -OY, SW, SH); sctx.arc(P.x, P.y, Math.max(0, r), 0, Math.PI * 2, true); sctx.fill('evenodd');
-    if (r > 2) {
-      sctx.shadowColor = '#4dff6a'; sctx.shadowBlur = 30;
-      sctx.strokeStyle = `rgba(134,230,60,${0.5 + 0.3 * Math.sin(T * 30)})`; sctx.lineWidth = 6;
-      sctx.beginPath(); sctx.arc(P.x, P.y, r, 0, Math.PI * 2); sctx.stroke(); sctx.shadowBlur = 0;
-    }
-  } else if (ph === 'dark') {
-    // ALL BLACK - nothing but his aura, burning in the dark, getting bigger and brighter
-    const u = clamp((T - C.dark) / (C.power - C.dark), 0, 1), pulse = 0.85 + 0.15 * Math.sin(T * 22);
-    sctx.fillStyle = '#000'; sctx.fillRect(-OX, -OY, SW, SH);
-    const rr = (110 + 140 * u) * Z * pulse;
-    const gl = sctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, rr * 1.6);
-    gl.addColorStop(0, `rgba(230,255,180,${0.55 + 0.4 * u})`); gl.addColorStop(0.3, `rgba(134,230,60,${0.45 + 0.35 * u})`); gl.addColorStop(1, 'rgba(20,80,20,0)');
-    sctx.fillStyle = gl; sctx.fillRect(-OX, -OY, SW, SH);
-    // the aura's flames licking up round him
-    sctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 16; i++) {
-      const ang = -Math.PI / 2 + (i / 16 - 0.5) * Math.PI * 1.7, flick = 0.7 + 0.3 * Math.sin(T * 31 + i * 2.3), len = rr * (0.9 + 0.5 * hash(i * 3.1)) * flick;
-      const bx = P.x + Math.cos(ang) * rr * 0.25, by = P.y + Math.sin(ang) * rr * 0.25 + rr * 0.15;
-      sctx.fillStyle = `rgba(134,230,60,${0.18 + 0.15 * u})`;
-      sctx.beginPath(); sctx.moveTo(bx - Math.sin(ang) * 14 * Z, by + Math.cos(ang) * 14 * Z); sctx.lineTo(bx + Math.cos(ang) * len, by + Math.sin(ang) * len - len * 0.3); sctx.lineTo(bx + Math.sin(ang) * 14 * Z, by - Math.cos(ang) * 14 * Z); sctx.fill();
-    }
-    sctx.globalCompositeOperation = 'source-over';
-  } else if (ph === 'power' || ph === 'gloat') {
-    // the SCREAM: the whole screen GREEN with his power (a white flash as it hits) - gone once the screaming stops
-    const g = T < C.screamEnd ? 0.5 + 0.08 * Math.sin(T * 25) : 0.5 * clamp(1 - (T - C.screamEnd) / C.greenFade, 0, 1);
-    if (g > 0) { sctx.fillStyle = `rgba(134,230,60,${g})`; sctx.fillRect(-OX, -OY, SW, SH); }
-    if (T < C.power + 0.3) { sctx.fillStyle = `rgba(255,255,255,${1 - (T - C.power) / 0.3})`; sctx.fillRect(-OX, -OY, SW, SH); }
-  }
   sctx.fillStyle = '#000'; sctx.fillRect(-OX, -OY, SW, bar + OY); sctx.fillRect(-OX, H - bar, SW, bar + OY);   // letterbox
   sctx.restore();
 }
