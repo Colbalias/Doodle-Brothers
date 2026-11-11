@@ -15883,6 +15883,17 @@ function stopSsj2Song(f, fade = 0.4) { if (f && f.ssj2Song) { stopBuffer(f.ssj2S
 function stepSsj2Cut(f, a, dt) {
   f.vx = 0; f.vy = 0;
   a.songT += dt / uiRealRate();
+  { const C = SSJ2_CUT, T = a.songT, powering = T >= C.fill, pk = powering ? clamp((T - C.fill) / (C.burst - C.fill), 0, 1) : 0, sh = powering ? Math.sin(T * 70) * 0.04 * (0.4 + pk) : 0;
+    a.pose = powering && T < C.burst ? pose({ lean: -0.32 + sh, bob: -14, legA: [0.8, 0.55], legB: [-0.8, 0.45], armA: [0.45 + sh, -1.5] })   // the scream
+           : T >= C.burst ? pose({ lean: 0.05, bob: -6, legA: [0.5, 0.35], legB: [-0.45, 0.3], armA: [0.3, -0.5] })                        // calm, SS2
+           : pose({ lean: 0.12, bob: -5, legA: [0.45, 0.3], legB: [-0.4, 0.35], armA: [0.25, -0.6] });                                     // head down, glaring
+    if (powering) {                                                  // his aura swelling, lightning, rocks lifting off the floor round him
+      shake = Math.max(shake, 2 + 6 * pk);
+      if (Math.random() < dt * (10 + 30 * pk)) burst(f.x + (Math.random() - 0.5) * 50, f.y - 20 - Math.random() * 90, ['#ffe066', '#ffffff'], 2, -Math.PI / 2, 0.8, 260 + 200 * pk, { grav: -200 });
+      if (pk > 0.5 && Math.random() < dt * 14) bolt(f.x + (Math.random() - 0.5) * 50, f.y - Math.random() * 100, Math.random() * Math.PI * 2, 30 + 30 * pk, 0.06, SSJ2_ARCS[(Math.random() * 3) | 0]);
+      if (Math.random() < dt * 12 * pk) particles.push({ x: f.x + (Math.random() - 0.5) * 300, y: STAGE.y - 2, vx: 0, vy: -200 - Math.random() * 300, life: 0.7, max: 0.7, size: 2 + Math.random() * 4, color: Math.random() < 0.5 ? '#3a2a22' : '#ffd23f', type: 'bit', grav: 0 });
+      if ((a.waveT = (a.waveT || 0) - dt) <= 0) { a.waveT = 0.5 - 0.3 * pk; auraWaves.push({ x: f.x, y: f.y - 55, t: 0, dur: 0.5, max: 80 + 80 * pk, color: '#ffd23f' }); }
+    } }
   if (!a.burst && a.songT >= SSJ2_CUT.burst) {           // THE BURST: he's Super Saiyan 2
     a.burst = true;
     setLanceForm(f, 2); f.transformed = true;
@@ -15899,6 +15910,40 @@ function stepSsj2Cut(f, a, dt) {
       f.action = { type: 'ultStart', t: 0, dur: 0.6, def: CHARACTERS.LANCE.altUlt };   // (the dash punch - it has to land)
     } else f.action = { type: 'land', t: 0, dur: 0.1 };
   }
+}
+// (live: the BACKGROUND behind the stage - the sky darkening, the red line tearing across it, lava pouring out - the fight
+//  carries on in front of it. Drawn in screen space, before the world.)
+function drawSsj2Backdrop(f, c) {
+  const a = f.action, T = a.songT, C = SSJ2_CUT, now = performance.now() / 1000;
+  const fade = clamp(T / 0.8, 0, 1) * clamp((C.len - T) / 0.9, 0, 1);
+  c.save();
+  c.globalAlpha = 0.6 * fade; c.fillStyle = '#0a0302'; c.fillRect(-OX - 60, -OY - 60, SW + 120, SH + 120);   // (the sky going dark)
+  const x0 = -80, y0 = H * 0.18, x1 = W + 80, y1 = H * 0.5, ang = Math.atan2(y1 - y0, x1 - x0), len = Math.hypot(x1 - x0, y1 - y0);
+  if (T >= C.line) {
+    const pLine = easeOut(clamp((T - C.line) / (C.lineDone - C.line), 0, 1));
+    const kFill = T < C.lineDone ? 0 : clamp((T - C.lineDone) / (C.fill - C.lineDone), 0, 1);
+    const thick = 10 + kFill * kFill * H * 0.55;
+    c.translate(x0, y0); c.rotate(ang);
+    if (kFill > 0) {
+      c.save(); c.beginPath(); c.rect(0, -thick / 2, len, thick); c.clip();
+      const g = c.createLinearGradient(0, -thick / 2, 0, thick / 2);
+      g.addColorStop(0, '#5a0a00'); g.addColorStop(0.3, '#d8320c'); g.addColorStop(0.5, '#ff9a2a'); g.addColorStop(0.7, '#d8320c'); g.addColorStop(1, '#5a0a00');
+      c.globalAlpha = fade; c.fillStyle = g; c.fillRect(0, -thick / 2, len, thick);
+      for (let i = 0; i < 40; i++) {                                 // bubbling, flowing blobs of lava
+        const bx = ((i * 137.5 + now * (60 + (i % 7) * 25)) % (len + 200)) - 100, by = Math.sin(i * 12.9 + now * (0.6 + (i % 5) * 0.2)) * thick * 0.42;
+        const br = 14 + (i % 6) * 10 + Math.sin(now * 2 + i) * 4;
+        c.globalAlpha = fade * (0.25 + 0.2 * Math.sin(now * 3 + i)); c.fillStyle = i % 3 === 0 ? '#ffe066' : i % 3 === 1 ? '#ff7a1a' : '#a01a05';
+        c.beginPath(); c.ellipse(bx, by, br * 1.8, br, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.restore();
+    }
+    const lw = len * pLine;                                          // the line itself, glowing, riding the lip of the tear
+    for (const [w, col, al] of [[30, '#ff2a10', 0.35], [12, '#ff5a1a', 0.9], [4, '#ffe0a0', 1]]) {
+      c.globalAlpha = fade * al; c.fillStyle = col;
+      for (const edge of kFill > 0 ? [-1, 1] : [0]) c.fillRect(0, edge * thick / 2 - w / 2, lw, w);
+    }
+  }
+  c.restore();
 }
 // (drawing - full screen, over everything)
 function drawSsj2Cut(f) {
@@ -20416,7 +20461,7 @@ function getPose(p) { return withCarry(p, basePose(p)); }
 function basePose(p) {
   const a = p.action;
   if (a && a.odmPose) return { ...a.odmPose };                // Sevon on his ODM gear (reeling in / Levi spin)
-  if (a && (a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'fxSac' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut') && a.pose) return { ...a.pose };   // Hunter powering up into Legendary 3
+  if (a && (a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'ssj2Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'fxSac' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut') && a.pose) return { ...a.pose };   // Hunter powering up into Legendary 3
   if (a && a.type === 'beamClash') { const q = { ...a.pose }; q.lean += Math.sin(p.anim * 70) * 0.04; return q; }   // pushing his beam, shaking
   if (a && a.type === 'attack') {
     const m = a.move;
@@ -22676,13 +22721,9 @@ function drawHUD() {
     if (ty === 'sgCut') drawSsgCut(tf); else if (ty === 'leeUlt') drawLeeCut(tf);
     else if (ty === 'hL3Cut') { if (tf.action.l2) drawHunterL2Cut(tf); else drawHunterL3Cut(tf); }
     else if (ty === 'ss1Cut') drawSs1Cut(tf);
-    else if (ty === 'ssj2Cut') {                                     // (Super Saiyan 2 is a full-screen painted cinematic: shown in a
-      sctx.globalAlpha = 1;                                          //  PICTURE-IN-PICTURE window at the top, the fight carrying on under it)
-      const k = 0.34, bw = W * k, bh = H * k, bx = (W - bw) / 2, by = 12;
-      sctx.fillStyle = '#000'; sctx.fillRect(bx - 4, by - 4, bw + 8, bh + 8);
-      sctx.beginPath(); sctx.rect(bx, by, bw, bh); sctx.clip();
-      sctx.translate(bx, by); sctx.scale(k, k);
-      drawSsj2Cut(tf);
+    else if (ty === 'ssj2Cut') {                                     // (Super Saiyan 2, live: HE powers up where he is - the lava tear is in the
+      const T2 = tf.action.songT, C2 = SSJ2_CUT;                     //  stage's BACKGROUND (see drawSsj2Backdrop) - here just the burst's flash)
+      if (T2 >= C2.burst && T2 < C2.burst + 0.5) { sctx.globalAlpha = 0.55 * (1 - (T2 - C2.burst) / 0.5); sctx.fillStyle = '#ffffff'; sctx.fillRect(-OX, -OY, SW, SH); }
     }
     sctx.restore(); if (ty === 'uiTransform') drawUiBubble();
     liveCutDraw = false;
@@ -23126,6 +23167,8 @@ function render() {
     const arc = arcticCut();                            // Hunter's Glacier Grind: somewhere else entirely (see drawArctic)
     if (arc) { ctx.fillStyle = '#5ea1e8'; ctx.fillRect(-OX - 60, -OY - 60, SW + 120, SH + 120); }
     else withCover(ctx, () => { if (sketch) drawPaper(); else drawBackground(); });   // (scaled to cover any screen shape)
+    const ss2L = fighters.find(f => f.action && f.action.type === 'ssj2Cut');   // Lance's Super Saiyan 2 (live): the lava tear in the sky
+    if (ss2L && !arc) withCover(ctx, () => drawSsj2Backdrop(ss2L, ctx));
     if (!sketch && !arc) {
       // ATMOSPHERIC HAZE: knock the backdrop back (darker, flatter, less contrast) so the fighters pop off
       // it - like the soft, muted backgrounds behind the figures in an animated stick fight
