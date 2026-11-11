@@ -13138,15 +13138,15 @@ function drawDragonHead(x, y, ang, s, jaw, t) {
 // sounds/battle/hunter-grind.mp3 (the scene's own sound, 0:15 - 0:48.7 of the clip - the mp3 itself is cut). The whole
 // match stops. He has them by the ANKLE the whole way, and the victim SCREAMS every time the clip's Goku does
 // (see GRIND_CUT.screams). Seconds into the song:
-//   0 - 0.9    he lifts them by the ankle, dangling      0.9 - 2.1  up over his head... SLAM (behind him)
-//   3 - 4.5    whirled round over his head                4.8 - 5.8  ...SLAM (in front)
-//   6 - 8.1    whirled again (they're screaming)          9.3  SLAM      11.7 - 13.1 held high... 13.1 SLAM (the big one)
-//   16.9 / 18.7 / 20.8 / 22.6  SLAM, SLAM, SLAM, SLAM - side to side
+//   0 - 0.9    he lifts them by the ankle, dangling       3 - 4.5  whirled round over his head      5.8  SLAM
+//   6 - 8.1    whirled again (they're screaming)          ...then swung from his fist          13.1 SLAM (the big one)
+//   16.9 / 18.7 / 20.72 / 22.6  SLAM, SLAM, SLAM, SLAM - he turns to face each one
+//   (every slam is ON a slam sound in the clip - the clip's other big moments are whirls, swings and screams)
 //   22.5 - 25.5  held up, screaming                       25.8  he LEAPS up with them, 27.6 ROARS in the air
 //   28.8  DIVES onto the stage by the edge - 29.6 SMASHES them face-first into the floor and DRAGS them across the WHOLE
 //         stage, back, and across again - fast (never off it) - 32.4 hoists them overhead - 33.3 HURLS them away (the launch) - done
 const GRIND_CUT = { len: 33.7, vol: 1.0,
-  slams: [[2.1, 'back'], [5.8, 'front'], [9.3, 'back'], [13.1, 'front'], [16.9, 'back'], [18.7, 'front'], [20.8, 'back'], [22.6, 'front']],
+  slams: [[5.8, 'front'], [13.1, 'front'], [16.9, 'front'], [18.7, 'front'], [20.72, 'front'], [22.6, 'front']],   // (only where the clip has a SLAM sound)
   screams: [[6.6, 7.8], [10.2, 11.4], [14.9, 16.2], [17.4, 18.1], [22.5, 25.5], [32.7, 33.1]],
   slamDmg: 2.2, tickDmg: 0.3, tick: 0.12,
   final: { dmg: 9, base: 600, growth: 6.4, angle: 40, ultFinal: true, xray: 'SPINE' } };
@@ -13223,7 +13223,7 @@ function stepHunterGrindCutBeat(f, a, dt) {
     for (let k = 0; k < 5; k++) { const sx = hx + (k - 2) * 26 + (Math.random() - 0.5) * 10; particles.push({ x: sx, y: hy, vx: 0, vy: -700 - Math.random() * 500, life: 0.35, max: 0.35, size: 5, color: '#e6f7ff', type: 'bit', grav: 2400 }); }   // (ice spikes bursting up)
     dust(hx, hy, 24 + 3 * n, 2.8); ring(hx, hy - 10); ring(hx, hy - 30);
     if (n === 3) startXray(v, 'RIBS', hx, hy - 30, true);
-    if (n === 6) startXray(v, 'SPINE', hx, hy - 30, true);
+    if (n === GRIND_CUT.slams.length - 1) startXray(v, 'SPINE', hx, hy - 30, true);
   };
   // the scream: in time with the clip's
   const scr = C.screams.findIndex(([s0, s1]) => T >= s0 && T < s1);
@@ -13269,7 +13269,7 @@ function stepHunterGrindCutBeat(f, a, dt) {
     const swingDur = Math.min(0.42, (t1 - t0) * 0.6), sw0 = t1 - swingDur;   // (FAST - up and over and down in under half a second)
     const behind = restTh > Math.PI / 2, liftTo = behind ? Math.PI + 0.5 : -0.5;
     if (T < sw0) {                                                 // lifting them back up off the floor
-      const k = easeOut(clamp((T - t0) / Math.max(0.1, Math.min(0.5, sw0 - t0)), 0, 1)), sh = scr >= 0 ? Math.sin(T * 26) * 0.1 : 0;
+      const k = easeOut(clamp((T - t0) / Math.max(0.1, Math.min(0.5, sw0 - t0)), 0, 1)), sh = scr >= 0 ? Math.sin(T * 26) * 0.1 : Math.sin((T - t0) * 4.2) * 0.3 * k;   // (screaming: shaken - otherwise swinging from his fist)
       hold(lerp(restTh, liftTo, k) + sh);
       camOn(f.x, gy - 130, scr >= 0 ? 1.5 : 1.15, 4);
     } else {                                                       // UP over his head... and DOWN in front of him, accelerating all the way
