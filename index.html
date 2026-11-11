@@ -16696,7 +16696,37 @@ function updateBeam(s, dt) {
   if (s.vdir) { s.dir = o.face; Object.assign(s, beamOrigin(o, s)); }
   else if (s.mouth) Object.assign(s, hunterMouth(o));        // Hunter's Gigantic Roar: out of his mouth
   else { s.x = o.x + s.dir * 30; s.y = o.y - 62; }
+  const tip0 = s.len;
   s.len = Math.min(s.maxLen, s.len + (s.grow || 3400) * dt);
+  // A NORMAL beam (not an ultimate's) can't go THROUGH people: its end stops at the first one it reaches, and stays ON them
+  // (following them as it pushes them back). If they're knocked out of it, it doesn't carry on to anyone behind them.
+  // Anyone who steps INTO it on the near side is still hit - they're in the beam - but its end never punches out the far side.
+  const ultBeam = s.ult || s.ultHit || (o.action && o.action.type === 'ultBeam');
+  if (!ultBeam) {
+    const span = t => {                                              // where a fighter is along the beam: [near, far] - or null if not in its path
+      if (t === o || allies(o, t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0 || isIntangible(t) || projPhase(t)) return null;
+      if (s.vdir) {
+        if (t.x + t.w / 2 < s.x - s.w / 2 || t.x - t.w / 2 > s.x + s.w / 2) return null;
+        return s.vdir < 0 ? [s.y - t.y, s.y - t.y + hurtH(t)] : [t.y - hurtH(t) - s.y, t.y - s.y];
+      }
+      if (t.y < s.y - s.w / 2 || t.y - hurtH(t) > s.y + s.w / 2) return null;
+      const along = (t.x - s.x) * s.dir; return [along - t.w / 2, along + t.w / 2];
+    };
+    const into = t => Math.min(14, t.w * 0.4);
+    if (s.blocker) {                                                 // locked onto someone: stay on them while they're in its path
+      const sp = fighters.includes(s.blocker) ? span(s.blocker) : null;
+      if (sp && sp[1] > 0) s.capLen = s.len = clamp(sp[0] + into(s.blocker), 0, s.maxLen);
+      else s.len = Math.min(s.len, s.capLen ?? s.len);               // (knocked out of it: it ends where it was)
+    } else if (s.len > tip0) {                                       // still reaching out: does it run into anyone?
+      let stop = s.len, who = null;
+      for (const t of fighters) {
+        const sp = span(t); if (!sp || sp[1] <= tip0 || sp[0] > s.len) continue;
+        const at = Math.max(tip0, sp[0] + into(t)); if (at < stop) { stop = at; who = t; }
+      }
+      if (who) { s.blocker = who; s.capLen = stop; }
+      s.len = stop;
+    }
+  }
   s.life -= dt; s.tickT -= dt;
   if (Math.random() < dt * 30) {
     if (s.vdir) burst(s.x, s.y + s.vdir * s.len, [s.color, '#ffffff'], 2, s.vdir < 0 ? Math.PI / 2 : -Math.PI / 2, 0.8, 300, { grav: 0 });
