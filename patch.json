@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.52",
+    "version":  "0.7.53",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "ccdbf4a306df45e4929f31b7976faf6a313887da02872a247d40ebdbede51554",
-                                     "size":  1848318
+                                     "hash":  "b5ceb456d63dc0b3bde32bb20cd5c70409bef78eefec582b25799be86c41e53d",
+                                     "size":  1857563
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -60,8 +60,8 @@
                                                       "size":  5023868
                                                   },
                   "sounds/battle/colby-lotus.mp3":  {
-                                                        "hash":  "0394fa7cd2d98b3450f21e25ddbcf6356ef5d3bc47f42f5935e828478ec388c6",
-                                                        "size":  1065024
+                                                        "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
+                                                        "size":  1010304
                                                     },
                   "sounds/battle/devils-never-cry.mp3":  {
                                                              "hash":  "e6d9384978008e9e153b8aa358e39c1d3f6933905b4f7082d5662f9c153a10c8",
