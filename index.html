@@ -25426,7 +25426,7 @@ function earnArcadeStar(diff, ch) {
   try { localStorage.setItem(CHAR_STARS_KEY, JSON.stringify(arcadeCharStars)); } catch (e) {}
   return true;
 }
-// ...and beating the BONUS BOSS on top of it makes that star a BOSS STAR (a red ring round it): { COLBY: ['HARD'], ... }
+// ...and beating the BONUS BOSS on top of it makes that star a RED STAR: { COLBY: ['HARD'], ... }
 const BOSS_STARS_KEY = 'db-arcade-boss-char';
 let arcadeBossStars = (() => { try { const v = JSON.parse(localStorage.getItem(BOSS_STARS_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } })();
 const bossStars = ch => Array.isArray(arcadeBossStars[ch]) ? arcadeBossStars[ch] : [];
@@ -25436,14 +25436,14 @@ function earnBossStar(diff, ch) {
   try { localStorage.setItem(BOSS_STARS_KEY, JSON.stringify(arcadeBossStars)); } catch (e) {}
   return true;
 }
-// a fighter's five little stars (gold = won the tournament on that difficulty with them; red ring = beat the bonus boss too)
+// a fighter's five little stars (gold = won the tournament on that difficulty with them; RED = beat the bonus boss too)
 function drawCharStars(ch, cx, cy, r, sk) {
   const got = charStars(ch), boss = bossStars(ch), gap = r * 2.6;
   ARCADE_DIFFS.forEach((dn, k) => {
     const x = cx + (k - 2) * gap;
-    if (boss.includes(dn)) { sctx.strokeStyle = '#ff2a2a'; sctx.lineWidth = Math.max(1.5, r * 0.28); sctx.beginPath(); sctx.arc(x, cy, r * 1.25, 0, Math.PI * 2); sctx.stroke(); }
     starPath(sctx, x, cy, r);
-    if (got.includes(dn)) { sctx.fillStyle = dn === 'IMPOSSIBLE' ? '#ffe680' : '#ffd23f'; sctx.fill(); sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? '#1d1b2a' : '#8a5a00'; sctx.stroke(); }
+    if (boss.includes(dn)) { sctx.fillStyle = '#ff2a2a'; sctx.fill(); sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? '#1d1b2a' : '#6a0808'; sctx.stroke(); }   // RED: beat the bonus boss too
+    else if (got.includes(dn)) { sctx.fillStyle = dn === 'IMPOSSIBLE' ? '#ffe680' : '#ffd23f'; sctx.fill(); sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? '#1d1b2a' : '#8a5a00'; sctx.stroke(); }
     else { sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? 'rgba(29,27,42,0.35)' : 'rgba(255,255,255,0.28)'; sctx.stroke(); }
   });
 }
@@ -25458,11 +25458,11 @@ function drawArcadeStars(th) {
   withMenuDrawing(() => {
     const sk = th === 'sketch', x0 = sk ? 150 : 34, y0 = sk ? 58 : 40, gap = 46;
     ARCADE_DIFFS.forEach((dn, k) => {
-      const x = x0 + k * gap, got = arcadeStars.includes(dn);
+      const x = x0 + k * gap, got = arcadeStars.includes(dn), red = Object.keys(arcadeBossStars).some(c => bossStars(c).includes(dn));
       starPath(sctx, x, y0, 17);
       if (got) {
-        sctx.fillStyle = dn === 'IMPOSSIBLE' ? '#ffe680' : '#ffd23f'; sctx.fill();
-        sctx.lineWidth = 2.5; sctx.strokeStyle = sk ? '#1d1b2a' : '#8a5a00'; sctx.stroke();
+        sctx.fillStyle = red ? '#ff2a2a' : dn === 'IMPOSSIBLE' ? '#ffe680' : '#ffd23f'; sctx.fill();
+        sctx.lineWidth = 2.5; sctx.strokeStyle = sk ? '#1d1b2a' : red ? '#6a0808' : '#8a5a00'; sctx.stroke();
         if (dn === 'IMPOSSIBLE' && !sk) { sctx.save(); sctx.globalAlpha = 0.35 + 0.25 * Math.sin(menuTime * 4); sctx.fillStyle = '#ffffff'; starPath(sctx, x, y0, 9); sctx.fill(); sctx.restore(); }
       } else { sctx.lineWidth = 2; sctx.strokeStyle = sk ? 'rgba(29,27,42,0.35)' : 'rgba(255,255,255,0.25)'; sctx.stroke(); }
       sctx.font = th === 'pixel' ? `7px ${PX_FONT}` : sk ? `13px ${DOODLE_FONT}` : `11px ${CG_FONT}`;
@@ -25717,7 +25717,7 @@ function drawArcade() {
       sctx.textAlign = 'center'; sctx.font = F(19, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_TITLE + ': ' + ARCADE_SUB, W / 2, 22);
       title(ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 62, boss ? 54 : 46, boss ? '#ff2a2a' : null);
       { const left = ARCADE_FINAL + 1 - A.round; sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = boss ? '#ff6a6a' : gold;
-        sctx.fillText(boss ? 'DEFEND THE BELT - BEAT THE BONUS BOSS FOR A BOSS STAR' : left === 1 ? 'ONE WIN FROM BEING ' + ARCADE_TITLE : left + ' WINS FROM ' + ARCADE_TITLE, W / 2, 88); }
+        sctx.fillText(boss ? 'DEFEND THE BELT - BEAT THE BONUS BOSS FOR A RED STAR' : left === 1 ? 'ONE WIN FROM BEING ' + ARCADE_TITLE : left + ' WINS FROM ' + ARCADE_TITLE, W / 2, 88); }
       bracket(150, 24);
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(me, W / 2 - 260, 640, 1.55, sk ? INK : (CHARACTERS[me].look.body || '#fff'), menuTime, 1);
@@ -25740,18 +25740,18 @@ function drawArcade() {
       sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_SUB + ' - CHAMPION', W / 2, 22);
       title(charName(picks[A.sel]) + ' IS ' + ARCADE_TITLE + '!', 70, 46, '#ffd23f');
       sctx.textAlign = 'center'; sctx.font = F(20); sctx.fillStyle = ink;
-      sctx.fillText(A.bonusLost ? 'The belt is yours - but the BONUS BOSS was too much. Beat it to make your star a BOSS STAR!'
+      sctx.fillText(A.bonusLost ? 'The belt is yours - but the BONUS BOSS was too much. Beat it to turn your star RED!'
                                 : 'The belt is yours AND the BONUS BOSS is beaten on ' + ARCADE_DIFFS[A.diff] + '.', W / 2, 108);
       belt(W / 2, 440, 1.25);
       bracket(160, 22);
       // THE STAR: earned (new) / already had it - and how many of the five they've got
       {
         const dn = ARCADE_DIFFS[A.diff], pulse = 1 + 0.08 * Math.sin(A.t * 6), sx = W / 2 - 300, sy = 560;
-        starPath(sctx, sx, sy, 30 * (A.newStar ? pulse : 1)); sctx.fillStyle = '#ffd23f'; sctx.fill(); sctx.lineWidth = 3; sctx.strokeStyle = sk ? INK : '#8a5a00'; sctx.stroke();
+        const red = !A.bonusLost || bossStars(picks[A.sel]).includes(dn);
+        starPath(sctx, sx, sy, 30 * (A.newStar || A.newBoss ? pulse : 1)); sctx.fillStyle = red ? '#ff2a2a' : '#ffd23f'; sctx.fill(); sctx.lineWidth = 3; sctx.strokeStyle = sk ? INK : red ? '#6a0808' : '#8a5a00'; sctx.stroke();
         sctx.textAlign = 'left'; sctx.font = F(26, true); sctx.fillStyle = A.newStar ? '#ffd23f' : ink;
         const who = charName(picks[A.sel]);
-        const bossTxt = A.bonusLost ? '' : A.newBoss ? '  +  BOSS STAR!' : '  (boss star already earned)';
-        if (!A.bonusLost) { sctx.strokeStyle = '#ff2a2a'; sctx.lineWidth = 4; sctx.beginPath(); sctx.arc(sx, sy, 40, 0, Math.PI * 2); sctx.stroke(); }
+        const bossTxt = A.bonusLost ? '' : A.newBoss ? '  -  IT TURNS RED!' : '  (already red)';
         sctx.fillText((A.newStar ? 'NEW ' + who + ' STAR - ' + dn + '!' : who + ' already has the ' + dn + ' star') + bossTxt, sx + 46, sy + 4);
         sctx.font = F(17); sctx.fillStyle = dim;
         sctx.fillText(charStars(picks[A.sel]).length + ' OF ' + ARCADE_DIFFS.length + ' STARS WITH ' + who + '  -  see them on the arcade fighter pick', sx + 46, sy + 32);
