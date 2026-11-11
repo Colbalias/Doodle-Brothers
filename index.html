@@ -13143,8 +13143,8 @@ function drawDragonHead(x, y, ang, s, jaw, t) {
 //   6 - 8.1    whirled again (they're screaming)          9.3  SLAM      11.7 - 13.1 held high... 13.1 SLAM (the big one)
 //   16.9 / 18.7 / 20.8 / 22.6  SLAM, SLAM, SLAM, SLAM - side to side
 //   22.5 - 25.5  held up, screaming                       25.8  he LEAPS up with them, 27.6 ROARS in the air
-//   28.8  DIVES at the edge of the stage - 29.6 SMASHES them into the wall and grinds them down it, all the way
-//   32.4  flies back up onto the edge with them overhead - 33.3 HURLS them away (the launch) - done
+//   28.8  DIVES onto the stage by the edge - 29.6 SMASHES them face-first into the floor and DRAGS them across the WHOLE
+//         stage (never off it) - 32.4 hoists them overhead - 33.3 HURLS them away (the launch) - done
 const GRIND_CUT = { len: 33.7, vol: 1.0,
   slams: [[2.1, 'back'], [5.8, 'front'], [9.3, 'back'], [13.1, 'front'], [16.9, 'back'], [18.7, 'front'], [20.8, 'back'], [22.6, 'front']],
   screams: [[6.6, 7.8], [10.2, 11.4], [14.9, 16.2], [17.4, 18.1], [22.5, 25.5], [32.7, 33.1]],
@@ -13198,13 +13198,19 @@ function stepHunterGrindCut(f, a, dt) {
     if (Math.random() < dt * 30) burst(v.x, v.y - 30, ['#ffffff', '#cfefff'], 1, 0, Math.PI, 200, { grav: 0 });
   };
   const FRONT = 0.55, BACK = -Math.PI - 0.55, OVER = -Math.PI / 2, DANGLE = 1.25;
-  const slamAt = (n, th) => {                                       // SLAM - their whole body into the floor
+  const slamAt = (n, th) => {                                       // SLAM - their whole body into the floor, and the floor BREAKS
     const hx = f.x + D * Math.cos(th) * (30 * S + 80), hy = gy;
     painfulSlam(v, hx, hy, n, false); v.damage += (C.slamDmg - BROLY.slamHit.dmg) * pw + BROLY.slamHit.dmg * (pw - 1);
-    shake = Math.max(shake, 20 + 2.5 * n); camPunch = 1; sfx.whoosh(true);
-    cracks.push({ x: hx, y: hy, life: 5, max: 5, seed: (hx * 3.3 + n) % 1000, size: 1.1 + 0.12 * n });
-    burst(hx, hy - 10, ['#cfefff', '#ffffff', '#8fd8ff'], 22, -Math.PI / 2, 1.5, 700, { grav: 900 });   // (ice flying)
-    ring(hx, hy - 10); if (n >= 3) auraWaves.push({ x: hx, y: hy - 20, t: 0, dur: 0.3, max: 90 + 12 * n, color: '#ffffff' });
+    shake = Math.max(shake, 28 + 3 * n); camPunch = 1; sfx.whoosh(true); sfx.slam();
+    hitstop = Math.max(hitstop, 0.07 + 0.012 * n);                  // (a real freeze on every one - the song's clock keeps going through it)
+    impactFrame = Math.max(impactFrame, 0.07 + 0.01 * n); impactAt = { x: hx, y: hy - 20, ang: Math.PI / 2, all: n >= 3, focus: true, invert: n % 2 === 1 };
+    a.zoomKick = 0.32 + 0.03 * n; a.slamX = hx; a.lastSlam = T;     // (the camera CRASHES in on it)
+    cracks.push({ x: hx, y: hy, life: 6, max: 6, seed: (hx * 3.3 + n) % 1000, size: 1.3 + 0.15 * n });
+    burst(hx, hy - 10, ['#cfefff', '#ffffff', '#8fd8ff'], 34 + 4 * n, -Math.PI / 2, 1.5, 900 + 40 * n, { grav: 1100 });   // (ice flying)
+    burst(hx, hy - 6, ['#806b5a', '#b4b4bb', '#5a5246'], 16, -Math.PI / 2, 1.2, 700, { grav: 1300 });                     // (chunks of floor)
+    for (let k = 0; k < 2 + Math.floor(n / 2); k++) auraWaves.push({ x: hx, y: hy - 10, t: -k * 0.08, dur: 0.35, max: 120 + 20 * n + 40 * k, color: k % 2 ? '#8fd8ff' : '#ffffff' });   // (shockwaves rolling out)
+    for (let k = 0; k < 5; k++) { const sx = hx + (k - 2) * 26 + (Math.random() - 0.5) * 10; particles.push({ x: sx, y: hy, vx: 0, vy: -700 - Math.random() * 500, life: 0.35, max: 0.35, size: 5, color: '#e6f7ff', type: 'bit', grav: 2400 }); }   // (ice spikes bursting up)
+    dust(hx, hy, 24 + 3 * n, 2.8); ring(hx, hy - 10); ring(hx, hy - 30);
     if (n === 3) startXray(v, 'RIBS', hx, hy - 30, true);
     if (n === 6) startXray(v, 'SPINE', hx, hy - 30, true);
   };
@@ -13218,7 +13224,7 @@ function stepHunterGrindCut(f, a, dt) {
     hold(lerp(0.3, DANGLE, k) + Math.sin(T * 14) * 0.08, 0.5, -0.1); camOn(f.x, gy - 120, 1.3, 4);
     return;
   }
-  f.x = a.cx; if (T < 25.8) { f.y = gy; f.ground = true; }
+  if (T < 25.8) { f.x = a.cx; f.y = gy; f.ground = true; }   // (in the middle for the slams - after that he moves)
   // the floor slams: each one swings in from wherever the last one ended
   const slamIdx = C.slams.findIndex(([t]) => T < t);
   if (T < 25.8) {
@@ -13237,17 +13243,30 @@ function stepHunterGrindCut(f, a, dt) {
     // between slams: rest a beat (lifting them up - dangling if they're screaming), then the swing over his head and DOWN
     const t0 = prevEnd ? prevEnd[0] : 0.9, t1 = cur[0], target = cur[1] === 'back' ? BACK : FRONT;
     const swingDur = Math.min(1.2, (t1 - t0) * 0.75), sw0 = t1 - swingDur;
+    if (T - (a.lastSlam ?? -9) < 0.22) {                           // the IMPACT beat: they BOUNCE off the floor, he's bent right over it
+      const u = (T - a.lastSlam) / 0.22, bounce = Math.sin(u * Math.PI) * 0.35;
+      hold(restTh + (restTh > -Math.PI / 2 ? -bounce : bounce), 0.5, 0.55 * Math.sign(Math.cos(restTh)), -18);
+      camOn(a.slamX ?? f.x, gy - 90, 1.2 + (a.zoomKick || 0) * (1 - u), 9);
+      return;
+    }
     if (T < sw0) {                                                 // lifting them back up off the floor
       const k = easeOut(clamp((T - t0) / 0.5, 0, 1)), sh = scr >= 0 ? Math.sin(T * 26) * 0.1 : 0;
       const liftTo = restTh > -Math.PI / 2 ? -0.5 : -Math.PI + 0.5;   // (up off the floor, on the side they came down)
       hold(lerp(restTh, liftTo, k) + sh);
       camOn(f.x, gy - 130, scr >= 0 ? 1.5 : 1.15, 4);
     } else {                                                       // UP over his head... and DOWN, accelerating all the way
-      const k = (T - sw0) / swingDur, up = 0.45;
-      const from = T < sw0 + 0.001 ? restTh : restTh, th = k < up ? lerp(from, OVER, easeOut(k / up)) : lerp(OVER, target, ((k - up) / (1 - up)) ** 2.4);
-      hold(th, Math.cos(th) < 0 ? -0.5 : 0.5, 0, -6);
-      if (k > up && Math.random() < dt * 40) burst(f.x, gy - 120 * S, ['#ffffff'], 1, Math.PI / 2, 1.4, 160, { grav: 0 });
-      camOn(f.x, gy - 140, 1.0, 5);
+      const k = (T - sw0) / swingDur, up = 0.45, idx = slamIdx;
+      // (no two alike: odd ones he HOPS up into the swing and drives them down from the top of the jump; every 3rd is a full
+      //  360 round over his head first; the rest are straight whips)
+      const spin360 = idx % 3 === 2, hopUp = idx % 2 === 1;
+      const thUp = spin360 ? lerp(restTh, OVER - Math.PI * 2 * Math.sign(Math.cos(restTh) || 1), easeOut(k / up)) : lerp(restTh, OVER, easeOut(k / up));
+      const th = k < up ? thUp : lerp(OVER, target, ((k - up) / (1 - up)) ** 2.6);
+      const hop = hopUp ? Math.sin(clamp(k, 0, 1) * Math.PI) * 70 : 0;
+      f.y = gy - hop; f.ground = hop < 1;
+      const lean = k < up ? -0.25 : 0.55 * Math.sign(Math.cos(target));   // (rearing back... then throwing his whole body into it)
+      hold(th, Math.cos(th) < 0 ? -0.5 : 0.5, lean, k < up ? -4 : -14);
+      if (k > up) { if (Math.random() < dt * 60) burst(v.x, v.y - 40, ['#ffffff', '#cfefff'], 1, 0, Math.PI, 220, { grav: 0 }); if (Math.random() < dt * 40) ghosts.push({ fig: figureOf(v), life: 0.15, max: 0.15, color: '#cfefff' }); }
+      camOn(f.x, gy - 140 - hop * 0.5, k < up ? 1.0 : 0.92, 6);
     }
     return;
   }
@@ -13266,47 +13285,42 @@ function stepHunterGrindCut(f, a, dt) {
     } else camOn(f.x, (gy + f.y) / 2 - 80, 0.9, 5);
     return;
   }
-  const walkoff = !!stageDef.walkoff;
-  if (T < 29.6) {                                                  // the DIVE - straight at the edge of the stage
+  if (T < 29.6) {                                                  // the DIVE - down onto the stage, near the edge
     if (ev('dive')) { a.df = { x: f.x, y: f.y }; sfx.whoosh(true); }
     const k = clamp((T - 28.8) / 0.8, 0, 1) ** 2;
-    f.x = lerp(a.df.x, walkoff ? edgeX - dirE * 120 : edgeX + dirE * (16 + 46 * S), k); a.fy = lerp(a.df.y, gy + (walkoff ? 0 : 10), k); f.y = a.fy;
+    f.x = lerp(a.df.x, edgeX - dirE * 140, k); a.fy = lerp(a.df.y, gy, k); f.y = a.fy;
     hold(lerp(OVER, FRONT, k), 0.5, 0.5, -6);
     if (Math.random() < dt * 60) ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#8fd8ff' });
     camOn(f.x, f.y - 60, 0.95, 8);
     return;
   }
-  if (T < 33.3) {                                                  // SMASHED into the wall - and GROUND down it, face first
-    if (ev('wall')) { painfulSlam(v, edgeX, gy, 5, false); v.damage += (C.slamDmg - BROLY.slamHit.dmg) * pw; shake = 32; camPunch = 1; burst(edgeX, gy, ['#cfefff', '#ffffff', '#8fd8ff'], 40, 0, Math.PI, 800, { grav: 700 }); a.wy = gy; }
+  const sL = stageL() + 120, sR = stageR() - 120;
+  if (T < 32.4) {                                                  // SMASHED face-first into the floor - and DRAGGED across the whole stage
+    if (ev('wall')) { painfulSlam(v, f.x + D * 60, gy, 5, false); v.damage += (C.slamDmg - BROLY.slamHit.dmg) * pw; shake = 34; camPunch = 1; burst(f.x, gy, ['#cfefff', '#ffffff', '#8fd8ff'], 40, -Math.PI / 2, 1.4, 800, { grav: 700 }); }
     a.tickT = (a.tickT || 0) - dt;
-    const grindTick = () => { if (a.tickT > 0) return; a.tickT = C.tick; v.damage += C.tickDmg * pw; v.hitFlash = 0.06; burst(v.x - dirE * 10, v.y - 40, ['#cfefff', '#ffffff', '#ffd23f'], 6, dirE > 0 ? Math.PI : 0, 0.8, 420, { grav: 300 }); shake = Math.max(shake, 10); sfx.hit(0.3); };
-    if (walkoff) {                                                 // (the walk-off stage: no wall - he drags their face along the floor instead)
-      f.x = clamp(f.x - dirE * 520 * dt, stageL() + 100, stageR() - 100); f.y = gy; f.ground = true; D = a.D = -dirE;
-      v.x = f.x + D * (24 * S + 46); v.y = gy - 34; v.action.spin = D * Math.PI / 2; v.face = -D; v.vx = v.vy = 0;
-      a.pose = P(0.75, -16, [Math.sin(T * 26) * 1.1, 0.6], [-Math.sin(T * 26) * 1.1, 0.6], { grip: [44, -52], armB: [-1.0, -0.4] });
-      grindTick(); camOn(f.x, gy - 80, 1.1, 5);
-    } else if (T >= 32.4) {                                         // ...then flies back UP onto the edge with them overhead
-      if (ev('rise')) { a.rf = { x: f.x, y: f.y }; sfx.whoosh(true); }
-      const k = easeOut(clamp((T - 32.4) / 0.7, 0, 1));
-      D = a.D = dirE; f.face = dirE; f.x = lerp(a.rf.x, edgeX - dirE * 70, k); f.y = lerp(a.rf.y, gy, k); a.fy = f.y; f.ground = k >= 1;
-      hold(lerp(FRONT, OVER, k), 0.5, -0.2, -8); camOn(f.x, gy - 120, 1.15, 5);
-    } else {
-      const bottom = STAGE.y + (STAGE.h || 140) + 30;
-      f.face = D = a.D = -dirE; f.x = edgeX + dirE * (16 + 46 * S); f.y = Math.min(bottom + 30 * S, f.y + 260 * dt); f.ground = false;
-      v.vx = v.vy = 0; v.x = edgeX + dirE * 16; v.y = f.y - 30 * S; v.action.spin = dirE * Math.PI * 0.15; v.face = dirE;
-      a.pose = P(0.6, -10, [0.9, 1.3], [0.2, 0.9], { grip: [42, -56] });
-      grindTick(); if (Math.random() < dt * 40) particles.push({ x: edgeX + dirE * 2, y: v.y - 40, vx: 0, vy: -200, life: 0.25, max: 0.25, size: 3, color: '#cfefff', type: 'bit', grav: 0 });
-      camOn(edgeX, f.y - 60, 1.2, 4);
-    }
+    D = a.D = -dirE; f.face = D;
+    const k = clamp((T - 29.6) / 2.8, 0, 1), far = D > 0 ? sR : sL, from = edgeX - dirE * 140;   // (from where he dove in, by one edge...)
+    f.x = lerp(from, far, k);                                     // (...right across to the other) f.y = gy; f.ground = true;   // (exactly as far as the stage goes - never off it)
+    v.vx = v.vy = 0; v.x = f.x + D * (24 * S + 46); v.y = gy - 30; v.action.spin = D * Math.PI / 2; v.face = -D;
+    const run = Math.sin(T * 26);
+    a.pose = P(0.75, -16, [run * 1.1, 0.6], [-run * 1.1, 0.6], { grip: [44, -52], armB: [-1.0, -0.4] });
+    if (a.tickT <= 0) { a.tickT = C.tick; v.damage += C.tickDmg * pw; v.hitFlash = 0.06; burst(v.x + D * 30, gy - 10, ['#cfefff', '#ffffff', '#ffd23f'], 7, D > 0 ? Math.PI : 0, 0.8, 460, { grav: 300 }); shake = Math.max(shake, 10); sfx.hit(0.3); }
+    if (Math.random() < dt * 25) cracks.push({ x: v.x, y: gy, life: 3, max: 3, seed: Math.random() * 1000, size: 0.7 });   // (a trench of cracked ice behind them)
+    a.ghostT = (a.ghostT || 0) - dt; if (a.ghostT <= 0) { a.ghostT = 0.03; ghosts.push({ fig: figureOf(f), life: 0.18, max: 0.18, color: '#8fd8ff' }); }
+    camOn(f.x + D * 60, gy - 80, 1.05, 6);
     return;
   }
-  // 33.3: HURLED away - the launch
+  if (T < 33.3) {                                                  // up off the floor... over his head
+    const k = easeOut(clamp((T - 32.4) / 0.6, 0, 1));
+    hold(lerp(FRONT, OVER, k), 0.5, -0.2, -8); camOn(f.x, gy - 120, 1.15, 5);
+    return;
+  }
+  // 33.3: HURLED away - the launch (the way he was dragging them)
   stopGrindSong(f);
   v.action = null; v.drawZ = 0; f.action = null;
   painfulSlam(v, v.x, v.y, 3, true);
-  knock(v, C.final, walkoff ? -dirE : dirE, pw, v.x, v.y - 20);
-  if (!walkoff) v.vy = Math.min(v.vy, -700);                       // (hurled up and out, off the edge)
-  f.x = walkoff ? f.x : edgeX - dirE * 70; f.y = gy; f.ground = true; f.vx = f.vy = 0;
+  knock(v, C.final, D, pw, v.x, v.y - 20);
+  f.y = gy; f.ground = true; f.vx = f.vy = 0;
   f.action = { type: 'land', t: 0, dur: 0.3 };
 }
 // (drawing - the letterbox, and the scream lines off them every time they scream)
@@ -14370,14 +14384,14 @@ function stepHunterL3Cut(f, a, dt) {
     f.hForm = 3; f.hairGrow = 1;
     if ((a.waveT -= dt) <= 0) { a.waveT = 1.1; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.8, max: 140, color: '#86e63c' }); }
   }
-  // STRAY KI BLASTS: from the scream on, his power LEAKS out of him - green beams shooting off in every direction, every so
+  // STRAY KI BLASTS: while he SCREAMS, his power LEAKS out of him - green beams shooting off in every direction, every so
   // often, and wherever one comes down it goes off in a yellow dome. Anyone caught in one is hit (frozen until the match
   // starts again, then they go flying). Most come down on the stage; some just fly off into the sky.
   a.strays = a.strays || []; a.booms = a.booms || [];
-  if (T >= C.power && T < C.len - 0.6) {
-    a.strayT = (a.strayT ?? 0.15) - dt;
+  if (ph === 'power') {                                          // (ONLY while he's screaming - the moment it stops, so do the beams)
+    a.strayT = (a.strayT ?? 0.1) - dt;
     if (a.strayT <= 0) {
-      a.strayT = (ph === 'power' ? 0.35 : 0.55) + Math.random() * 0.5;
+      a.strayT = 0.2 + Math.random() * 0.3;
       const sL = stageL(), sR = stageR(), down = Math.random() < 0.75;
       const tx = down ? sL + Math.random() * (sR - sL) : f.x + (Math.random() - 0.5) * 2600, ty = down ? STAGE.y : f.y - 700 - Math.random() * 500;
       a.strays.push({ x0: f.x, y0: cy - 20, x1: tx, y1: ty, t: 0, dur: Math.hypot(tx - f.x, ty - cy) / 2600, down, hit: false });
