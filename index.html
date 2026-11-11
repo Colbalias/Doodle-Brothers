@@ -14370,6 +14370,40 @@ function stepHunterL3Cut(f, a, dt) {
     f.hForm = 3; f.hairGrow = 1;
     if ((a.waveT -= dt) <= 0) { a.waveT = 1.1; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.8, max: 140, color: '#86e63c' }); }
   }
+  // STRAY KI BLASTS: from the scream on, his power LEAKS out of him - green beams shooting off in every direction, every so
+  // often, and wherever one comes down it goes off in a yellow dome. Anyone caught in one is hit (frozen until the match
+  // starts again, then they go flying). Most come down on the stage; some just fly off into the sky.
+  a.strays = a.strays || []; a.booms = a.booms || [];
+  if (T >= C.power && T < C.len - 0.6) {
+    a.strayT = (a.strayT ?? 0.15) - dt;
+    if (a.strayT <= 0) {
+      a.strayT = (ph === 'power' ? 0.35 : 0.55) + Math.random() * 0.5;
+      const sL = stageL(), sR = stageR(), down = Math.random() < 0.75;
+      const tx = down ? sL + Math.random() * (sR - sL) : f.x + (Math.random() - 0.5) * 2600, ty = down ? STAGE.y : f.y - 700 - Math.random() * 500;
+      a.strays.push({ x0: f.x, y0: cy - 20, x1: tx, y1: ty, t: 0, dur: Math.hypot(tx - f.x, ty - cy) / 2600, down, hit: false });
+      sfx.beam(0.25);
+    }
+  }
+  for (const b of a.strays) {
+    b.t += dt;
+    if (!b.hit && b.t >= b.dur) {
+      b.hit = true;
+      if (b.down) {                                                // KABOOM - a dome of yellow light where it lands
+        a.booms.push({ x: b.x1, y: b.y1, t: 0, r: 95 + Math.random() * 50 });
+        dust(b.x1, b.y1, 14, 2); shake = Math.max(shake, 12); sfx.slam();
+        cracks.push({ x: b.x1, y: b.y1, life: 3, max: 3, seed: Math.random() * 1000, size: 0.9 });
+        for (const o of fighters) {
+          if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
+          if (Math.hypot(o.x - b.x1, (o.y - 40) - (b.y1 - 40)) > 110) continue;
+          a.strayHit = a.strayHit || new Set(); if (a.strayHit.has(o)) continue; a.strayHit.add(o);   // (everyone's frozen - so ONE hit each, at most)
+          applyHit(o, { dmg: 4, base: 320, growth: 2.2, angle: 70 }, Math.sign(o.x - b.x1) || 1, 1, o.x, o.y - 40, { fighter: f });
+        }
+      }
+    }
+  }
+  a.strays = a.strays.filter(b => b.t < b.dur + 0.35);
+  for (const m of a.booms) m.t += dt;
+  a.booms = a.booms.filter(m => m.t < 0.8);
   if (T >= C.len) {                                              // back to the fight - the power-up blows anyone near him away
     delete f.hairGrow; f.action = null;
     for (const o of fighters) {
@@ -14384,6 +14418,24 @@ function drawHunterL3Cut(f) {
   const P = toScreen(f.x, f.y - 55 * hScale(f)), Z = camZ();
   const R = Math.hypot(SW, SH);
   sctx.save();
+  // the STRAY KI BLASTS: green beams streaking out of him... and the yellow domes where they land
+  {
+    const Zs = camZ();
+    for (const b of (a.strays || [])) {
+      const u = clamp(b.t / b.dur, 0, 1), tail = clamp((b.t - 0.12) / b.dur, 0, 1), fade = b.hit ? clamp(1 - (b.t - b.dur) / 0.35, 0, 1) : 1;
+      const p0 = toScreen(lerp(b.x0, b.x1, tail), lerp(b.y0, b.y1, tail)), p1 = toScreen(lerp(b.x0, b.x1, u), lerp(b.y0, b.y1, u));
+      sctx.lineCap = 'round';
+      sctx.strokeStyle = `rgba(40,200,60,${0.55 * fade})`; sctx.lineWidth = 9 * Zs; sctx.beginPath(); sctx.moveTo(p0.x, p0.y); sctx.lineTo(p1.x, p1.y); sctx.stroke();
+      sctx.strokeStyle = `rgba(200,255,190,${0.95 * fade})`; sctx.lineWidth = 3 * Zs; sctx.beginPath(); sctx.moveTo(p0.x, p0.y); sctx.lineTo(p1.x, p1.y); sctx.stroke();
+      if (!b.hit) { sctx.fillStyle = '#eaffd8'; sctx.beginPath(); sctx.arc(p1.x, p1.y, 6 * Zs, 0, Math.PI * 2); sctx.fill(); }
+    }
+    for (const m of (a.booms || [])) {
+      const u = m.t / 0.8, r = m.r * Zs * easeOut(clamp(u / 0.35, 0, 1)), al = u < 0.5 ? 1 : 1 - (u - 0.5) / 0.5, p = toScreen(m.x, m.y);
+      const g2 = sctx.createRadialGradient(p.x, p.y, r * 0.1, p.x, p.y, Math.max(1, r));
+      g2.addColorStop(0, `rgba(255,255,220,${al})`); g2.addColorStop(0.6, `rgba(255,220,40,${0.9 * al})`); g2.addColorStop(1, `rgba(255,120,20,${0.5 * al})`);
+      sctx.fillStyle = g2; sctx.beginPath(); sctx.arc(p.x, p.y, Math.max(1, r), Math.PI, 0); sctx.closePath(); sctx.fill();   // (a dome, sitting on the floor)
+    }
+  }
   const bar = 70 * clamp(T / 0.6, 0, 1) * clamp((C.len - T) / 0.6, 0, 1);
   if (ph === 'hole' || ph === 'iris') {
     // the vortex: the world dimming toward the edges, dark spiral arms wheeling into him
