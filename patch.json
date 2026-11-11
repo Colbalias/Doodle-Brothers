@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.57",
+    "version":  "0.7.58",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "744841e033efc7cdd9aa87e12e0e30705ae93cd4626443fdc849c0833f23ef8e",
-                                     "size":  1879312
+                                     "hash":  "d25b4c39272f4d2182f1efad753c911ca640757c29061fff19f853c29da362ab",
+                                     "size":  1893601
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -51,6 +51,10 @@
                                                              "hash":  "cc33cf5756a3e3495024fc783d6f8efc31cf57cecc01f6be731c5e841f2504ec",
                                                              "size":  5966141
                                                          },
+                  "sounds/battle/broly-vs-gogeta.mp3":  {
+                                                            "hash":  "63c92c96596ff52d0748feffc212a2e4bd176eaff96bfc22b330f085e8c4ad67",
+                                                            "size":  5194423
+                                                        },
                   "sounds/battle/by-the-sword.mp3":  {
                                                          "hash":  "f71fd937ea290d9b260782bbdaab4ae2dbf4f8ea40129ae8ca7cafbe1443bc47",
                                                          "size":  3071278
@@ -63,10 +67,22 @@
                                                         "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
                                                         "size":  1010304
                                                     },
+                  "sounds/battle/courtesy-call.mp3":  {
+                                                          "hash":  "695c6b45ce63b5d6c534f79a3898aabb4ec1a835408b92e19f91565e658c5be3",
+                                                          "size":  6012519
+                                                      },
                   "sounds/battle/devils-never-cry.mp3":  {
                                                              "hash":  "e6d9384978008e9e153b8aa358e39c1d3f6933905b4f7082d5662f9c153a10c8",
                                                              "size":  4735073
                                                          },
+                  "sounds/battle/dont-let-me-be-misunderstood.mp3":  {
+                                                                         "hash":  "eae50ac438e6425be4741256d1e3a78a86043daff841ed2e80acf7f85e5540bc",
+                                                                         "size":  14803656
+                                                                     },
+                  "sounds/battle/dont-sweat-the-technique.mp3":  {
+                                                                     "hash":  "1650319a8cba8ae4157e9e18dc41524a0493a43b154a5cac14eba6c2c08f5f6b",
+                                                                     "size":  5402109
+                                                                 },
                   "sounds/battle/f.mp3":  {
                                               "hash":  "869e11c5aeb214d55e35536bc292797fcecb146f1970096c0d788ae5479f472c",
                                               "size":  6329940
@@ -115,10 +131,22 @@
                                                                "hash":  "944c56a219a6616eecca4b9a7b56f08dc81bb4e34e45a27ab976d679c74bcd60",
                                                                "size":  4136679
                                                            },
+                  "sounds/battle/i-will-survive.mp3":  {
+                                                           "hash":  "aedb169d8cfdd6d669d62aaf2e7c97ac05eaa4013de26f28376fb2e01d0881b6",
+                                                           "size":  3220091
+                                                       },
+                  "sounds/battle/jump-around.mp3":  {
+                                                        "hash":  "fa4376039045c915caade0879be0036fae28091167b2cbcf996a2452645a96cc",
+                                                        "size":  4979996
+                                                    },
                   "sounds/battle/kakarot-vs-broly.mp3":  {
                                                              "hash":  "a6375ebad4e7769a106340bf691eb062aa40a74461844135cd940464761920e3",
                                                              "size":  4093014
                                                          },
+                  "sounds/battle/kibou-no-uta.mp3":  {
+                                                         "hash":  "03253268ac8c30e26c94bedb1cdded7f40f5bfd6d3784dafb08963f11e8ec505",
+                                                         "size":  4874731
+                                                     },
                   "sounds/battle/killing-in-the-name.mp3":  {
                                                                 "hash":  "8eb701aecbe2536b6bf0266031bcf2aeba0eed0b5e0770e9f79cc50bd46c2fb5",
                                                                 "size":  6988050
@@ -155,6 +183,10 @@
                                                               "hash":  "6134fd66d14c3af114303975a0645c11a3f2fb10dc7c935a856b0dbb4c677734",
                                                               "size":  5903605
                                                           },
+                  "sounds/battle/one-step-closer.mp3":  {
+                                                            "hash":  "355566e25c8dca4f7299c4d88629fd6ee1c1b99200659114014a07f205c54d08",
+                                                            "size":  3503216
+                                                        },
                   "sounds/battle/paranoia.mp3":  {
                                                      "hash":  "470701adc993521d9352b45dc6ffcfb4616ac7db38ee5f681b189c2f3ff705ce",
                                                      "size":  2820107
@@ -163,6 +195,14 @@
                                                              "hash":  "34db7d5cee6b13d955ce71c05c15739d4ee5fbc48b5300c8d59d5278de46eb0a",
                                                              "size":  3103751
                                                          },
+                  "sounds/battle/remember-the-name.mp3":  {
+                                                              "hash":  "1be648c3649a402b6216d7cf3e1953fb672a37275f696d24898c49a99d1f6f76",
+                                                              "size":  4750537
+                                                          },
+                  "sounds/battle/revelation.mp3":  {
+                                                       "hash":  "099410c414b86751f57e604d9798eb9e82f21f4c3a6f84c6ee1d7572078da172",
+                                                       "size":  4120815
+                                                   },
                   "sounds/battle/rollin.mp3":  {
                                                    "hash":  "2452f3e25c155549d573ad1d8440a8ba03ffd300b6f0be7377da2647c3382b56",
                                                    "size":  4963537
@@ -183,6 +223,14 @@
                                                          "hash":  "7bdf0a3d699d75ae0327f2dd955c6945ecd9b21a6ee4ba3dc8d9dc91e7ff4b15",
                                                          "size":  7020386
                                                      },
+                  "sounds/battle/song-2.mp3":  {
+                                                   "hash":  "1274a68b794a6197ac6df60193c2ff1ec8561aad0416f1ea310b4d15158690b1",
+                                                   "size":  2544349
+                                               },
+                  "sounds/battle/south-side-suicide.mp3":  {
+                                                               "hash":  "c70dedb2086c7e6699e5bd45a5ff807b343a08e5ec7983aaa2207ff328fd0f68",
+                                                               "size":  3893064
+                                                           },
                   "sounds/battle/tank.mp3":  {
                                                  "hash":  "fea5068d52dbac77ae1d263db9c22c1e45ea9a4a738d755ddd8ce2043bcaa79a",
                                                  "size":  5258944
@@ -199,10 +247,26 @@
                                                                         "hash":  "4f2984d789d4e73e5bbade98b46396909cf20c39ae63f2e33de16c79978005f8",
                                                                         "size":  9490510
                                                                     },
+                  "sounds/battle/till-i-collapse.mp3":  {
+                                                            "hash":  "1110716ffb36ea5ac2ec3090985b4d44fc66418dcebf1fc7016af4e99b11d914",
+                                                            "size":  5502482
+                                                        },
+                  "sounds/battle/tokyo-drift.mp3":  {
+                                                        "hash":  "929b7a086f24c9b2ed503b2408396a770fae260d82c197b5e84113af1f29d893",
+                                                        "size":  5635810
+                                                    },
+                  "sounds/battle/try-n-hold-me-back.mp3":  {
+                                                               "hash":  "6013077e16cd6519d03db122d3952beda1c4b956bc26ce0b0eb337ade11a2f53",
+                                                               "size":  5191808
+                                                           },
                   "sounds/battle/tsukuyomi.mp3":  {
                                                       "hash":  "ea504a85cfcc1bdab117cd92db011d756203709fdce755fd4ce5bba29686923d",
                                                       "size":  297706
                                                   },
+                  "sounds/battle/x-gon-give-it-to-ya.mp3":  {
+                                                                "hash":  "b3b7370cdc31a64e009175ac16acd9439510fd00db47b96de087fcab513912f7",
+                                                                "size":  3794568
+                                                            },
                   "sounds/battle/you-say-run.mp3":  {
                                                         "hash":  "ec59d90ccdf70219d312670fc4f7fd60841dc11f809e13b3e6a47a92b1c45c4c",
                                                         "size":  5567353
