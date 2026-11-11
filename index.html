@@ -709,7 +709,7 @@ const steadyCam = () => (typeof netActive === 'function' && netActive()) || play
 function updateCamera(dt) {
   camPunch = Math.max(0, camPunch - dt * 4.5);
   const steady = steadyCam();
-  const l3 = fighters.find(f => f.action && (f.action.type === 'sgCut' || f.action.type === 'fxSac' || f.action.type === 'leeUlt' || f.action.type === 'hGrindCut'));   // (Hunter's Legendary 3 cutscene: the camera's on him)
+  const l3 = fighters.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut'));   // (Hunter's Legendary 3 cutscene: the camera's on him)
   const alive = l3 ? [l3] : fighters.filter(f => f.respawnTimer <= 0 && !f.minion);
   let tx = STAGE.x + STAGE.w / 2, ty = STAGE.y - 110, tz = CAM_ZOOM_MAX;
   if (alive.length) {
@@ -734,7 +734,7 @@ function updateCamera(dt) {
   if (shipF) {                                       // Aiden's pirate ship: pull out to show the whole ship
     const a = shipF.action; tx = a.x + a.dir * (a.t < SHIP.holdEnd ? 0 : SHIP.L * 0.45); ty = a.gy - 210; tz = 0.72; speed = 3;
   }
-  const uiF = alive.find(f => f.action && (f.action.type === 'flameDragon' || f.action.type === 'sgCut' || f.action.type === 'fxSac' || f.action.type === 'leeUlt' || f.action.type === 'hGrindCut') && f.action.cam);   // (+ Hunter's Legendary 3)
+  const uiF = alive.find(f => f.action && (f.action.type === 'flameDragon' || f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut') && f.action.cam);   // (+ Hunter's Legendary 3)
   if (uiF) { const c = uiF.action.cam; tx = c.x; ty = c.y; tz = c.z; speed = c.speed; }   // Lance's Ultra Instinct: the cutscene's own camera
   if (typeof ult !== 'undefined' && ult) {          // ultimate: push in close on the action
     const u = ult.user, v = ult.target;
@@ -15398,7 +15398,7 @@ function drawLeeCut(f) {
     if (B.t < 0.1) { sc.fillStyle = `rgba(220,240,255,${0.7 * (1 - B.t / 0.1)})`; sc.fillRect(-OX, -OY, SW, SH); }   // (the flash)
     sc.restore();
   }
-  if (a.freeze) { sc.fillStyle = '#000'; sc.fillRect(-OX, -OY, SW, 54 + OY); sc.fillRect(-OX, H - 54, SW, 54 + OY); }   // letterbox
+  if (a.freeze && !liveCutDraw) { sc.fillStyle = '#000'; sc.fillRect(-OX, -OY, SW, 54 + OY); sc.fillRect(-OX, H - 54, SW, 54 + OY); }   // letterbox
   sc.restore();
 }
 
@@ -15747,7 +15747,7 @@ function drawSsgCut(f) {
     gl.addColorStop(0, 'rgba(255,255,255,1)'); gl.addColorStop(0.5, 'rgba(255,200,180,0.7)'); gl.addColorStop(1, 'rgba(255,60,60,0)');
     sctx.fillStyle = gl; sctx.beginPath(); sctx.arc(M.x, M.y, th * 4, 0, Math.PI * 2); sctx.fill();
   }
-  const bar = 64 * clamp(T / 0.5, 0, 1);
+  const bar = liveCutDraw ? 0 : 64 * clamp(T / 0.5, 0, 1);
   sctx.fillStyle = '#000'; sctx.fillRect(-OX, -OY, SW, bar + OY); sctx.fillRect(-OX, H - bar, SW, bar + OY);
   sctx.restore();
 }
@@ -19637,7 +19637,7 @@ function updateSim(dt) {
   // LANCE'S ULTRA INSTINCT: the whole match stops to watch - everyone but him and the one he's beating on is frozen
   // (TRANSFORMATIONS - Lance's Super Saiyan / Super Saiyan 2 / Ultra Instinct, Hunter's Legendary / Legendary 3 - DON'T stop the
   //  match any more: they play out while everyone else keeps fighting. Ultra Instinct's victim is held by the scene itself.)
-  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'sgCut' || f.action.type === 'fxSac' ||
+  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac' ||
                                                  (f.action.type === 'flameDragon' && (f.action.phase === 'summon' || f.action.phase === 'release'))));   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
   for (const f of fighters) f.uiFrozen = !!uiCut && f !== uiCut && f !== uiCut.action.victim;
   for (const f of fighters.slice()) {
@@ -22670,9 +22670,11 @@ function drawHUD() {
   // TRANSFORMATIONS play out during the fight: their screen effects are drawn LIGHT (no letterbox) and the HUD stays up
   for (const tf of fighters) {
     const ty = tf.action && tf.action.type;
-    if (ty !== 'hL3Cut' && ty !== 'ss1Cut' && ty !== 'ssj2Cut' && ty !== 'uiTransform') continue;
-    liveCutDraw = true; sctx.save(); sctx.globalAlpha = ty === 'hL3Cut' && !tf.action.l2 ? 1 : 0.35;
-    if (ty === 'hL3Cut') { if (tf.action.l2) drawHunterL2Cut(tf); else drawHunterL3Cut(tf); }
+    const cb = ty === 'sgCut' || (ty === 'leeUlt' && tf.action.comeback);   // (the COMEBACKS too)
+    if (ty !== 'hL3Cut' && ty !== 'ss1Cut' && ty !== 'ssj2Cut' && ty !== 'uiTransform' && !cb) continue;
+    liveCutDraw = true; sctx.save(); sctx.globalAlpha = (ty === 'hL3Cut' && !tf.action.l2) ? 1 : cb ? 0.6 : 0.35;
+    if (ty === 'sgCut') drawSsgCut(tf); else if (ty === 'leeUlt') drawLeeCut(tf);
+    else if (ty === 'hL3Cut') { if (tf.action.l2) drawHunterL2Cut(tf); else drawHunterL3Cut(tf); }
     else if (ty === 'ss1Cut') drawSs1Cut(tf); else if (ty === 'ssj2Cut') drawSsj2Cut(tf);
     sctx.restore(); if (ty === 'uiTransform') drawUiBubble();
     liveCutDraw = false;
@@ -22681,10 +22683,8 @@ function drawHUD() {
   if (fxF) { drawFxSac(fxF); return; }                               // Lance's Final Explosion - the sacrifice
   const grF = fighters.find(f => f.action && f.action.type === 'hGrindCut');
   if (grF) { drawHGrindCut(grF); if (ultBanner) drawUltHUD(); return; }   // Hunter's Glacier Grind
-  const leeF = fighters.find(f => f.action && f.action.type === 'leeUlt');
+  const leeF = fighters.find(f => f.action && f.action.type === 'leeUlt' && !f.action.comeback);
   if (leeF) { drawLeeCut(leeF); if (ultBanner) drawUltHUD(); return; }   // Colby's Primary Lotus
-  const sgF = fighters.find(f => f.action && f.action.type === 'sgCut');
-  if (sgF) { drawSsgCut(sgF); if (ultBanner) drawUltHUD(); return; }   // Lance's Super Saiyan God comeback
   const tsuF = fighters.find(f => f.action && f.action.type === 'tsukuyomi');
   if (tsuF) { drawTsukuyomi(tsuF); if (ultBanner) drawUltHUD(); return; }   // Colbalias's Tsukuyomi: the sharingan, then the genjutsu world
    // Lance's Super Saiyan moment: the blue + the golden beams                       // Hunter's Legendary 3 cutscene: letterbox + the green glow
