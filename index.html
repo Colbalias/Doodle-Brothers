@@ -13145,9 +13145,10 @@ function drawDragonHead(x, y, ang, s, jaw, t) {
 //   22.5 - 25.5  held up, screaming                       25.8  he LEAPS up with them, 27.6 ROARS in the air
 //   28.8  DIVES onto the stage by the edge - 29.6 SMASHES them face-first into the floor and DRAGS them across the WHOLE
 //         stage, back, and across again - fast (never off it) - 32.4 hoists them overhead - 33.3 HURLS them away (the launch) - done
-const GRIND_CUT = { len: 33.7, vol: 1.0,
+const GRIND_CUT = { len: 33.7, vol: 1.35,   // (louder - it was a bit quiet)
+ 
   slams: [[5.8, 'front'], [13.1, 'front'], [16.9, 'front'], [18.7, 'front'], [20.72, 'front'], [22.6, 'front']],   // (only where the clip has a SLAM sound)
-  screams: [[6.6, 7.8], [10.2, 11.4], [14.9, 16.2], [17.4, 18.1], [22.5, 25.5], [32.7, 33.1]],
+  screams: [[5.2, 7.8], [10.6, 11.4], [12.9, 13.9], [14.9, 17.4], [18.3, 19.1], [22.0, 25.5], [31.3, 33.3]],   // (measured off Goku's voice in the clip)
   slamDmg: 2.2, tickDmg: 0.3, tick: 0.12,
   final: { dmg: 9, base: 600, growth: 6.4, angle: 40, ultFinal: true, xray: 'SPINE' } };
 function playGrindSong(f) {
@@ -13186,6 +13187,7 @@ function stepHunterGrindCut(f, a, dt) {
   }
 }
 function stepHunterGrindCutBeat(f, a, dt) {
+  if (a.ifr) { a.ifr.t += dt / uiRealRate(); if (a.ifr.t > 0.2) a.ifr = null; }
   a.songT += dt / uiRealRate();
   const C = GRIND_CUT, T = a.songT, S = hScale(f), v = a.victim, gy = STAGE.y, L = LEG_UP + LEG_LOW - 1;
   const ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
@@ -13216,6 +13218,7 @@ function stepHunterGrindCutBeat(f, a, dt) {
     hitstop = Math.max(hitstop, 0.07 + 0.012 * n);                  // (a real freeze on every one - the song's clock keeps going through it)
     impactFrame = Math.max(impactFrame, 0.07 + 0.01 * n); impactAt = { x: hx, y: hy - 20, ang: Math.PI / 2, all: n >= 3, focus: true, invert: n % 2 === 1 };
     a.zoomKick = 0.32 + 0.03 * n; a.slamX = hx; a.lastSlam = T;     // (the camera CRASHES in on it)
+    a.ifr = { t: 0, x: hx, y: hy, n, seed: hx * 0.37 + n * 7.1 };     // (and the SHATTER impact frame - see drawHGrindCut)
     cracks.push({ x: hx, y: hy, life: 6, max: 6, seed: (hx * 3.3 + n) % 1000, size: 1.3 + 0.15 * n });
     burst(hx, hy - 10, ['#cfefff', '#ffffff', '#8fd8ff'], 34 + 4 * n, -Math.PI / 2, 1.5, 900 + 40 * n, { grav: 1100 });   // (ice flying)
     burst(hx, hy - 6, ['#806b5a', '#b4b4bb', '#5a5246'], 16, -Math.PI / 2, 1.2, 700, { grav: 1300 });                     // (chunks of floor)
@@ -13325,9 +13328,10 @@ function stepHunterGrindCutBeat(f, a, dt) {
     f.x = lerp(pi === 0 ? edgeX - dirE * 140 : from, far, pu * pu * (3 - 2 * pu) * 0.25 + pu * 0.75);   // (a quick burst up to speed)
     if (pu >= 1 && ev('turn' + pi)) { sfx.whoosh(true); dust(f.x, gy, 16, 2.2); shake = Math.max(shake, 14); }   // (skidding round at the end of a pass) f.y = gy; f.ground = true;   // (exactly as far as the stage goes - never off it)
     const vs = ((v.look && v.look.scale) || 1) * (v.sizeMul || 1);
-    v.vx = v.vy = 0; v.x = f.x + D * (24 * S + 50); v.y = gy - 6 + 48 * vs; v.action.spin = D * Math.PI / 2; v.face = -D;   // (lying FLAT on the floor - their hips pivot right down at floor level)
+    // BY THE THROAT: their neck in his fist, their head toward him, the rest of them flat on the floor out in front of him
+    v.vx = v.vy = 0; v.x = f.x + D * (52 * S + 28 * vs); v.y = gy - 6 + 48 * vs; v.action.spin = -D * Math.PI / 2; v.face = D;
     const run = Math.sin(T * 26);
-    a.pose = P(0.95, -20, [run * 1.1, 0.6], [-run * 1.1, 0.6], { grip: [52, -10], armB: [-1.0, -0.4] });   // (bent right over, hand down on them)
+    a.pose = P(0.95, -20, [run * 1.1, 0.6], [-run * 1.1, 0.6], { grip: [52, -8], armB: [-1.0, -0.4] });   // (bent right over, fist round their throat)
     if (a.tickT <= 0) { a.tickT = C.tick; v.damage += C.tickDmg * pw; v.hitFlash = 0.06; burst(v.x + D * 30, gy - 10, ['#cfefff', '#ffffff', '#ffd23f'], 7, D > 0 ? Math.PI : 0, 0.8, 460, { grav: 300 }); shake = Math.max(shake, 10); sfx.hit(0.3); }
     if (Math.random() < dt * 25) cracks.push({ x: v.x, y: gy, life: 3, max: 3, seed: Math.random() * 1000, size: 0.7 });   // (a trench of cracked ice behind them)
     a.ghostT = (a.ghostT || 0) - dt; if (a.ghostT <= 0) { a.ghostT = 0.03; ghosts.push({ fig: figureOf(f), life: 0.18, max: 0.18, color: '#8fd8ff' }); }
@@ -13356,6 +13360,37 @@ function drawHGrindCut(f) {
     const p = toScreen(hx, hy), Z = camZ();
     sc.strokeStyle = 'rgba(255,255,255,0.85)'; sc.lineWidth = 3; sc.lineCap = 'round';
     for (let i = 0; i < 10; i++) { const an = i / 10 * Math.PI * 2 + now * 2, r0 = 22 * Z, r1 = (46 + 14 * Math.sin(now * 40 + i)) * Z; sc.beginPath(); sc.moveTo(p.x + Math.cos(an) * r0, p.y + Math.sin(an) * r0); sc.lineTo(p.x + Math.cos(an) * r1, p.y + Math.sin(an) * r1); sc.stroke(); }
+  }
+  // THE SHATTER IMPACT FRAME (every slam): for a split second the world drops away - a black frame, the two of them as
+  // WHITE silhouettes, a red burst from the impact; then it FLIPS - white, black silhouettes, and the ice cracking out
+  // across the screen from where they hit
+  if (a.ifr) {
+    const I = a.ifr, Z = camZ(), p = toScreen(I.x, I.y), flip = I.t > 0.07, fade = I.t < 0.14 ? 1 : 1 - (I.t - 0.14) / 0.06;
+    sc.save(); sc.globalAlpha = clamp(fade, 0, 1);
+    sc.fillStyle = flip ? '#f4fbff' : '#050505'; sc.fillRect(-OX, -OY, SW, SH);
+    if (!flip) {                                                     // the red burst - spikes out from the impact
+      sc.fillStyle = '#d0141a';
+      for (let i = 0; i < 18; i++) {
+        const an = i / 18 * Math.PI * 2 + hash(I.seed + i) * 0.3, r0 = 30 * Z, r1 = (260 + 380 * hash(I.seed + i * 3.1)) * Z, w = 0.05 + 0.05 * hash(i + I.seed);
+        sc.beginPath(); sc.moveTo(p.x + Math.cos(an - w) * r0, p.y + Math.sin(an - w) * r0); sc.lineTo(p.x + Math.cos(an) * r1, p.y + Math.sin(an) * r1); sc.lineTo(p.x + Math.cos(an + w) * r0, p.y + Math.sin(an + w) * r0); sc.fill();
+      }
+    } else {                                                         // the ice CRACKING out from it - jagged, branching
+      sc.strokeStyle = '#2a6f9e'; sc.lineCap = 'round';
+      for (let i = 0; i < 11; i++) {
+        let an = i / 11 * Math.PI * 2 + hash(I.seed * 1.7 + i), x = p.x, y = p.y, len = (520 + 300 * hash(I.seed + i * 5.3)) * Z;
+        sc.lineWidth = 4; sc.beginPath(); sc.moveTo(x, y);
+        for (let k = 1; k <= 7; k++) {
+          an += (hash(I.seed + i * 11 + k) - 0.5) * 0.7; const step = len / 7; x += Math.cos(an) * step; y += Math.sin(an) * step; sc.lineTo(x, y);
+          if (k === 3 || k === 5) { const ba = an + (hash(i + k * 3.3) < 0.5 ? 0.7 : -0.7); sc.moveTo(x, y); sc.lineTo(x + Math.cos(ba) * step * 1.4, y + Math.sin(ba) * step * 1.4); sc.moveTo(x, y); }
+        }
+        sc.stroke(); sc.lineWidth = Math.max(1, 4 - 0);
+      }
+    }
+    // the two of them, in silhouette (white on the black - black on the white)
+    const c0 = ctx; ctx = sc; sc.save(); applyCamera(sc);
+    for (const g of [f, v]) if (g) drawFigure(figureOf(g), { tint: flip ? '#050505' : '#ffffff' });
+    sc.restore(); ctx = c0;
+    sc.restore();
   }
   sc.fillStyle = '#000'; sc.fillRect(-OX, -OY, SW, 54 + OY); sc.fillRect(-OX, H - 54, SW, 54 + OY);   // letterbox
   sc.restore();
