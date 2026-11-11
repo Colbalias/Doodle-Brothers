@@ -14356,7 +14356,7 @@ function drawHunterL2Cut(f) {
 }
 
 // When his rage takes him to Legendary 3, the whole match stops to watch - the BROLY TRANSFORMATION from Dragon Ball Super:
-// Broly (0:54 - 1:41 of the clip, with its own sound - sounds/battle/hunter-l3-song.mp3, the mp3 itself is cut), beat for beat,
+// Broly (0:54 - 1:41 of the clip, with its own sound - sounds/battle/hunter-l3-broly.mp3, the mp3 itself is cut), beat for beat,
 // the camera on HIM the whole way (no cutaways). Seconds in:
 //   0 - 3      straining, shaking, his aura flickering       3.04  a GREEN FLASH blows out of him
 //   6 - 11     he SCREAMS - the aura surging, his hair starting to rise and grow
@@ -14382,7 +14382,7 @@ function startHunterL3Cut(f) {
 function playHunterL3Song(f) {
   stopHunterL3Song(f);
   if (!soundOn) return null;
-  let el; try { el = hL3SongEl = new Audio('sounds/battle/hunter-l3-song.mp3'); } catch (e) { return null; }
+  let el; try { el = hL3SongEl = new Audio('sounds/battle/hunter-l3-broly.mp3'); } catch (e) { return null; }
   el.preload = 'auto';
   el.volume = clamp(H_L3_CUT.vol * settings.master * settings.music * 1.6, 0, 1);
   el.play().catch(() => {});
