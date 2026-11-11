@@ -17870,7 +17870,7 @@ function stepAction(f, inp, dt) {
   if (a.type === 'leeUlt') return stepLeeLotus(f, a, dt);          // Colby: Primary Lotus
   if (a.type === 'hGrindCut') return stepHunterGrindCut(f, a, dt);  // Hunter: Glacier Grind (Broly demolishes Goku)
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
-  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
+  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
   if (a.type === 'fxFrozen') { if (!a.by.action || a.by.action.type !== 'fxSac') { f.action = { type: 'hitstun', t: 0, dur: 0.5 }; } f.vx = f.vy = 0; return; }
   if (a.type === 'sgVictim') { if (!a.by.action || a.by.action.type !== 'sgCut') f.action = null; return; }
@@ -18584,14 +18584,14 @@ function updateFighter(f, inp, dt) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
     if (f.action && (['sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
     if (f.char === 'COLBY' && !f.lotusUsed && !f.selfKO && !f.out) {   // COLBY'S FIRST KO: PRIMARY LOTUS - his comeback (once a match - however he went out)
-      if (ult || fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
+      if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
         f.lotusUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
         f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0, lotus: true }; return;
       }
       startLotusComeback(f); return;
     }
     if (f.char === 'LANCE' && !f.sgUsed && !f.selfKO && isFinite(f.stocks) && f.stocks <= 1 && !f.out) {   // LANCE'S LAST STOCK: SUPER SAIYAN GOD (once a match - however he went out)
-      if (ult || fighters.some(o => o !== f && o.action && ['uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
+      if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
         // (someone's ultimate is still playing: he's HELD at the edge - untouchable - and it starts the moment that's over)
         f.sgUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
         f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0 }; return;
@@ -19523,8 +19523,8 @@ function beingUlted(f) {
 }
 function hunterRage(f, dt, d0) {
   if (f.action && f.action.type === 'hL3Cut') return;             // (mid-cutscene)
-  if (f.l3Pending && f.respawnTimer <= 0 && !f.out && (!f.action || f.action.type === 'land') && !ultRunning() && !ult) { f.l3Pending = false; startHunterL3Cut(f); return; }
-  if (f.l2Pending && f.respawnTimer <= 0 && !f.out && (!f.action || f.action.type === 'land') && !ultRunning() && !ult) { f.l2Pending = false; startHunterL2Cut(f); return; }
+  if (f.l3Pending && f.respawnTimer <= 0 && !f.out && (!f.action || f.action.type === 'land') && !ult) { f.l3Pending = false; startHunterL3Cut(f); return; }
+  if (f.l2Pending && f.respawnTimer <= 0 && !f.out && (!f.action || f.action.type === 'land') && !ult) { f.l2Pending = false; startHunterL2Cut(f); return; }
   if (f.l2Pending) return;                                          // (waiting to be free for the Legendary cutscene: the meter holds)
   if (f.stompCD > 0) f.stompCD = Math.max(0, f.stompCD - dt);   // (the Broly Stomp's cooldown)
   if (f.respawnTimer > 0 || f.out) return;                    // (KO'd: the meter waits - and he KEEPS his form through the KO)
@@ -19684,7 +19684,9 @@ function updateSim(dt) {
   //  match any more: they play out while everyone else keeps fighting. Ultra Instinct's victim is held by the scene itself.)
   const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac' ||
                                                  (f.action.type === 'flameDragon' && (f.action.phase === 'summon' || f.action.phase === 'release'))));   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
-  for (const f of fighters) f.uiFrozen = !!uiCut && f !== uiCut && f !== uiCut.action.victim;
+  const TF_TYPES = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform'];
+  const inTransform = f => !!(f.action && (TF_TYPES.includes(f.action.type) || (f.action.type === 'ultVictim' && fighters.some(g => g.action && g.action.type === 'uiTransform' && g.action.victim === f))));
+  for (const f of fighters) f.uiFrozen = !!uiCut && f !== uiCut && f !== uiCut.action.victim && !inTransform(f);   // (a transformation keeps going through someone else's ultimate)
   for (const f of fighters.slice()) {
     if (f.uiFrozen) continue;
     const inp = readyT > 0 && !demo ? emptyInput() : demo && !f.minion ? demoInput(f) : inputFor(f);   // (frozen till the countdown's done)
