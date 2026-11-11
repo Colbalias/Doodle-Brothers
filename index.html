@@ -8592,6 +8592,12 @@ const hbx = (x, y, r, o) => ({ x: x * HS, y: y * HS, r: r * HS, ...o });
 // Full = one form up, and it starts filling again. Forms are kept through KOs.
 const HUNTER_RAGE = { max: 100, passive: 0.55, perDmg: 0.45, nearLance: 0.6, lanceR: 420, formCost: 0.15, color: '#ff3a1a' };   // (a slow, steady build: Legendary 3 usually around his last stock of 3)
 const hSpd = f => f.look && f.look.rage ? 1 + 0.008 * (f.hForm || 0) : 1;   // (Hunter: a TINY bit faster each rage form - still the slowest)
+// HUNTER'S FORM ARMOR: in his LEGENDARY forms he can just TAKE hits - Legendary Super Saiyan soaks 1, Legendary 3 soaks 2
+// (he takes the damage, but doesn't flinch or fly). Each soaked hit's charge comes back after 2 seconds. Ultimates and
+// throws aren't soaked.
+const H_FORM_ARMOR = { lss: 1, l3: 2, recharge: 2 };
+const hunterArmorMax = f => f.hForm === 3 ? H_FORM_ARMOR.l3 : f.hForm === 2 ? H_FORM_ARMOR.lss : 0;
+const hunterFormArmor = t => !!(t && t.look && t.look.rage && !t.minion && hunterArmorMax(t) > 0 && (t.hArmor || 0) > 0);
 const HUNTER_FORMS = [
   { name: 'BASE', short: '', power: 1, size: 0 },
   { name: 'SUPER SAIYAN',             short: 'SUPER SAIYAN',  power: 1.08, size: 0,    hair: '#ffd23f', aura: '#ffd23f' },
@@ -11475,7 +11481,9 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
     return true;
   }
 
-  knock(t, h, dirSign, mult, hx, hy);
+  const hArm = hunterFormArmor(t) && !h.ultFinal && !h.ultHit;   // HUNTER (Legendary / Legendary 3): an ARMOR charge soaks it
+  if (hArm) { t.hArmor--; t.hArmorT = 0; }
+  knock(t, hArm ? { ...h, hArmorSoak: true } : h, dirSign, mult, hx, hy);
   godSpeedZap(src.fighter || src.by || (src.shot && src.shot.owner), t, h, hx, hy);   // Colby in GOD SPEED: + lightning damage
   return true;
 }
@@ -11512,6 +11520,13 @@ function knock(t, h, dirSign, mult, hx, hy) {
     t.action.armorHits = (t.action.armorHits || 0) + 1;
     t.hitFlash = 0.08; shake = Math.max(shake, 4); hitstop = Math.max(hitstop, 0.04);
     burst(hx, hy, ['#ffffff', '#7fd8ff'], 6, 0, Math.PI, 300, { grav: 0 });
+    sfx.block();
+    return true;
+  }
+  if (h.hArmorSoak) {                                              // (soaked by Hunter's form armor: the damage counts - he doesn't budge)
+    t.hitFlash = 0.1; shake = Math.max(shake, 6); hitstop = Math.max(hitstop, 0.05);
+    burst(hx, hy, ['#86e63c', '#ffffff', '#4dff6a'], 12, 0, Math.PI, 380, { grav: 0 }); ring(t.x, t.y - 55);
+    painTexts.push({ x: t.x, y: t.y - 150, t: 0.5, max: 0.5, text: 'ARMOR!', big: false });
     sfx.block();
     return true;
   }
@@ -18259,7 +18274,13 @@ function updateFighter(f, inp, dt) {
   if (f.look && f.look.hype && !(f.action && f.action.type === 'taunt')) f.hype = Math.max(0, (f.hype || 0) - HYPE.drain * dt);   // Aiden's HYPE slowly drains (not while he's taunting)
   f.hypePulse = Math.max(0, (f.hypePulse || 0) - dt);
   if (f.look && f.look.demonMeter) updateGaze(f, dt);
-  if (f.sageCD > 0) f.sageCD = Math.max(0, f.sageCD - dt);       // (Sage Mode's auto dodge coming back)            // Colbalias's gaze mark wears off
+  if (f.sageCD > 0) f.sageCD = Math.max(0, f.sageCD - dt);       // (Sage Mode's auto dodge coming back)
+  if (f.look && f.look.rage && !f.minion) {                      // HUNTER'S FORM ARMOR: recharging (one charge every H_FORM_ARMOR.recharge seconds)
+    const mx = hunterArmorMax(f);
+    if ((f.hArmorForm || 0) !== (f.hForm || 0)) { f.hArmorForm = f.hForm || 0; f.hArmor = mx; f.hArmorT = 0; }   // (a new form: fully charged)
+    if ((f.hArmor || 0) > mx) f.hArmor = mx;
+    if ((f.hArmor || 0) < mx) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= H_FORM_ARMOR.recharge) { f.hArmor = (f.hArmor || 0) + 1; f.hArmorT = 0; } }
+  }            // Colbalias's gaze mark wears off
   f.tsCD = Math.max(0, (f.tsCD || 0) - dt);
   f.opening = Math.max(0, (f.opening || 0) - dt);               // the window to punish after a perfect block
   syncKame(f);
@@ -24588,6 +24609,7 @@ const MOVESETS = {
       'The RAGE bar (on his card) builds slowly all match by itself - faster when he takes damage, and near LANCE.',
       'Full = he powers up: SUPER SAIYAN > LEGENDARY SUPER SAIYAN > LEGENDARY SUPER SAIYAN 3. Each one hits harder and is a little faster; the LEGENDARY forms make him BIGGER too.',
       'He KEEPS his form when he loses a stock.',
+      'FORM ARMOR: in LEGENDARY SUPER SAIYAN he can soak 1 hit (he takes the damage but doesn't flinch), in LEGENDARY SUPER SAIYAN 3 he can soak 2. Each one comes back 2 seconds after it's used. Ultimates and throws still get through.',
       'Reaching LEGENDARY SUPER SAIYAN 3 stops the match for its own cutscene: he powers up to the music, and his hair grows out right in front of you.',
       'Only 3 Z vanishes (most fighters have 5) - the price for all the armor. Each rage form gives him one more, up to 5.' ] },
     { title: 'TRANSFORM + ULTIMATE (I)', rows: [
