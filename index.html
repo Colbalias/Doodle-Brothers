@@ -14364,7 +14364,7 @@ function drawHunterL2Cut(f) {
 //   17 - 20    he screams again                              20 - 23   his eyes again - and they go RED
 //   23 - 27    a GREEN ORB of power forms round him and lifts him
 //   27.08      it BURSTS - a green flash - and it's chaos: 28 - 33 screaming, the hair growing in all the way
-//   33 - 44    a giant PILLAR of green light, him in the middle of it (40.8 - 42.6: a BARRAGE of ki blasts pours out of him)
+//   33 - 44    a giant PILLAR of green light, him in the middle of it - a KI BLAST: it hits anyone in its column as it erupts (40.8 - 42.6: a BARRAGE of ki blasts pours out of him)
 //   44 - 47    calm: he hangs in a green sphere of his aura - and it bursts when this ends
 // STRAY KI BLASTS fly off him all through it - each one fired ON a blast sound in the clip (H_L3_CUT.blasts).
 // Like Lance's cutscenes it runs in REAL seconds, so it stays on the sound.
@@ -14427,6 +14427,17 @@ function stepHunterL3Cut(f, a, dt) {
   if (ph === 'dome' && (a.waveT -= dt) <= 0) { a.waveT = 0.4; auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.7, max: 260, color: '#b86bff' }); }
   if (T >= C.flash1 && ev('flash1')) { impactFrame = 0.16; impactAt = { x: f.x, y: cy, ang: 0, all: true, focus: true, invert: true }; burst(f.x, cy, gr, 90, 0, Math.PI, 1200, { grav: 0 }); ring(f.x, cy); ring(f.x, cy - 40); auraWaves.push({ x: f.x, y: cy, t: 0, dur: 0.5, max: 380, color: '#86e63c' }); shake = 28; camPunch = 1; sfx.huge(); sfx.clash(true); }
   if (T >= C.flash2 && ev('flash2')) { f.hForm = 3; impactFrame = 0.18; impactAt = { x: f.x, y: cy, ang: 0, all: true, focus: true, invert: true }; burst(f.x, cy, gr, 120, 0, Math.PI, 1400, { grav: 0 }); ring(f.x, cy); ring(f.x, cy - 40); ring(f.x, cy - 80); shake = 34; camPunch = 1; sfx.huge(); sfx.clash(true); }
+  if (T >= C.pillar[0] && ev('pillar')) {                      // THE PILLAR is a KI BLAST: it erupts out of him - anyone standing in its column is blasted straight UP
+    const half = 150 * (S / HS);
+    impactFrame = Math.max(impactFrame, 0.1); impactAt = { x: f.x, y: cy, ang: -Math.PI / 2, all: true, focus: true, invert: true };
+    shake = Math.max(shake, 26); camPunch = 1; sfx.beam(1); sfx.huge();
+    burst(f.x, STAGE.y - 10, ['#e6ff86', '#ffffff', '#86e63c'], 60, -Math.PI / 2, 0.5, 1600, { grav: 0 });
+    for (const o of fighters) {
+      if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
+      if (Math.abs(o.x - f.x) > half + o.w / 2) continue;
+      applyHit(o, { dmg: 7, base: 480, growth: 3.2, angle: 88 }, Math.sign(o.x - f.x) || f.face, 1, o.x, o.y - 50, { fighter: f });
+    }
+  }
   if (T >= C.redEyes && ev('red')) { impactFrame = Math.max(impactFrame, 0.06); impactAt = { x: f.x, y: headY, ang: 0, all: false, focus: true }; sfx.parry(); }
   // STRAY KI BLASTS: one fired ON every blast sound in the clip (a burst of them on the big ones) - random, never aimed: they
   // land wherever they land, mostly on the stage (a yellow dome where they hit - anyone in it is hit), some off into the sky
