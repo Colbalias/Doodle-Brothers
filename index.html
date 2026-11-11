@@ -25388,6 +25388,8 @@ const ARCADE_ROUND_NAMES = ['ROUND OF 16', 'QUARTERFINAL', 'SEMIFINAL', 'FINAL',
 const ARCADE_FINAL = 3, ARCADE_BONUS = 4;                     // (round indexes: the final, then the bonus round)
 const ARCADE_DIFFS = ['EASY', 'NORMAL', 'HARD', 'MASTER', 'IMPOSSIBLE'];
 const ARCADE_STOCKS = 3;
+// THE TITLE you're chasing: the arcade tournament is THE BIGGEST RICHARD: LEGENDS COLLIDE - win it and the belt is yours
+const ARCADE_TITLE = 'THE BIGGEST RICHARD', ARCADE_SUB = 'LEGENDS COLLIDE';
 let arcade = null;   // { phase: 'pick' | 'vs' | 'lose' | 'win', sel, diff, round, t, dev, saved, active, br }
 // ARCADE STARS: clear the bonus round on a difficulty = that difficulty's GOLD STAR, shown top-left of the home screen
 // (one per difficulty, kept on this computer). The win screen tells you when you've earned a new one.
@@ -25559,6 +25561,29 @@ function drawArcade() {
   const picks = arcadePicks();
   withMenuDrawing(() => {
     if (sk) drawNotebook(); else if (px) { drawPXBackground(); blitPX(); } else drawCGBackground();
+    // THE CHAMPIONSHIP BELT: leather straps, side plates and the big gold centre plate with the title on it
+    const belt = (cx, cy, k, lit = true) => {
+      const pw = 330 * k, ph = 62 * k, gl = lit ? 0.75 + 0.25 * Math.sin(menuTime * 3) : 0.45;
+      sctx.save();
+      sctx.fillStyle = sk ? 'rgba(29,27,42,0.85)' : '#1a1012'; sctx.fillRect(cx - pw * 0.95, cy - ph * 0.28, pw * 1.9, ph * 0.56);   // the strap
+      sctx.fillStyle = sk ? MARKERS[3] : '#b8892a';
+      for (const sd of [-1, 1]) for (const j of [0.62, 0.8]) {     // the side plates
+        const x = cx + sd * pw * j; sctx.beginPath(); sctx.arc(x, cy, ph * 0.3, 0, Math.PI * 2); sctx.fill();
+        sctx.fillStyle = sk ? INK : '#7a5a14'; sctx.beginPath(); sctx.arc(x, cy, ph * 0.12, 0, Math.PI * 2); sctx.fill(); sctx.fillStyle = sk ? MARKERS[3] : '#b8892a';
+      }
+      const g = sctx.createLinearGradient(0, cy - ph / 2, 0, cy + ph / 2);   // the centre plate
+      g.addColorStop(0, sk ? '#ffe680' : '#fff2a8'); g.addColorStop(0.45, '#ffd23f'); g.addColorStop(1, sk ? '#e0a020' : '#a8740c');
+      sctx.globalAlpha = lit ? 1 : 0.6; sctx.fillStyle = g;
+      sctx.beginPath();
+      sctx.moveTo(cx - pw / 2 + 18 * k, cy - ph / 2); sctx.lineTo(cx + pw / 2 - 18 * k, cy - ph / 2); sctx.lineTo(cx + pw / 2, cy); sctx.lineTo(cx + pw / 2 - 18 * k, cy + ph / 2);
+      sctx.lineTo(cx - pw / 2 + 18 * k, cy + ph / 2); sctx.lineTo(cx - pw / 2, cy); sctx.closePath(); sctx.fill();
+      sctx.lineWidth = 3 * k; sctx.strokeStyle = sk ? INK : '#6a4a08'; sctx.stroke();
+      if (!sk && lit) { sctx.globalAlpha = 0.35 * gl; sctx.fillStyle = '#ffffff'; sctx.fillRect(cx - pw * 0.42, cy - ph * 0.36, pw * 0.84, ph * 0.12); sctx.globalAlpha = 1; }
+      sctx.textAlign = 'center'; sctx.fillStyle = sk ? INK : '#3a2402';
+      sctx.font = F(Math.round(30 * k), true); sctx.fillText(ARCADE_TITLE, cx, cy + 6 * k);
+      sctx.font = F(Math.round(12 * k), true); sctx.fillStyle = sk ? MARKERS[0] : '#8a1010'; sctx.fillText(ARCADE_SUB, cx, cy + 22 * k);
+      sctx.restore();
+    };
     const title = (str, y, size, col) => { sctx.textAlign = 'center'; sctx.font = F(size, true); sctx.fillStyle = sk ? 'rgba(29,27,42,0.9)' : '#000'; sctx.fillText(str, W / 2 + 4, y + 4); sctx.fillStyle = col || (sk ? MARKERS[0] : '#ffffff'); sctx.fillText(str, W / 2, y); };
     // THE BRACKET: 8 fighters down each side, every round's winners moving in toward the middle, the two finalists
     // meeting in the centre - and the champion's box (+ the bonus round) above them.
@@ -25619,7 +25644,7 @@ function drawArcade() {
       // the CHAMPION's box + the trophy, and the BONUS ROUND beside it
       const cy = yOf(3, 0) - sp * 2.2 - bh, cx = W / 2 - bw / 2, champ = R(4) && R(4)[0];
       drawBox(cx, cy, champ, { now: false });
-      sctx.textAlign = 'center'; sctx.font = F(10, true); sctx.fillStyle = champ ? gold : dim; sctx.fillText('CHAMPION', W / 2, cy - 6);
+      sctx.textAlign = 'center'; sctx.font = F(10, true); sctx.fillStyle = champ ? gold : dim; sctx.fillText(ARCADE_TITLE, W / 2, cy - 6);
       { const tx = W / 2, ty = cy - 40;
         sctx.fillStyle = champ ? '#ffd23f' : faint;
         sctx.beginPath(); sctx.moveTo(tx - 12, ty - 12); sctx.lineTo(tx + 12, ty - 12); sctx.quadraticCurveTo(tx + 10, ty + 5, tx, ty + 7); sctx.quadraticCurveTo(tx - 10, ty + 5, tx - 12, ty - 12); sctx.fill();
@@ -25632,9 +25657,9 @@ function drawArcade() {
       sctx.textAlign = 'center';
     };
     if (A.phase === 'pick') {
-      title('ARCADE', 70, 58);
-      sctx.font = F(17); sctx.fillStyle = dim; sctx.textAlign = 'center';
-      sctx.fillText('A 16-fighter tournament - a new random draw every run. Win 4 in a row to be champion, then the BONUS ROUND.', W / 2, 102);
+      belt(W / 2, 52, 1.05);
+      sctx.font = F(15); sctx.fillStyle = dim; sctx.textAlign = 'center';
+      sctx.fillText('16 legends. ONE belt. Win 4 in a row to be crowned ' + ARCADE_TITLE + ' - then defend it against the BONUS BOSS.', W / 2, 104);
       bracket(150, 17);
       const ch = picks[A.sel];
       const keep = sketch; if (sk) sketch = true;
@@ -25660,7 +25685,10 @@ function drawArcade() {
       sctx.fillText('LEFT / RIGHT = FIGHTER   -   UP / DOWN = DIFFICULTY   -   J / ENTER = START   -   K / ESC = BACK', W / 2, H - 16);
     } else if (A.phase === 'vs') {
       const foe = arcadeFoe(A), boss = A.round >= ARCADE_BONUS, me = picks[A.sel];
-      title(ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 56, boss ? 54 : 46, boss ? '#ff2a2a' : null);
+      sctx.textAlign = 'center'; sctx.font = F(19, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_TITLE + ': ' + ARCADE_SUB, W / 2, 22);
+      title(ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 62, boss ? 54 : 46, boss ? '#ff2a2a' : null);
+      { const left = ARCADE_FINAL + 1 - A.round; sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = boss ? '#ff6a6a' : gold;
+        sctx.fillText(boss ? 'DEFEND THE BELT - BEAT THE BONUS BOSS FOR THE STAR' : left === 1 ? 'ONE WIN FROM BEING ' + ARCADE_TITLE : left + ' WINS FROM ' + ARCADE_TITLE, W / 2, 88); }
       bracket(150, 24);
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(me, W / 2 - 260, 640, 1.55, sk ? INK : (CHARACTERS[me].look.body || '#fff'), menuTime, 1);
@@ -25675,15 +25703,17 @@ function drawArcade() {
     } else if (A.phase === 'lose') {
       title('KNOCKED OUT', 92, 72, '#ff2a2a');
       sctx.textAlign = 'center'; sctx.font = F(22); sctx.fillStyle = ink;
-      sctx.fillText('Out in the ' + ARCADE_ROUND_NAMES[A.round].toLowerCase() + ' to ' + charName(A.lostTo || '') + '. A new tournament - a new draw - starts from the round of 16.', W / 2, 136);
+      sctx.fillText('Out in the ' + ARCADE_ROUND_NAMES[A.round].toLowerCase() + ' to ' + charName(A.lostTo || '') + ' - ' + ARCADE_TITLE + ' slips away. A new tournament starts from the round of 16.', W / 2, 136);
       bracket(190, 24);
       sctx.font = F(20); sctx.fillStyle = dim;
       if (A.t > 0.6) sctx.fillText('J / ENTER = NEW TOURNAMENT   -   K / ESC = QUIT', W / 2, H - 30);
     } else if (A.phase === 'win') {
-      title(A.bonusLost ? 'CHAMPION!' : 'ARCADE CLEAR!', 70, 66, '#ffd23f');
+      sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_SUB + ' - CHAMPION', W / 2, 22);
+      title(charName(picks[A.sel]) + ' IS ' + ARCADE_TITLE + '!', 70, 46, '#ffd23f');
       sctx.textAlign = 'center'; sctx.font = F(20); sctx.fillStyle = ink;
-      sctx.fillText(A.bonusLost ? charName(picks[A.sel]) + ' won the tournament - but the BONUS BOSS was too much. Beat it for the star!'
-                                : charName(picks[A.sel]) + ' won the tournament AND beat the BONUS BOSS on ' + ARCADE_DIFFS[A.diff] + '.', W / 2, 108);
+      sctx.fillText(A.bonusLost ? 'The belt is yours - but the BONUS BOSS was too much. Beat it for the star!'
+                                : 'The belt is yours AND the BONUS BOSS is beaten on ' + ARCADE_DIFFS[A.diff] + '.', W / 2, 108);
+      belt(W / 2, 440, 1.25);
       bracket(160, 22);
       // THE STAR: earned (new) / already had it - and how many of the five they've got
       if (!A.bonusLost) {
