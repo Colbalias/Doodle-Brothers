@@ -13358,18 +13358,63 @@ function stepHunterGrindCutBeat(f, a, dt) {
     hold(lerp(FRONT, OVER, k), 0.5, -0.2, -8); camOn(f.x, gy - 120, 1.15, 5);
     return;
   }
-  // 33.3: HURLED away - the launch (the way he was dragging them)
-  stopGrindSong(f);
+  // 33.3: HURLED away - the launch (the way he was dragging them) - and they're BACK on the stage
+  stopGrindSong(f); arcticFlashAt = performance.now();
   v.action = null; v.drawZ = 0; f.action = null;
   painfulSlam(v, v.x, v.y, 3, true);
   knock(v, C.final, D, pw, v.x, v.y - 20);
   f.y = gy; f.ground = true; f.vx = f.vy = 0;
   f.action = { type: 'land', t: 0, dur: 0.3 };
 }
+// THE ARCTIC: Glacier Grind takes the two of them somewhere else entirely - a frozen wasteland of snow and ice under a
+// blue sky, jagged white mountains all round - and only the two of them are there. Back to the stage when it's over.
+// (World units: the floor is still at STAGE.y, the snowfield runs out past the edges of the screen.)
+let arcticFlashAt = -1e9;                                       // (the white-out going back - see render)
+const arcticCut = () => fighters.find(f => f.action && f.action.type === 'hGrindCut') || null;
+function drawArctic() {
+  const vb = viewBounds(), L = vb.l - 400, R = vb.r + 400, T = vb.t - 400, gy = STAGE.y;
+  // the sky
+  const sky = ctx.createLinearGradient(0, T, 0, gy);
+  sky.addColorStop(0, '#2f6fd1'); sky.addColorStop(0.55, '#5ea1e8'); sky.addColorStop(1, '#bfe0fa');
+  ctx.fillStyle = sky; ctx.fillRect(L, T, R - L, gy - T + 2);
+  // clouds (drifting)
+  const now = performance.now() / 1000;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  for (let i = 0; i < 9; i++) {
+    const cx = L + ((i * 433 + now * 8 + cam.x * 0.85) % (R - L + 600)) - 300 + cam.x * 0.15, cy = T + 260 + (i % 3) * 110 + hash(i) * 60, w = 120 + hash(i * 7) * 120;
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.ellipse(cx + (k - 1.5) * w * 0.35, cy - Math.sin(k * 1.3) * 18, w * 0.32, w * 0.2, 0, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // the MOUNTAINS: two ranges (the far one paler and slower), jagged, snow on the top, blue shade on one side
+  const range = (par, base, hgt, n, light, dark, snow, seed) => {
+    const off = cam.x * par, span = 620;
+    for (let i = Math.floor((L - off) / span) - 1; i <= Math.floor((R - off) / span) + 1; i++) {
+      const mx = i * span + off + hash(i * 3.7 + seed) * 300, h = hgt * (0.6 + 0.5 * hash(i * 1.9 + seed)), w = span * (0.6 + 0.4 * hash(i + seed));
+      const peak = { x: mx, y: base - h };
+      ctx.fillStyle = light; ctx.beginPath(); ctx.moveTo(mx - w, base); ctx.lineTo(peak.x, peak.y); ctx.lineTo(mx + w, base); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(peak.x, peak.y); ctx.lineTo(mx + w, base); ctx.lineTo(mx + w * 0.15, base); ctx.closePath(); ctx.fill();   // (the shadowed face)
+      ctx.fillStyle = snow; ctx.beginPath(); ctx.moveTo(peak.x, peak.y);   // (the snowcap, ragged)
+      for (let k = 0; k <= 6; k++) { const u = k / 6, sx = lerp(mx - w * 0.36, mx + w * 0.36, u), sy = peak.y + h * 0.36 + (k % 2 ? -h * 0.08 : h * 0.04) * (1 + hash(i + k)); ctx.lineTo(sx, sy); }
+      ctx.closePath(); ctx.fill();
+    }
+  };
+  range(0.88, gy - 60, 430, 0, '#b4d0ec', '#93b8dc', '#f2f8ff', 1);   // (far away - pale, small)
+  range(0.7, gy - 10, 300, 0, '#cfe2f4', '#9cbfe2', '#ffffff', 5);
+  // the SNOWFIELD - the floor
+  const g = ctx.createLinearGradient(0, gy, 0, gy + 700);
+  g.addColorStop(0, '#f4faff'); g.addColorStop(0.3, '#d8ebfa'); g.addColorStop(1, '#9cc2e6');
+  ctx.fillStyle = g; ctx.fillRect(L, gy, R - L, 1200);
+  ctx.strokeStyle = 'rgba(120,165,210,0.45)'; ctx.lineWidth = 3;
+  for (let i = 0; i < 14; i++) {                                   // (drifts and ridges in the snow)
+    const y = gy + 18 + i * i * 6, x0 = L + hash(i * 2.2) * 400;
+    ctx.beginPath(); ctx.moveTo(x0, y); for (let x = x0; x < R; x += 120) ctx.lineTo(x, y + Math.sin(x * 0.01 + i) * 6); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(L, gy - 2, R - L, 4);   // (the edge of the ice)
+}
 // (drawing - the letterbox, and the scream lines off them every time they scream)
 function drawHGrindCut(f) {
   const a = f.action, v = a.victim, sc = sctx, now = performance.now() / 1000;
   sc.save();
+  if (a.songT < 0.45) { sc.fillStyle = `rgba(235,248,255,${1 - a.songT / 0.45})`; sc.fillRect(-OX, -OY, SW, SH); }   // (the white-out: transported)
   if (v && v.action && v.action.scream) {
     const sp = v.action.spin || 0, s = (v.look && v.look.scale || 1) * (v.sizeMul || 1), hx = v.x + Math.sin(sp) * 47 * s, hy = v.y - 48 * s - Math.cos(sp) * 47 * s;
     const p = toScreen(hx, hy), Z = camZ();
@@ -17763,7 +17808,7 @@ function stepAction(f, inp, dt) {
   }
   // HUNTER: ULT while holding someone (a grab or a chain link) = GLACIER GRIND (transformed, or straight from a full meter)
   if (f.ultBuf > 0 && f.look && f.look.rage && !f.minion && !ult && (f.transformed ? f.ult > 0 : f.ult >= ULT_MAX) &&
-      (a.type === 'holding' || (a.type === 'attack' && a.move.hChain))) {
+      (a.type === 'holding' || (a.type === 'attack' && (a.move.hChain || (a.held && typeof a.held === 'object'))))) {   // (a grab, a chain link - or his SIDE grabs: Gigantic Buster / Choke)
     const v = a.type === 'holding' ? a.victim : a.held;
     if (v && v.respawnTimer <= 0) { startHunterGrind(f, v); return; }
   }
@@ -23067,8 +23112,10 @@ function render() {
     drawDeckScene(ult);                               // Captain Heel's grab ultimate: on board the pirate ship
   } else {
     // Background is drawn straight to the screen; everything in the world goes through the camera
-    withCover(ctx, () => { if (sketch) drawPaper(); else drawBackground(); });   // (scaled to cover any screen shape)
-    if (!sketch) {
+    const arc = arcticCut();                            // Hunter's Glacier Grind: somewhere else entirely (see drawArctic)
+    if (arc) { ctx.fillStyle = '#5ea1e8'; ctx.fillRect(-OX - 60, -OY - 60, SW + 120, SH + 120); }
+    else withCover(ctx, () => { if (sketch) drawPaper(); else drawBackground(); });   // (scaled to cover any screen shape)
+    if (!sketch && !arc) {
       // ATMOSPHERIC HAZE: knock the backdrop back (darker, flatter, less contrast) so the fighters pop off
       // it - like the soft, muted backgrounds behind the figures in an animated stick fight
       ctx.fillStyle = stageDef.walkoff ? 'rgba(20,40,60,0.12)' : stageDef.hell ? 'rgba(26,4,3,0.36)' : 'rgba(34,29,27,0.42)';
@@ -23083,7 +23130,7 @@ function render() {
     }
     ctx.save();
     applyCamera(ctx);
-    if (sketch) drawStageSketch(); else drawStage();
+    if (arc) drawArctic(); else if (sketch) drawStageSketch(); else drawStage();
     drawCracks();
     drawRopes();
     drawShipUlts();                                     // Aiden's pirate ship (behind everyone)
@@ -23098,7 +23145,7 @@ function render() {
     if (ult && ult.phase === 'cutscene') drawUltCutscene();
     else {
       // Draw back-to-front (a thrown fighter swung behind the thrower goes behind him)
-      const order = fighters.filter(f => f.respawnTimer <= 0).sort((a, b) => (a.drawZ || 0) - (b.drawZ || 0));
+      const order = fighters.filter(f => f.respawnTimer <= 0 && (!arc || f === arc || f === arc.action.victim)).sort((a, b) => (a.drawZ || 0) - (b.drawZ || 0));   // (the arctic: only the two of them)
       for (const f of order) drawFighter(f);
       for (const f of order) drawSmear(f);              // attack smears on top of the bodies
       for (const f of order) if (f.action && f.action.anchor && f.action.type === 'attack') { const A = f.action.anchor; drawAnchorAt(A.x, A.y, A.th, A.alpha, A.scale || 1); }
@@ -23134,6 +23181,7 @@ function render() {
     sctx.drawImage(lo, -OX, -OY, LW * PIX, LH * PIX);
   }
   if (impactFrame <= 0) drawHUD();
+  { const u = (performance.now() - arcticFlashAt) / 450; if (u < 1) { sctx.fillStyle = `rgba(235,248,255,${1 - u})`; sctx.fillRect(-OX, -OY, SW, SH); } }   // (back from the arctic: the white-out)
 }
 
 // =====================================================================
