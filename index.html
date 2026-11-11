@@ -14469,7 +14469,7 @@ function stepHunterL3Cut(f, a, dt) {
         for (const o of fighters) {
           if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
           if (Math.hypot(o.x - b.x1, (o.y - 40) - (b.y1 - 40)) > 110) continue;
-          a.strayHit = a.strayHit || new Set(); if (a.strayHit.has(o)) continue; a.strayHit.add(o);   // (everyone's frozen - so ONE hit each, at most)
+          // (no cap: they land wherever they land - never aimed at anyone - and if one lands on you, that's on you)
           applyHit(o, { dmg: 4, base: 320, growth: 2.2, angle: 70 }, Math.sign(o.x - b.x1) || 1, 1, o.x, o.y - 40, { fighter: f });
         }
       }
