@@ -571,6 +571,7 @@ const airDodgeMax = f => ((f && f.look && f.look.airDodges) || AIR_DODGE_MAX) + 
                          + (f && f.look && f.look.rage ? Math.min(f.hForm || 0, 5 - f.look.airDodges) : 0)   // (HUNTER: +1 per rage form, 5 at most)
                          + (f && f.swapBonus || 0);   // (SWAPPED by Colbalias's Demon's Gaze: +3 till you're back on the stage or KO'd - see gazeSwap)
 const dodgeFree = f => ((f && f.look && f.look.groundDodges) || DODGE_FREE) + (f && f.ui && f.transformed ? 1 : 0);
+const MOVE_REPEAT = { from: 3 };                    // (the 3rd use of the same move in a row, and every one after, costs a Z vanish dot - see startAttack)
 function canAirDodge(f) { return f.dodgeCount < airDodgeMax(f); }
 const WAVEDASH_FRICTION = 0.3;
 
@@ -9873,7 +9874,7 @@ COLBY_PUNCHES.kSpin = { name: 'Spinning Gut Finisher', startup: 0.05, active: 0.
 COLBY_PUNCHES.upGround = { ...COLBY_THUNDER_BOLT, boltUp: true,
   wind: pose({ lean: -0.05, bob: -6, legA: [0.7, 0.6], legB: [-0.6, 0.3], armA: [2.2, -0.6], armB: [2.4, -1.5] }),
   strike: pose({ lean: -0.1, bob: -8, legA: [0.8, 0.7], legB: [-0.7, 0.3], armA: [3.0, -0.05], armB: [2.5, -1.7] }) };   // (hand thrust UP, the other at his temple)
-CHARACTERS.COLBY.bareMoves = COLBY_PUNCHES;  // used while his scythe is thrown
+CHARACTERS.COLBY.bareMoves = { ...COLBY_PUNCHES, uair: COLBY_PUNCHES.upGround };  // used while his scythe is thrown (his AIR up J is the Thunder Bolt too)
 CHARACTERS.COLTEN.bareMoves = COLBY_PUNCHES; // Colten empty-handed (his Dragonslayer thrown and not picked back up)
 // AIDEN'S TAUNTS - three little skits (see HEEL_TAUNT / heelTauntStep / drawHeelTauntProps):
 //   UP   : RUM BARREL - hops up onto a barrel of rum, lights a cigar... puffs - and the smoke pours straight out of his
@@ -11557,8 +11558,10 @@ function knock(t, h, dirSign, mult, hx, hy) {
   // FROZEN IN TIME (Colby's Time Stop): the damage lands now, but the knockback piles up and is all
   // released at once when time starts again
   if (t.action && t.action.type === 'timeStop') {
-    t.action.svx += Math.cos(ang) * speed * dirSign * 0.55;
-    t.action.svy += -Math.sin(ang) * speed * 0.55;
+    // (the DAMAGE stacks - the KNOCKBACK doesn't: when time starts again they fly from the hardest single hit only - which
+    //  still grows with all that damage they've piled up)
+    const kx = Math.cos(ang) * speed * dirSign, ky = -Math.sin(ang) * speed;
+    if (Math.hypot(kx, ky) > Math.hypot(t.action.svx, t.action.svy)) { t.action.svx = kx; t.action.svy = ky; }
     t.action.hits++;
     t.hitFlash = 0.1;
     hitstop = Math.max(hitstop, 0.05); shake = Math.max(shake, 5);
@@ -17411,6 +17414,24 @@ function startAttack(f, inp, btn) {
   if (!move) {                                        // (a string's next hit that he doesn't have right now - e.g. the scythe's back in his hand)
     move = f.moveset[key.replace(/\d+$/, '')] || f.moveset.jab; if (!move) return;
   }
+  // DON'T SPAM IT: the same move three times in a row - from the THIRD, every use costs a Z vanish dot (none left = it
+  // won't come out). A string of presses (jab, jab 2, jab 3 / Colby's punch-kick chain / any combo follow-up) counts as ONE use.
+  if (!f.minion) {
+    const grp = /^[pk]\d$/.test(key) ? 'chain' : key.replace(/\d+$/, '');
+    const cont = /[2-9]$/.test(key) || (f.comboTimer > 0 && key === f.comboKey);   // (carrying on the string - even into a different-named follow-up, like Lance's jab 2 into his kick: not a new use)
+    if (!cont) {
+      if (grp === f.repGroup) f.repCount = (f.repCount || 0) + 1; else { f.repGroup = grp; f.repCount = 1; }
+      if (f.repCount >= MOVE_REPEAT.from) {
+        if (!canAirDodge(f)) {                                   // out of dots: it just doesn't come out
+          f.atkBuf = 0; f.spcBuf = 0;
+          if (!(f.repWarnT > 0)) { painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: 'TOO PREDICTABLE', big: false }); f.repWarnT = 0.5; }
+          return;
+        }
+        f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;   // (spends a Z vanish dot)
+        painTexts.push({ x: f.x, y: f.y - 130, t: 0.4, max: 0.4, text: '-1 Z', big: false });
+      }
+    }
+  }
   f.atkBuf = 0; f.spcBuf = 0; f.jumpBuf = 0; f.flip = 0; f.comboTimer = 0;
   f.action = { type: 'attack', key, move, btn, phase: 'startup', t: 0,
                charge: 0, mult: 1, hit: new Set(), air: !f.ground, started: time, cStick: fromC && f.ground, fromC,
@@ -18384,6 +18405,7 @@ function updateFighter(f, inp, dt) {
   if (f.look && f.look.hype && !(f.action && f.action.type === 'taunt')) f.hype = Math.max(0, (f.hype || 0) - HYPE.drain * dt);   // Aiden's HYPE slowly drains (not while he's taunting)
   f.hypePulse = Math.max(0, (f.hypePulse || 0) - dt);
   if (f.look && f.look.demonMeter) updateGaze(f, dt);
+  if (f.repWarnT > 0) f.repWarnT -= dt;
   if (f.sageCD > 0) f.sageCD = Math.max(0, f.sageCD - dt);       // (Sage Mode's auto dodge coming back)
   if (f.look && f.look.rage && !f.minion) {                      // HUNTER'S FORM ARMOR: recharging (one charge every H_FORM_ARMOR.recharge seconds)
     const mx = hunterArmorMax(f);
