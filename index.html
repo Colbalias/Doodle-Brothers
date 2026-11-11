@@ -15592,7 +15592,7 @@ function drawLeeCut(f) {
   sc.restore();
 }
 
-// ---------------- LANCE: SUPER SAIYAN GOD - his once-a-match comeback (on his LAST stock) ----------------
+// ---------------- LANCE: SUPER SAIYAN GOD - his once-a-match comeback (knocked out with a FULL ult meter) ----------------
 // The first time he's knocked out on his final stock, he DOESN'T die: wherever he went out, it stops - and to
 // sounds/battle/lance-ssg-song.mp3 (from 0:24 of the song, the mp3 itself is cut) he hangs there battered in the dark...
 // then SCREAMS "I WILL NOT LET YOU DESTROY MY WORLD!" and goes SUPER SAIYAN GOD - red hair, a red aura - and flies back
@@ -18801,14 +18801,19 @@ function updateFighter(f, inp, dt) {
   if (f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
     if (f.action && (['sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
-    if (f.char === 'COLBY' && !f.lotusUsed && !f.selfKO && !f.out) {   // COLBY'S FIRST KO: PRIMARY LOTUS - his comeback (once a match - however he went out)
+    // COMEBACKS (Colby's Primary Lotus, Lance's Super Saiyan God): ONLY if you're knocked out WITH A FULL ULT METER - and only
+    // once a match. Any stock, however you went out. It spends the meter.
+    const cbReady = (f.ult || 0) >= ULT_MAX && !f.out;
+    if (f.char === 'COLBY' && !f.lotusUsed && cbReady) {   // COLBY: PRIMARY LOTUS
+      f.ult = 0;
       if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
         f.lotusUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
         f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0, lotus: true }; return;
       }
       startLotusComeback(f); return;
     }
-    if (f.char === 'LANCE' && !f.sgUsed && !f.selfKO && isFinite(f.stocks) && f.stocks <= 1 && !f.out) {   // LANCE'S LAST STOCK: SUPER SAIYAN GOD (once a match - however he went out)
+    if (f.char === 'LANCE' && !f.sgUsed && cbReady) {   // LANCE: SUPER SAIYAN GOD
+      f.ult = 0;
       if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
         // (someone's ultimate is still playing: he's HELD at the edge - untouchable - and it starts the moment that's over)
         f.sgUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
