@@ -645,7 +645,16 @@ const STAGE_LIST = [
   // CHECKER HILLS: sunny rolling hills - and the ground just keeps going, FLAT, right out past the KO lines on both sides.
   // No ledges, no drops: walk (or get knocked) far enough left or right and you're out.
   { name: 'CHECKER HILLS', platforms: [], walkoff: true },
+  // SKYSCRAPER: a cut-away tower - six more FLOORS stacked up over the main one, all the way to the ROOF (setting back as it
+  // goes up). Every floor's a platform: jump up through it, hold down to drop. Their EDGES are open air - get knocked off
+  // the side and you fall down the outside of the building: recover onto any floor, or the ledge at the bottom.
+  // The KO line on top is far above the roof (see TOWER).
+  { name: 'SKYSCRAPER', tower: true, platforms: [
+    { x: 50, y: 335, w: 1180 }, { x: 50, y: 170, w: 1180 }, { x: 50, y: 5, w: 1180 },
+    { x: 150, y: -160, w: 980 }, { x: 150, y: -325, w: 980 },
+    { x: 270, y: -490, w: 740, roof: true } ] },
 ];
+const TOWER = { top: -1400, ceil: -980, zMin: 0.5, follow: 0.85, steadyFollow: 0.7 };   // (its KO line on top / how high the camera goes / how far it pulls out)
 const STAGE_HOME = { x: STAGE.x, w: STAGE.w };                  // (the normal stage size - the walk-off stage stretches it)
 // THE PIT: walls just inside the stage's edges; the KO line is only at the top (lower than usual - it's the only way out)
 const PIT = { pad: 16, bounceMin: 480, keep: 0.62, dmgBase: 4, dmgPer: 1 / 130, dmgMax: 15, top: -560 };
@@ -680,12 +689,14 @@ function applyStage(i) {
   else { STAGE.x = STAGE_HOME.x; STAGE.w = STAGE_HOME.w; }
   PLATFORMS.length = 0;
   for (const p of stageDef.platforms) PLATFORMS.push({ ...p });
+  BLAST.top = stageDef.tower ? TOWER.top : BLAST_TOP;            // (the skyscraper: the top KO line is way up over the roof)
 }
 // The BOTTOM blast line is well below the stage (~780px under its underside), with room to Z-vanish all the way
 // under the stage and still recover. The camera stops following at CAM_FLOOR, so you only die once you've dropped
 // OUT OF VIEW below the stage - never while you're still on screen.
 // The TOP line is a bit higher too (was -380), so your own upward Z vanishes don't KO you so easily.
-const BLAST = { left: -720, right: W + 720, bottom: H + 900, top: -780 };   // (pushed out ~35%: lots more room off screen before a KO - air play is big in every direction)
+const BLAST = { left: -720, right: W + 720, bottom: H + 900, top: -780 };
+const BLAST_TOP = BLAST.top;   // (pushed out ~35%: lots more room off screen before a KO - air play is big in every direction)
 const CAM_FLOOR = STAGE.y + STAGE.h + 300;      // the lowest point the camera follows anyone down to
 const CAM_CEIL = -230;                          // ...and the highest (where it was before the top line moved up)
 const SPAWN = { x: 640, y: 170 };
@@ -715,11 +726,11 @@ function updateCamera(dt) {
   let tx = STAGE.x + STAGE.w / 2, ty = STAGE.y - 110, tz = CAM_ZOOM_MAX;
   if (alive.length) {
     const xs = alive.map(f => clamp(f.x, BLAST.left + 200, BLAST.right - 200));
-    const ys = alive.map(f => clamp(f.y - 45, CAM_CEIL, CAM_FLOOR));
+    const ys = alive.map(f => clamp(f.y - 45, stageDef.tower ? TOWER.ceil : CAM_CEIL, CAM_FLOOR));
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     tx = lerp(STAGE.x + STAGE.w / 2, (minX + maxX) / 2, steady ? STEADY_CAM.follow : 0.8);        // follow the action (stage stays in view)
-    ty = lerp(STAGE.y - 90, (minY + maxY) / 2, steady ? STEADY_CAM.followY : 0.6);
-    tz = clamp(Math.min(W / (maxX - minX + CAM_PAD.x), H / (maxY - minY + CAM_PAD.y)), steady ? STEADY_CAM.zMin : CAM_ZOOM_MIN, steady ? STEADY_CAM.zMax : CAM_ZOOM_MAX);
+    ty = lerp(STAGE.y - 90, (minY + maxY) / 2, stageDef.tower ? (steady ? TOWER.steadyFollow : TOWER.follow) : steady ? STEADY_CAM.followY : 0.6);
+    tz = clamp(Math.min(W / (maxX - minX + CAM_PAD.x), H / (maxY - minY + CAM_PAD.y)), stageDef.tower ? TOWER.zMin : steady ? STEADY_CAM.zMin : CAM_ZOOM_MIN, steady ? STEADY_CAM.zMax : CAM_ZOOM_MAX);
     if (steady && stageDef.walkoff) tx = clamp(tx, stageL() + 300, stageR() - 300);   // (the walk-off stage: stays over the playable part)
   }
   let speed = steady ? STEADY_CAM.speed : 4;
@@ -20229,7 +20240,42 @@ function drawHillsStage() {
   ctx.fillStyle = '#2a9a2e';                                                             // tufts
   for (let x = x0; x < x1; x += 37) { const h = 5 + (Math.abs(Math.round(x)) % 5); ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x + 3, s.y - h); ctx.lineTo(x + 6, s.y); ctx.fill(); }
 }
+// ---- SKYSCRAPER: dusk over a city, far below - the skyline sinks away as the camera climbs the tower ----
+const towerSky = { stars: Array.from({ length: 70 }, () => ({ x: rnd(), y: rnd(), r: rnd() })),
+                   far: Array.from({ length: 34 }, (_, i) => ({ x: i * 62 - 120 + rnd() * 30, w: 40 + rnd() * 50, h: 60 + rnd() * 170, seed: rnd() * 1000 })),
+                   near: Array.from({ length: 20 }, (_, i) => ({ x: i * 104 - 160 + rnd() * 40, w: 70 + rnd() * 70, h: 90 + rnd() * 260, seed: rnd() * 1000, spire: rnd() < 0.25 })),
+                   clouds: Array.from({ length: 6 }, (_, i) => ({ x: rnd() * 2000, y: rnd(), w: 300 + rnd() * 300, s: 6 + rnd() * 10 })) };
+function drawTowerBackground() {
+  const up = clamp((390 - cam.y) / 1100, -0.3, 1.2);              // (how high up the tower the camera is)
+  const g = ctx.createLinearGradient(0, -OY, 0, H + OY);
+  g.addColorStop(0, '#0b1030'); g.addColorStop(0.45, '#2a2a5e'); g.addColorStop(0.75, '#a2506a'); g.addColorStop(1, '#f39a5a');
+  ctx.fillStyle = g; ctx.fillRect(-OX, -OY, SW, SH);
+  for (const st of towerSky.stars) {                               // the first stars
+    ctx.globalAlpha = 0.25 + 0.5 * st.r * (0.6 + 0.4 * Math.sin(time * 2 + st.x * 40));
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(-OX + st.x * SW, -OY + st.y * SH * 0.45, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+  const px = k => -((cam.x - W / 2) * k);
+  for (const c of towerSky.clouds) {                               // long thin dusk clouds, drifting
+    const x = ((c.x + time * c.s + px(0.04)) % (SW + c.w)) - OX - c.w, y = -OY + 60 + c.y * 220 + up * 120;
+    ctx.fillStyle = 'rgba(255,170,150,0.16)'; ctx.fillRect(x, y, c.w, 10); ctx.fillRect(x + 40, y + 10, c.w * 0.6, 6);
+  }
+  // the city, far below: two layers of skyline that SINK as you climb (the higher you are, the further down they are)
+  for (const [L, k, base, col, win] of [[towerSky.far, 0.08, 560, '#3a2a48', 'rgba(255,214,140,0.5)'], [towerSky.near, 0.16, 640, '#1f1830', 'rgba(255,224,150,0.75)']]) {
+    const by = base + up * (k > 0.1 ? 420 : 260), off = px(k);
+    for (const b of L) {
+      const x = b.x + off, top = by - b.h;
+      ctx.fillStyle = col; ctx.fillRect(x, top, b.w, SH + OY);
+      if (b.spire) ctx.fillRect(x + b.w / 2 - 3, top - 50, 6, 50);
+      ctx.fillStyle = win;
+      for (let wy = top + 10, r = 0; wy < by + 200 && wy < H + OY; wy += 16, r++) for (let wx = x + 6, c = 0; wx < x + b.w - 8; wx += 12, c++)
+        if ((Math.sin(b.seed + r * 7.1 + c * 3.3) + 1) * 0.5 > 0.55) ctx.fillRect(wx, wy, 5, 7);
+    }
+  }
+  ctx.fillStyle = 'rgba(243,154,90,0.18)'; ctx.fillRect(-OX, 520 + up * 300, SW, 60);   // (the haze over the city)
+}
 function drawBackground() {
+  if (stageDef.tower) return drawTowerBackground();
   if (stageDef.walkoff) return drawHillsBackground();
   if (stageDef.pit) return drawPitBackground();
   if (stageDef.hell) return drawHellBackground();
@@ -20501,7 +20547,76 @@ function drawHellStage() {
   ctx.globalAlpha = 1;
 }
 
+// the tower itself (cut away): the back wall of every storey with its big windows, steel columns, the floor slabs (hazard
+// stripes on their open edges), and on the roof a helipad, a water tank and the antenna mast with its blinking light
+function drawTowerStage() {
+  const s = STAGE, vb = viewBounds(), floors = PLATFORMS.slice().sort((a, b) => b.y - a.y);
+  const storeys = [{ x: s.x, w: s.w, y: s.y }, ...floors];          // (each slab, bottom up - the storey above it runs to the next one)
+  // below the main floor: the lower floors of the building, falling away into the haze
+  const bot = Math.max(vb.b + 40, s.y + s.h + 200);
+  const lg = ctx.createLinearGradient(0, s.y + s.h, 0, bot);
+  lg.addColorStop(0, '#232838'); lg.addColorStop(1, 'rgba(35,40,56,0.15)');
+  ctx.fillStyle = lg; ctx.fillRect(s.x + 30, s.y + s.h, s.w - 60, bot - s.y - s.h);
+  ctx.fillStyle = 'rgba(255,214,140,0.22)';
+  for (let y = s.y + s.h + 30; y < bot; y += 60) for (let x = s.x + 50; x < s.x + s.w - 70; x += 46) if ((x * 7 + y * 3) % 5 < 2) ctx.fillRect(x, y, 26, 30);
+  // each storey: back wall + windows + columns
+  for (let i = 0; i < storeys.length - 1; i++) {
+    const lo = storeys[i], hi = storeys[i + 1], x = hi.x, w = hi.w, y0 = hi.y, y1 = lo.y;   // (the storey is as wide as its ceiling)
+    if (y1 < vb.t - 20 || y0 > vb.b + 20) continue;
+    ctx.fillStyle = '#2b3246'; ctx.fillRect(x + 10, y0, w - 20, y1 - y0);
+    const ww = 92, gap = 18, n = Math.floor((w - 40) / (ww + gap)), x0 = x + (w - (n * (ww + gap) - gap)) / 2;
+    for (let k = 0; k < n; k++) {                                  // the big windows: the dusk sky behind
+      const wx = x0 + k * (ww + gap), wy = y0 + 24, wh = y1 - y0 - 44;
+      const g = ctx.createLinearGradient(0, wy, 0, wy + wh); g.addColorStop(0, '#45507e'); g.addColorStop(1, '#b0687a');
+      ctx.fillStyle = g; ctx.fillRect(wx, wy, ww, wh);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.moveTo(wx + 10, wy); ctx.lineTo(wx + 34, wy); ctx.lineTo(wx + 8, wy + wh); ctx.lineTo(wx - 16 + 10, wy + wh); ctx.fill();   // (a glint)
+      ctx.fillStyle = '#1b2030'; ctx.fillRect(wx + ww / 2 - 2, wy, 4, wh); ctx.fillRect(wx, wy + wh * 0.55, ww, 3);   // mullions
+    }
+    ctx.fillStyle = '#3c4458';                                     // steel columns at the ends
+    ctx.fillRect(x + 10, y0, 14, y1 - y0); ctx.fillRect(x + w - 24, y0, 14, y1 - y0);
+    ctx.fillStyle = 'rgba(255,230,160,0.5)';                       // ceiling lights
+    for (let lx = x + 80; lx < x + w - 80; lx += 160) ctx.fillRect(lx, y0 + 14, 40, 3);
+  }
+  // the main floor: a thick slab of concrete and steel
+  ctx.fillStyle = '#4a5160'; ctx.fillRect(s.x, s.y, s.w, s.h);
+  ctx.fillStyle = '#3a404d'; for (let y = s.y + 30; y < s.y + s.h; y += 36) ctx.fillRect(s.x, y, s.w, 6);
+  ctx.fillStyle = '#2a2f3a'; for (let x = s.x + 40; x < s.x + s.w; x += 120) ctx.fillRect(x, s.y + 12, 8, s.h - 12);
+  // every slab: concrete top, steel edge with rivets, HAZARD STRIPES at the open ends
+  const slab = (x, y, w, th) => {
+    ctx.fillStyle = '#9aa0ab'; ctx.fillRect(x, y, w, 5);
+    ctx.fillStyle = '#5c6372'; ctx.fillRect(x, y + 5, w, th - 5);
+    ctx.fillStyle = '#7a8190'; for (let rx = x + 12; rx < x + w - 8; rx += 26) ctx.fillRect(rx, y + th - 6, 3, 3);
+    for (const ex of [x, x + w - 34]) {
+      ctx.save(); ctx.beginPath(); ctx.rect(ex, y + 5, 34, th - 5); ctx.clip();
+      ctx.fillStyle = '#f2c230'; ctx.fillRect(ex, y + 5, 34, th - 5); ctx.fillStyle = '#1a1a1a';
+      for (let k = -2; k < 6; k++) { ctx.beginPath(); ctx.moveTo(ex + k * 10, y + th); ctx.lineTo(ex + k * 10 + 5, y + th); ctx.lineTo(ex + k * 10 + 5 + th, y + 5); ctx.lineTo(ex + k * 10 + th, y + 5); ctx.fill(); }
+      ctx.restore();
+    }
+  };
+  slab(s.x, s.y, s.w, 16);
+  for (const p of floors) slab(p.x, p.y, p.w, 16);
+  // THE ROOF
+  const roof = floors.find(p => p.roof);
+  if (roof) {
+    const cx = roof.x + roof.w / 2, y = roof.y;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 3;   // helipad (drawn flat on the deck, from the side: a stripe)
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(cx - 120, y - 2, 240, 2);
+    ctx.fillStyle = '#3c4458'; ctx.fillRect(roof.x + 30, y - 70, 70, 70);  // a water tank on stilts
+    ctx.fillStyle = '#58606f'; ctx.fillRect(roof.x + 26, y - 110, 78, 44); ctx.beginPath(); ctx.moveTo(roof.x + 22, y - 110); ctx.lineTo(roof.x + 65, y - 135); ctx.lineTo(roof.x + 108, y - 110); ctx.fill();
+    ctx.fillStyle = '#2b3246'; ctx.fillRect(roof.x + 36, y - 66, 6, 66); ctx.fillRect(roof.x + 88, y - 66, 6, 66);
+    ctx.fillStyle = '#4a5160'; ctx.fillRect(roof.x + roof.w - 130, y - 40, 90, 40);   // the stair housing
+    ctx.fillStyle = '#2b3246'; ctx.fillRect(roof.x + roof.w - 110, y - 32, 26, 32);
+    ctx.fillStyle = '#5c6372'; ctx.fillRect(cx - 4, y - 300, 8, 300);   // THE ANTENNA
+    for (let k = 0; k < 6; k++) { ctx.fillRect(cx - 26 + k * 2, y - 40 - k * 44, 52 - k * 4, 3); }
+    const on = Math.sin(time * 4) > 0;
+    ctx.fillStyle = on ? '#ff3030' : '#5a1010'; ctx.beginPath(); ctx.arc(cx, y - 306, 7, 0, Math.PI * 2); ctx.fill();
+    if (on) { ctx.fillStyle = 'rgba(255,60,60,0.25)'; ctx.beginPath(); ctx.arc(cx, y - 306, 22, 0, Math.PI * 2); ctx.fill(); }
+  }
+  for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
+  ctx.globalAlpha = 1;
+}
 function drawStage() {
+  if (stageDef.tower) return drawTowerStage();
   if (stageDef.walkoff) return drawHillsStage();
   if (stageDef.pit) return drawPitStage();
   if (stageDef.hell) return drawHellStage();
@@ -23686,6 +23801,7 @@ function drawStageThumb(k, r) {
   if (st.walkoff) { sky.addColorStop(0, '#2f8fe8'); sky.addColorStop(1, '#c9ecff'); }
   else if (st.hell) { sky.addColorStop(0, '#2a0503'); sky.addColorStop(1, '#a3260c'); }
   else if (st.pit) { sky.addColorStop(0, '#0d0d10'); sky.addColorStop(1, '#2a2a30'); }
+  else if (st.tower) { sky.addColorStop(0, '#0b1030'); sky.addColorStop(0.6, '#2a2a5e'); sky.addColorStop(1, '#f39a5a'); }
   else { sky.addColorStop(0, '#1a1716'); sky.addColorStop(1, '#56493f'); }
   c.fillStyle = sky; c.fillRect(r.x, r.y, r.w, r.h);
   if (st.walkoff) {                                                 // hills + the endless checkered ground
@@ -23694,6 +23810,13 @@ function drawStageThumb(k, r) {
     for (let x = 0; x < r.w; x += 16) for (let y = 0; y < r.h; y += 16) { c.fillStyle = ((x + y) / 16) % 2 ? '#c17a2e' : '#8f5420'; c.fillRect(r.x + x, gy + 6 + y, 16, 16); }
     c.fillStyle = '#3cc23f'; c.fillRect(r.x, gy, r.w, 7);
     c.fillStyle = 'rgba(255,255,255,0.9)'; c.beginPath(); c.arc(r.x + r.w * 0.3, r.y + 30, 16, 0, 7); c.arc(r.x + r.w * 0.3 + 18, r.y + 26, 20, 0, 7); c.fill();
+  } else if (st.tower) {                                            // the tower: storeys of windows, slabs, the antenna
+    const fl = [{ x: 50, y: 500, w: 1180 }, ...st.platforms].sort((a, b) => b.y - a.y), sy = y => r.y + r.h - 14 - (500 - y) * (r.h - 40) / 990, sx = x => r.x + r.w * (0.1 + 0.8 * (x - 50) / 1180);
+    for (let i = 0; i < fl.length - 1; i++) { const hi = fl[i + 1], lo = fl[i]; c.fillStyle = '#2b3246'; c.fillRect(sx(hi.x), sy(hi.y), sx(hi.x + hi.w) - sx(hi.x), sy(lo.y) - sy(hi.y));
+      c.fillStyle = '#7a6890'; for (let x = sx(hi.x) + 6; x < sx(hi.x + hi.w) - 10; x += 16) c.fillRect(x, sy(hi.y) + 4, 10, sy(lo.y) - sy(hi.y) - 8); }
+    c.fillStyle = '#9aa0ab'; for (const p of fl) c.fillRect(sx(p.x), sy(p.y), sx(p.x + p.w) - sx(p.x), 3);
+    c.fillStyle = '#4a5160'; c.fillRect(sx(50), sy(500), sx(1230) - sx(50), r.y + r.h - sy(500));
+    const rf = fl[fl.length - 1], ax = sx(rf.x + rf.w / 2); c.fillStyle = '#5c6372'; c.fillRect(ax - 1, sy(rf.y) - 26, 2, 26); c.fillStyle = '#ff3030'; c.fillRect(ax - 2, sy(rf.y) - 29, 4, 4);
   } else if (st.pit) {                                              // stone walls both sides
     c.fillStyle = '#3d3a36'; c.fillRect(r.x, r.y, 18, r.h); c.fillRect(r.x + r.w - 18, r.y, 18, r.h);
     c.fillStyle = '#5a5248'; c.fillRect(r.x + 18, gy, r.w - 36, r.h);
@@ -23978,7 +24101,10 @@ function checkMatchEnd() {
   }
 }
 function showResults() {
-  if (arcade && arcade.active) { const won = !!matchOver.winner && matchOver.winner === fighters[0]; matchOver = null; arcadeMatchOver(won); return; }   // ARCADE: on to the next fight (or back to fight 1)
+  if (arcade && arcade.active) {   // ARCADE: a WIN only if you're still standing and they're really out of lives (no star otherwise)
+    const me = fighters[0], foe = fighters[1];
+    const won = !!matchOver.winner && matchOver.winner === me && !me.out && me.stocks > 0 && !!foe && foe.out && !(foe.stocks > 0);
+    matchOver = null; arcadeMatchOver(won); return; }   // ARCADE: on to the next fight (or back to fight 1)
   const team = matchOver.team;
   results = {
     winner: matchOver.winner ? fighters.indexOf(matchOver.winner) : -1,
