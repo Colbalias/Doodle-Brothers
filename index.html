@@ -10708,7 +10708,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -11074,8 +11074,33 @@ function startBattleSong() {
   el.addEventListener('ended', () => { if (battleMusic.el === el && scene === 'fight') startBattleSong(); });   // song over mid-fight: the next one
   battleMusic.el = el; battleMusic.song = i; battleMusic.t = 0;
 }
+// ONE ULT SONG AT A TIME: with ultimates and transformations all able to go off together, only the NEWEST one is heard -
+// every older one is CUT (muted, not stopped: it still plays out silently, so anything timed to it stays on time)
+const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd'];
+let ultAudioSeq = 0;
+const ultAudioOrder = new WeakMap();                              // (handle -> when it started)
+function cutUltAudio(h) {
+  h.cut = true;
+  if (h.el) h.el.muted = true;
+  if (h.g && actx) { const t = actx.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setValueAtTime(h.g.gain.value, t); h.g.gain.linearRampToValueAtTime(0.0001, t + 0.15); }
+}
+function ultAudioFocus() {
+  let top = null, topN = -1;
+  const live = [];
+  for (const f of fighterPool) for (const k of ULT_AUDIO_SLOTS) {
+    const h = f[k];
+    if (!h || typeof h !== 'object') continue;
+    if (h.el && h.el.ended) { if (k === 'roarSnd') f[k] = null; continue; }
+    if (!ultAudioOrder.has(h)) ultAudioOrder.set(h, ++ultAudioSeq);
+    const n = ultAudioOrder.get(h);
+    live.push(h);
+    if (n > topN) { topN = n; top = h; }
+  }
+  for (const h of live) if (h !== top && !h.cut) cutUltAudio(h);
+}
 function updateBattleMusic(dt) {
   const fighting = scene === 'fight' && !matchOver;
+  ultAudioFocus();
   if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
   if (fighting && !battleMusic.el && soundOn && menuMusic.unlocked) startBattleSong();   // a new fight: a new song
   const el = battleMusic.el;
@@ -13021,7 +13046,7 @@ function stepHunterRoar(f, a, dt) {
   a.rt = (a.rt || 0) + dt / uiRealRate();                          // (REAL seconds - it's timed to the clip)
   f.vx = approach(f.vx, 0, FRICTION * dt); if (!f.ground) f.vy = 0; a.air = false;
   if (!a.fired) {
-    if (!a.aimed) { a.aimed = true; const o = nearestFoe(f); if (o) f.face = Math.sign(o.x - f.x) || f.face; playRoarSfx(); }
+    if (!a.aimed) { a.aimed = true; const o = nearestFoe(f); if (o) f.face = Math.sign(o.x - f.x) || f.face; f.roarSnd = playRoarSfx(); }
     const k = clamp(a.rt / R.wind, 0, 1), m = hunterMouth(f);
     a.poseOverride = pose({ lean: -0.35 * k, bob: -10 * k, armA: [-0.7, -1.4], armB: [0.7, -1.4], legA: [0.8, 0.8], legB: [-0.7, 0.5] });   // chest out, head thrown back
     shake = Math.max(shake, 3 + 10 * k);
@@ -26183,7 +26208,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)
