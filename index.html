@@ -6308,7 +6308,7 @@ function legionNewExchange(U) {
               clones: A.gang ? A.gang.map(g => ({ ...g })) : A.pair ? [{ side: -1, app: 'run' }, { side: 1, app: 'poof' }] : [{ side: A.side, app: A.app }] };
   E.clones.forEach((c, i) => c.i = i);
   E.A0 = A.appT * s; E.C0 = E.A0 + A.ta * s; E.CI = E.C0 + E.C.wT * s; E.END = E.CI + E.C.sT * s;
-  if (U.user.arcadeBoss && !A.pair && !A.gang) E.clones.push({ side: -E.clones[0].side, app: 'poof', i: 1 });   // ARCADE BOSS: +1 clone in every exchange (from the other side)
+  if (U.user.arcadeBoss && ARCADE_BOSS.clones && !A.pair && !A.gang) E.clones.push({ side: -E.clones[0].side, app: 'poof', i: 1 });   // ARCADE BOSS: +1 clone in every exchange (from the other side)
   if (E.clones.some(c => c.app === 'poof')) E.poofed = false;
   U.ex.push(E);
   U.crowd = Math.max(0, U.crowd - E.clones.length);
@@ -6382,7 +6382,7 @@ function updateLegionUlt(U, dt) {
   u.hitFlash = Math.max(0, u.hitFlash - dt); v.hitFlash = Math.max(0, v.hitFlash - dt);
   U.jolt = Math.max(0, (U.jolt || 0) - dt);
   if (once('setup')) {
-    U.crowd = LEGION_SEQ.reduce((n, A) => n + (A.gang ? A.gang.length : A.pair ? 2 : 1) + (u.arcadeBoss && !A.pair && !A.gang ? 1 : 0), 0);
+    U.crowd = LEGION_SEQ.reduce((n, A) => n + (A.gang ? A.gang.length : A.pair ? 2 : 1) + (u.arcadeBoss && ARCADE_BOSS.clones && !A.pair && !A.gang ? 1 : 0), 0);
     U.spent = 0; U.phase = 'summon'; U.t = 0; U.ex = []; U.debris = []; U.off = 0; U.offT = 0; U.air = 0; U.adv = 0;
     const s = v.onPlatform || ((v.x > STAGE.x && v.x < STAGE.x + STAGE.w) ? STAGE : null);
     if (s) { U.baseY = s.y; }
@@ -7037,8 +7037,10 @@ function stepHellwave(f, a) {
 // startup), a QUARTER as durable (bursts after 25% damage), and takes 1.5x knockback (lighter).
 const CLONE = { max: 2, cd: 0.25, life: 20, delay: 0, dmg: 1, kb: 1, kbTaken: 1.5, hits: 2, slow: 1.3, link: 0.5 };   // link = the share of a clone's damage Colbalias takes   // up to TWO clones at once; each one bursts on its 2nd hit
 // TRANSFORMED Colbalias: one MORE clone out at once, and each one takes one more hit before it bursts
-const cloneMax = owner => Math.min(7, CLONE.max + (owner && owner.transformed ? 1 : 0) + (owner && owner.arcadeBoss ? 1 : 0)   // (the ARCADE final boss: +1 more)
-                          + Math.max(0, REAL_FIGHTERS - 2));   // (+1 for every player past a 1v1 - 7 at most)
+// how many fighters he's actually up against (his own TEAM doesn't count - only the people he has to fight)
+const colbFoes = owner => owner ? fighters.slice(0, REAL_FIGHTERS).filter(o => o !== owner && !o.out && !allies(owner, o)).length : Math.max(1, REAL_FIGHTERS - 1);
+const cloneMax = owner => Math.min(7, CLONE.max + (owner && owner.transformed ? 1 : 0) + (owner && owner.arcadeBoss ? ARCADE_BOSS.clones : 0)   // (the ARCADE final boss: more, by difficulty)
+                          + Math.max(0, colbFoes(owner) - 1));   // (+1 for every OPPONENT past the first - 7 at most)
 // BIGGER LOBBIES: one more hit per fighter past two (3 in the match = +1, 4 = +2)
 const cloneHitsMax = c => CLONE.hits + (c.owner && c.owner.transformed ? 1 : 0);   // (multiplayer clones: no tougher than in a 1v1)
 // Summoning a clone costs one of his blue Z-vanish dots (they only refill on the ground) - no endless spam
@@ -7144,7 +7146,7 @@ function summonShadowClone(f) {
 // (no blocking, dodging, grabbing, specials, or ultimates - except up K to get back to the stage)
 // BIGGER LOBBIES = SMARTER CLONES: feral in a 1v1, HARD with 3 fighters, MASTER with 4 - and from HARD up they
 // defend themselves: shield, roll, spot-dodge and Z VANISH out of the way of hits to stay alive
-const cloneAiLevel = () => REAL_FIGHTERS >= 4 ? 'MASTER' : REAL_FIGHTERS >= 3 ? 'HARD' : 'FERAL';
+const cloneAiLevel = owner => { const n = colbFoes(owner) + 1; return n >= 4 ? 'MASTER' : n >= 3 ? 'HARD' : 'FERAL'; };   // (by how many he's up against)
 const CLONE_DODGE = { HARD: 0.5, MASTER: 0.78 };         // chance to dodge an attack that's about to land on it
 // Colbalias's CPU: backOff = how often he backs away from them while his clones are fighting (to keep his range)
 const COLBALIAS_AI = { backOff: 0.45 };
@@ -7153,7 +7155,7 @@ const COLBALIAS_AI = { backOff: 0.45 };
 // punish, then don't get parried back... a tennis match where every return can be the winner.
 const COLB_PARRY = { EASY: 0.3, NORMAL: 0.55, HARD: 0.75, MASTER: 0.88, IMPOSSIBLE: 0.97, BOSS: 1, FERAL: 0 };
 function minionInput(f) {
-  const lvl = cloneAiLevel();
+  const lvl = cloneAiLevel(f.owner);
   const inp = aiInput(f, lvl);
   const offStage = !f.ground && (f.x < STAGE.x || f.x > STAGE.x + STAGE.w || f.y > STAGE.y + 5);
   if (lvl === 'FERAL' && !offStage) { inp.blockTap = inp.blockHeld = false; inp.dirTap = false; }   // (feral: never defends - but it will Z vanish home)
@@ -11091,7 +11093,17 @@ function nextBattleSong() {
 }
 // THE FINAL BOSS THEME: plays ONLY in arcade mode's last fight (vs the boss Colbalias) - never in the shuffle. It loops.
 const BOSS_SONG = { file: 'master-of-puppets.mp3', from: 0 };   // (Metallica - Master of Puppets)
-const ARCADE_BOSS = { taken: 0.68, kb: 0.72, dealt: 1.3, speed: 1.1 };   // the arcade boss Colbalias: hits harder, takes less damage + knockback, faster
+// THE ARCADE BOSS (Colbalias) is tuned to the DIFFICULTY - the red star has to be earned. ai = his CPU level, taken / kb = the
+// damage and knockback he takes, dealt = the damage he does, speed = run/air speed, clones = extra clones out at once,
+// stocks = extra lives. MASTER and IMPOSSIBLE: absolutely insane.
+const ARCADE_BOSS_DIFF = {
+  EASY:       { ai: 'NORMAL', taken: 0.95, kb: 0.95, dealt: 1.05, speed: 1.0,  clones: 0, stocks: 0 },
+  NORMAL:     { ai: 'HARD',   taken: 0.85, kb: 0.86, dealt: 1.15, speed: 1.04, clones: 1, stocks: 0 },
+  HARD:       { ai: 'MASTER', taken: 0.74, kb: 0.78, dealt: 1.28, speed: 1.08, clones: 1, stocks: 0 },
+  MASTER:     { ai: 'BOSS',   taken: 0.56, kb: 0.6,  dealt: 1.5,  speed: 1.15, clones: 2, stocks: 1 },
+  IMPOSSIBLE: { ai: 'BOSS',   taken: 0.42, kb: 0.48, dealt: 1.75, speed: 1.22, clones: 3, stocks: 2 },
+};
+const ARCADE_BOSS = { ...ARCADE_BOSS_DIFF.HARD };   // (set for each boss fight - see arcadeStartRound)
 const bossFight = () => !!(arcade && arcade.active && fighters.some(f => f.arcadeBoss));
 // ONLINE: everyone plays the HOST'S song (sent with the match start), and if it ends mid-fight everyone moves on to
 // the same next one - so the big moments line up for the whole lobby
@@ -19209,6 +19221,24 @@ function aiInput(f, level) {
     } else if (Math.random() < 0.06) ai.tapAtk = true;
   }
 
+  // GRAB ULTIMATES (Hunter's Glacier Grind, Captain Heel's Deck Match, Colbalias's Tsukuyomi): someone held + the meter
+  // for it = the CPU goes for it (decided once per hold - the harder the CPU, the more often)
+  if (ga && !f.minion && !ult) {
+    const C = CHARACTERS[f.char];
+    const held = ga.type === 'holding' ? ga.victim : (f.look && f.look.rage && ga.type === 'attack' && ga.move && (ga.move.hChain || (ga.held && typeof ga.held === 'object'))) ? ga.held : C.grabUlt ? heldVictim(f) : null;
+    const ready = f.transformed ? f.ult > ((f.look && f.look.doubleUlt) ? (f.tfFloor || 0) : 0) : f.ult >= ULT_MAX;
+    if (held && held.respawnTimer <= 0 && ready && (C.grabUlt || (f.look && f.look.rage))) {
+      if (ga.aiGU === undefined) ga.aiGU = Math.random() < ({ EASY: 0.35, NORMAL: 0.6, HARD: 0.85, MASTER: 0.95, IMPOSSIBLE: 1, BOSS: 1 }[level] ?? 0.6);
+      if (ga.aiGU && (ga.t || 0) > 0.08) ai.tapUlt = true;
+    }
+  }
+  // ...and with the meter for it, a CPU with a grab ultimate goes looking for the GRAB (not just the normal ultimate)
+  if ((!ga || ga.type === 'run' || ga.type === 'land') && !f.minion && !ult && CHARACTERS[f.char].grabUlt && !f.transformed && f.ult >= ULT_MAX) {
+    const o = nearestFoe(f);
+    if (o && o.respawnTimer <= 0 && f.ground && Math.abs(o.x - f.x) < 95 && Math.abs(o.y - f.y) < 40 && Math.random() < ({ EASY: 0.02, NORMAL: 0.05, HARD: 0.1, MASTER: 0.16, IMPOSSIBLE: 0.25, BOSS: 0.25 }[level] ?? 0.05)) {
+      f.face = Math.sign(o.x - f.x) || f.face; ai.tapGrab = true; ai.tapUlt = false;
+    }
+  }
   // Aiden's CPU sometimes goes for the 360 command grab instead of a plain grab (counts as having spun the stick)
   if (ai.tapGrab && f.look && f.look.spd && Math.random() < 0.35) f.circle = { l: time, r: time, u: time, d: time };
   const inp = emptyInput();
@@ -25604,7 +25634,8 @@ function arcadeStartRound() {
   for (const f of fighterPool) f.arcadeBoss = false;
   startMatch();
   fighters[1].arcadeBoss = boss;                  // (the boss version of Colbalias - see cloneMax / the clone rush)
-  if (boss) { const b = fighters[1]; b.cpuLevel = 'AI BOSS'; b.stats = { ...b.stats, runSpeed: b.stats.runSpeed * ARCADE_BOSS.speed, airSpeed: b.stats.airSpeed * ARCADE_BOSS.speed }; }   // ...his own AI level (a cut above IMPOSSIBLE, whatever difficulty you're on) + faster
+  if (boss) { Object.assign(ARCADE_BOSS, ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]] || ARCADE_BOSS_DIFF.HARD);   // (scaled to your difficulty)
+    const b = fighters[1]; b.cpuLevel = 'AI ' + ARCADE_BOSS.ai; b.stocks += ARCADE_BOSS.stocks; b.stats = { ...b.stats, runSpeed: b.stats.runSpeed * ARCADE_BOSS.speed, airSpeed: b.stats.airSpeed * ARCADE_BOSS.speed }; }   // ...his own AI level (a cut above IMPOSSIBLE, whatever difficulty you're on) + faster
   if (boss) fighters[1].name = 'BONUS BOSS';
 }
 // a match just ended (called instead of the results screen while arcade is on)
@@ -25797,7 +25828,7 @@ function drawArcade() {
       sctx.fillText(charName(me), W / 2 - 260, 668); sctx.fillText(charName(foe), W / 2 + 260, 668);
       sctx.font = F(70, true); sctx.fillStyle = boss ? '#ff2a2a' : accent; sctx.fillText('VS', W / 2, 600);
       sctx.font = F(15); sctx.fillStyle = dim;
-      sctx.fillText(ARCADE_DIFFS[A.diff] + '  -  ' + ARCADE_STOCKS + ' STOCKS' + (boss ? '  -  HELLFIRE  -  THE BOSS: ONE MORE CLONE THAN NORMAL' : ''), W / 2, 682);
+      sctx.fillText(ARCADE_DIFFS[A.diff] + '  -  ' + ARCADE_STOCKS + ' STOCKS' + (boss ? '  -  HELLFIRE  -  THE BOSS, ' + ARCADE_DIFFS[A.diff] + ': ' + (ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].clones ? '+' + ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].clones + ' CLONES' : 'NO EXTRA CLONES') + (ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].stocks ? ', +' + ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].stocks + ' STOCKS' : '') : ''), W / 2, 682);
       if (A.t > 0.4) { sctx.font = F(20, true); sctx.fillStyle = Math.sin(menuTime * 5) > 0 ? accent : ink; sctx.fillText('PRESS J / ENTER WHEN YOU ARE READY', W / 2, 710); }   // (it waits for you)
     } else if (A.phase === 'lose') {
       title('KNOCKED OUT', 92, 72, '#ff2a2a');
