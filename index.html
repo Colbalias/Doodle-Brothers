@@ -7293,12 +7293,13 @@ function updateStatueUlt(U, dt) {
     U.strikes = []; U.nextStrike = 0; U.beamTick = 0;
   }
   const S = U.statue, G = statueGeom(S);
-  u.vx = u.vy = 0; v.vx = v.vy = 0; u.face = d;
-  u.anim += dt; v.anim += dt;
-  u.hitFlash = Math.max(0, u.hitFlash - dt); v.hitFlash = Math.max(0, v.hitFlash - dt);
+  u.vx = u.vy = 0; u.face = d;
+  u.anim += dt;
+  u.hitFlash = Math.max(0, u.hitFlash - dt);
   U.jolt = Math.max(0, U.jolt - dt);
   U.userPose = U.def.finalWind;
-  v.x = U.baseX + (U.jolt > 0 ? (Math.random() - 0.5) * 8 : 0); v.y = U.baseY;
+  U.extras = (U.extras || []).filter(e => fighters.includes(e.t) && e.t.respawnTimer <= 0 && !e.t.out);
+  if (v.respawnTimer > 0 || v.out || !fighters.includes(v)) { ult = null; u.action = { type: 'land', t: 0, dur: 0.3 }; return; }   // (their target got knocked out by someone else)
   const T1 = STATUE.rise, T2 = T1 + STATUE.barrage, T3 = T2 + STATUE.zero, T4 = T3 + STATUE.beam;
   if (T < T1) {                                                    // RISE
     S.rise = easeOut(T / T1);
@@ -7369,7 +7370,8 @@ function updateStatueUlt(U, dt) {
     }
   }
   if (T >= T4) {
-    U.baseX = v.x;
+    U.baseX = v.x; U.baseY = v.y;
+    for (const e of U.extras || []) { e.baseX = e.t.x; e.baseY = e.t.y; e.dir = Math.sign(e.t.x - u.x) || e.dir; }   // (wherever they've moved to)
     releaseUltExtras(U, U.def.final, e => e.dir, U.parried);
     if (U.parried && U.parried.has(v)) { ult = null; v.action = null; v.x = U.baseX; v.y = U.baseY; u.action = { type: 'land', t: 0, dur: 0.3 }; }   // (repelled: no launch)
     else endUlt(U);
@@ -13889,6 +13891,10 @@ function startUltSequence(u, v, def) {
   u.action = { type: 'ultSeq' };
   v.action = { type: 'ultVictim' };
   v.shielding = false; v.vx = v.vy = 0; u.vx = u.vy = 0;
+  // LIVE ULTIMATES (multiplayer feels better): the 100-Type Guanyin and It's My Turn DON'T stop the match - everyone else
+  // keeps fighting. The Guanyin's targets can even move while its palms hit them (they still have to PERFECT BLOCK the
+  // beam); It's My Turn still has hold of the one it's beating on (locked = the ones the match leaves to the ultimate).
+  if (U.statue || U.rush) { ult.live = true; ult.locked = new Set(U.statue ? [u] : [u, v]); if (U.statue) v.action = null; }
   // COLBALIAS - THE RAID BOSS: the 100-Type Guanyin and the Shadow Clone Rush take EVERY opponent on screen at once
   ult.extras = [];
   if (U.statue || U.legion) {
@@ -13898,6 +13904,7 @@ function startUltSequence(u, v, def) {
       if (o.x < vb.l - 20 || o.x > vb.r + 20 || o.y < vb.t - 40 || o.y > vb.b + 40) continue;
       const pl = o.onPlatform || ((o.x > STAGE.x && o.x < STAGE.x + STAGE.w && o.y <= STAGE.y + 1) ? STAGE : null);
       ult.extras.push({ t: o, baseX: o.x, baseY: pl ? pl.y : o.y, dir: Math.sign(o.x - u.x) || u.face, jolt: 0 });
+      if (ult.live) continue;                                    // (the Guanyin: they stay free to move)
       o.action = { type: 'ultVictim', t: 0, pose: LV.guard }; o.shielding = false; o.vx = o.vy = 0;
     }
   }
@@ -13994,7 +14001,7 @@ function releaseUltExtras(U, final, dirOf, parried) {
 function updateUlt(dt) {
   const U = ult, u = U.user, v = U.target;
   U.t += dt;
-  holdUltExtras(U, dt);
+  if (!U.live) holdUltExtras(U, dt);                          // (a LIVE ultimate: the others aren't held)
   if (U.def.statue || U.def.legion) watchUltBlocks(U);
   if (U.def.wrestle) return updateWrestleUlt(U, dt);         // Aiden: Max Malicious Moonsault
   if (U.def.deck) return updateDeckUlt(U, dt);               // Aiden (from a grab): Dead Man's Deck Match
@@ -19933,10 +19940,15 @@ function updateSim(dt) {
 
   // While an ultimate is playing, it runs the show: everything else is paused
   if (ult) {
+    const liveU = ult.live;
     updateUlt(dt);
-    for (const f of fighters) tickPose(f, dt);
-    updateCamera(dt);
-    return;
+    if (!liveU) {
+      // (anyone else in the middle of a TRANSFORMATION / comeback / song-timed move keeps going through it - it stays on its music)
+      for (const f of fighters.slice()) if (ult && f !== ult.user && f !== ult.target && f.respawnTimer <= 0 && f.action && typeof f.action.songT === 'number' && !(ult.extras || []).some(e => e.t === f)) updateFighter(f, emptyInput(), dt);
+      for (const f of fighters) tickPose(f, dt);
+      updateCamera(dt);
+      return;
+    }
   }
 
   // Demo / debug toggles - all switched OFF in CLEAN MODE (real matches: nothing on the keyboard can
@@ -19979,10 +19991,11 @@ function updateSim(dt) {
   const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac'));
   // (Sevon's NINTH FORM no longer stops the match: everyone keeps moving while he breathes in - run, or get ready to block)   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
   const TF_TYPES = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform'];
-  const inTransform = f => !!(f.action && (TF_TYPES.includes(f.action.type) || (f.action.type === 'ultVictim' && fighters.some(g => g.action && g.action.type === 'uiTransform' && g.action.victim === f))));
+  const inTransform = f => !!(f.action && (TF_TYPES.includes(f.action.type) || f.action.type === 'sgCut' || (f.action.type === 'leeUlt' && f.action.comeback) || f.action.type === 'flameDragon' || (f.action.type === 'ultVictim' && fighters.some(g => g.action && g.action.type === 'uiTransform' && g.action.victim === f))));
   for (const f of fighters) f.uiFrozen = !!uiCut && f !== uiCut && f !== uiCut.action.victim && !inTransform(f);   // (a transformation keeps going through someone else's ultimate)
   for (const f of fighters.slice()) {
     if (f.uiFrozen) continue;
+    if (ult && ult.locked && ult.locked.has(f)) { tickPose(f, dt); continue; }   // (a LIVE ultimate is moving these two itself)
     const inp = readyT > 0 && !demo ? emptyInput() : demo && !f.minion ? demoInput(f) : inputFor(f);   // (frozen till the countdown's done)
     updateFighter(f, inp, dt);
     tickPose(f, dt);
@@ -23575,7 +23588,8 @@ function render() {
     }
     if (ult) {
       // Ultimate: the world drops into darkness (blood-red for the cutscene) so the fighters pop
-      ctx.fillStyle = ult.phase === 'cutscene' ? (sketch ? 'rgba(120,0,0,0.18)' : 'rgba(40,0,0,0.62)')
+      ctx.fillStyle = ult.live ? (sketch ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.18)')   // (a LIVE ultimate: the fight's still on - keep it visible)
+                    : ult.phase === 'cutscene' ? (sketch ? 'rgba(120,0,0,0.18)' : 'rgba(40,0,0,0.62)')
                                                : (sketch ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.55)');
       ctx.fillRect(-OX - 60, -OY - 60, SW + 120, SH + 120);
       if (ult.phase !== 'cutscene') drawSpeedLines();
@@ -26429,7 +26443,7 @@ function frame(now) {
     else {
       if (hitstop > 0) {
         hitstop -= STEP;              // freeze frame on hits (inputs are kept for after)
-        for (const f of fighters) if (f.action && (f.action.type === 'leeUlt' || f.action.type === 'hGrindCut')) f.action.songT += STEP / Math.max(0.01, speed());   // (Colby's Primary Lotus runs on its song - it doesn't pause)
+        for (const f of fighters) if (f.action && typeof f.action.songT === 'number') f.action.songT += STEP / Math.max(0.01, speed());   // (EVERY move that runs on its song - ultimates, transformations, comebacks - keeps going through the hitstop, so it stays on the music)   // (Colby's Primary Lotus runs on its song - it doesn't pause)
       } else {
         update(STEP);
         for (const k in pressed) delete pressed[k];
