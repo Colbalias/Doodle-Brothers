@@ -9593,8 +9593,10 @@ const CHARACTERS = {
 const CHAR_NAMES = Object.keys(CHARACTERS);
 // ALT SKINS (Smash-style): one alternate look per fighter, picked with the SKIN button on your card on the select
 // screen. Only the LOOK changes - same moves, same stats. (lookFor() merges the alt over the fighter's normal look.)
+// Lance's other gi: dark blue-green, with a light green belt (on his purple skins and his dark blue one)
+const LANCE_TEAL_GI = { main: '#1d5c63', dark: '#123e44', blue: '#8fe38a' };
 const CHAR_ALTS = {
-  LANCE:     { name: 'PURPLE', swatch: '#7b3fd1', look: { body: '#7b3fd1', gi: { main: '#f2761e', dark: '#c4560f', blue: '#5a2aa8' } } },
+  LANCE:     { name: 'PURPLE', swatch: '#7b3fd1', look: { body: '#7b3fd1', gi: LANCE_TEAL_GI } },
   SEVON:     { name: 'BLUE RANGER', swatch: '#1f55d6', look: { body: '#1f55d6', haori: false, flameHair: false, ranger: true } },
   COLBY:     [{ name: 'WHITE', swatch: '#ececec', look: { body: '#ececec', headColor: '#ececec' } }, { name: 'GREEN', swatch: '#2ef06a', look: { body: '#2ef06a', headColor: '#2ef06a' } },
               { name: 'RED', swatch: '#c4271f', look: { body: '#c4271f' } }],   // (RED: his old all-red look, still in Lee's gear)   // (GREEN: bright)
@@ -9615,6 +9617,7 @@ for (const ch of Object.keys(CHARACTERS)) {
   for (const A of A0) if (A.look && A.look.body) extra.push({ name: word(A.look.body) + ' ' + A.name, swatch: twinShade(A.look.body), look: { ...A.look, body: twinShade(A.look.body) } });
   CHAR_ALTS[ch] = [...A0, ...extra];
 }
+for (const A of CHAR_ALTS.LANCE) if (A.name === 'DARK') A.look.gi = LANCE_TEAL_GI;   // (the dark blue skin wears it too)
 const altLooks = {};
 const altList = ch => { const a = CHAR_ALTS[ch]; return !a ? [] : Array.isArray(a) ? a : [a]; };   // (a fighter can have SEVERAL alt skins)
 function lookFor(ch, alt) {
@@ -21347,7 +21350,9 @@ function drawFigure(fig, opts = {}) {
   const EDGE = MUS && !opts.tint ? shade(fig.color, 0.5) : null;   // dark edge on arms in front of the body
   ctx.lineWidth = ARM_W;
   // Far arm: grips the opponent, or holds the lower part of the shaft (two hands) / the whole scythe (one hand)
-  if (look.oneArm) { /* only one arm (Future Gohan) - nothing on the far side */ }
+  // ONE ARM (Future Gohan): he lost his LEFT arm. Facing right, that's the far side (nothing there); facing LEFT it's the
+  // near side - so his one arm (the right) is drawn here, behind his body, and the near side is left empty
+  if (look.oneArm) { if (f < 0) { if (grip) ikArm(shoulder, grip); else limb(shoulder, pz.armA, 16, 15, f); } }
   else if (grip) ikArm(shoulder, { x: grip.x - f * 3, y: grip.y + 7 });
   else if (S && (S.hands === 2 || S.hands === 'B')) ikArm(shoulder, S.at(S.hb));
   else if (look.sledge && !grip) ikArm(shoulder, swordSecondHand(shoulder, pz, f, 18), AL, AL2);   // HUNTER: both hands on the sledgehammer's handle
@@ -21883,7 +21888,8 @@ function drawFigure(fig, opts = {}) {
     ctx.fillStyle = EDGE || main; ctx.beginPath(); ctx.arc(shoulder.x + f * 2, shoulder.y + 3, 9, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = main; ctx.beginPath(); ctx.arc(shoulder.x + f * 2, shoulder.y + 3, 7.5, 0, Math.PI * 2); ctx.fill();
   }
-  if (grip) { if (MUS) edgedIk(shoulder, grip); else ikArm(shoulder, grip); }
+  if (look.oneArm && f < 0) { /* (facing left: the near side is his missing arm - see the far arm) */ }
+  else if (grip) { if (MUS) edgedIk(shoulder, grip); else ikArm(shoulder, grip); }
   else if (S && S.hands === 2) ikArm(shoulder, S.g);
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
@@ -23782,9 +23788,12 @@ function toggleNetTurbo() {
 const STAGE_VOTE = -1, VOTE_TIME = 15;
 let stageVote = null, voteStage = null;
 const voteRect = k => { const n = STAGE_LIST.length, w = Math.min(270, (W - 120) / n - 20), gap = 20, x0 = W / 2 - (n * w + (n - 1) * gap) / 2; return { x: x0 + k * (w + gap), y: 230, w, h: 210 }; };
-function openStageVote() {
-  const voters = players.map((p, i) => i).filter(i => !players[i].off && !players[i].cpu);
-  stageVote = { t: 0, voters, cur: {}, vote: {}, winner: -1, tie: false, endT: 0 };
+// ONLINE: the host opens it for everyone (net.js) - each computer steers only its own players, the host keeps the count
+// and calls the result, then starts the match on the winning stage
+function openStageVote(netVoters) {
+  const net = Array.isArray(netVoters);
+  const voters = net ? netVoters.slice() : players.map((p, i) => i).filter(i => !players[i].off && !players[i].cpu);
+  stageVote = { t: 0, voters, cur: {}, vote: {}, winner: -1, tie: false, endT: 0, net };
   voters.forEach((i, k) => { stageVote.cur[i] = k % STAGE_LIST.length; });
   scene = 'stagevote'; menuSfx('go');
   if (!voters.length) stageVoteResolve();
@@ -23796,32 +23805,41 @@ function stageVoteResolve() {
   V.winner = best[Math.floor(realRandom() * best.length)];
   V.tie = best.length > 1; V.counts = counts; V.endT = 0;
   menuSfx('go');
+  if (V.net && !netGuest() && window.sbNet && sbNet.voteEnd) sbNet.voteEnd(V.winner, V.counts, V.tie);   // (the host tells everyone)
 }
+const myVoter = i => !stageVote.net || !(window.sbNet && sbNet.mySeats) || sbNet.mySeats().includes(i);   // (online: only this computer's own players)
+function voteSync(i) { const V = stageVote; if (V && V.net && window.sbNet && sbNet.voteSend) sbNet.voteSend(i, V.cur[i], V.vote[i]); }
 function stageVoteUpdate(dt) {
   const V = stageVote; if (!V) { scene = 'select'; return; }
   V.t += dt;
   if (V.winner >= 0) {                                              // the result's up: on into the fight
     V.endT += dt;
-    if (V.endT > 1.8) { voteStage = V.winner; stageVote = null; startMatch(); }
+    if (V.endT > 1.8) {
+      if (!V.net) { voteStage = V.winner; stageVote = null; startMatch(); }
+      else if (!netGuest() && !V.started) { V.started = true; sbNet.hostStart(V.winner); }   // ONLINE: the host starts it on the winner (guests wait for it)
+    }
     mouse.click = mouse.right = mouse.moved = false;
     return;
   }
   const devs = menuDevices(dt), n = STAGE_LIST.length;
   for (const i of V.voters) {
+    if (!myVoter(i)) continue;                                      // (online: someone else's player - their computer steers it)
     const d = devs.find(q => q.dev === players[i].dev); if (!d) continue;
-    const locked = V.vote[i] !== undefined;
+    const locked = V.vote[i] !== undefined, was = V.cur[i] + ':' + V.vote[i];
     if (!locked && d.tap.left) { V.cur[i] = (V.cur[i] + n - 1) % n; menuSfx('move'); }
     if (!locked && d.tap.right) { V.cur[i] = (V.cur[i] + 1) % n; menuSfx('move'); }
     if (!locked && d.tap.ok) { V.vote[i] = V.cur[i]; menuSfx('pick'); }
     else if (locked && d.tap.back) { delete V.vote[i]; menuSfx('back'); }
-    else if (!locked && (d.tap.back || d.tap.esc) && !Object.keys(V.vote).length) { stageVote = null; scene = 'select'; menuSfx('back'); return; }
+    else if (!V.net && !locked && (d.tap.back || d.tap.esc) && !Object.keys(V.vote).length) { stageVote = null; scene = 'select'; menuSfx('back'); return; }
+    if (V.cur[i] + ':' + V.vote[i] !== was) voteSync(i);
   }
-  const kb = V.voters.find(i => players[i].dev === 'keyboard') ?? V.voters[0];   // (the mouse votes for the keyboard player)
+  const kb = V.voters.find(i => myVoter(i) && players[i].dev === 'keyboard') ?? V.voters.find(i => myVoter(i));   // (the mouse votes for the keyboard player)
   if (kb !== undefined && V.vote[kb] === undefined) for (let k = 0; k < n; k++) if (inRect(mouse, voteRect(k))) {
-    if (mouse.moved) V.cur[kb] = k;
-    if (mouse.click) { V.cur[kb] = k; V.vote[kb] = k; menuSfx('pick'); }
+    if (mouse.moved && V.cur[kb] !== k) { V.cur[kb] = k; voteSync(kb); }
+    if (mouse.click) { V.cur[kb] = k; V.vote[kb] = k; menuSfx('pick'); voteSync(kb); }
   }
   mouse.click = mouse.right = mouse.moved = false;
+  if (V.net && netGuest()) return;                                  // (online: only the host calls the result)
   if (V.voters.every(i => V.vote[i] !== undefined) || V.t >= VOTE_TIME) stageVoteResolve();
 }
 // a little picture of each stage

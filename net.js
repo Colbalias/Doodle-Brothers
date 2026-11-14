@@ -274,6 +274,14 @@
       }
       case 'hash': if (N.active) checkHash(m.t, m.h); break;
       case 'leave': machineLeft(mid); break;
+      case 'vpick': {                                     // a guest moved / locked their stage vote
+        const V = stageVote;
+        if (N.active || !V || !V.net || !owned(m.p) || V.winner >= 0) break;
+        if (Number.isInteger(m.cur)) V.cur[m.p] = m.cur;
+        if (Number.isInteger(m.vote)) V.vote[m.p] = m.vote; else delete V.vote[m.p];
+        broadcast({ k: 'vstate', cur: V.cur, vote: V.vote });
+        break;
+      }
     }
   }
   // a whole computer left (closed the game / lost the connection): its seats empty out
@@ -350,6 +358,15 @@
       case 'ping': toHost({ k: 'pong', t: m.t }); break;
       case 'pong': N.ping = Math.round(performance.now() - m.t); break;
       case 'start': beginMatch(m); break;
+      case 'vote': if (!N.active) { ui.hide(); openStageVote(m.voters || []); } break;       // the host opened the STAGE VOTE
+      case 'vstate': {                                    // everyone's votes, from the host (our own players keep where they are)
+        const V = stageVote; if (!V || !V.net) break;
+        const mine = mySlots(N);
+        for (const k in m.cur) if (!mine.includes(+k)) V.cur[k] = m.cur[k];
+        for (const k of V.voters) if (!mine.includes(k)) { if (m.vote && m.vote[k] !== undefined) V.vote[k] = m.vote[k]; else delete V.vote[k]; }
+        break;
+      }
+      case 'vend': { const V = stageVote; if (V && V.net) { V.winner = m.winner; V.counts = m.counts; V.tie = !!m.tie; V.endT = 0; menuSfx('go'); } break; }
       case 'in': storeInputs(m.t0, m.ps); break;
       case 'hash': if (N.active) checkHash(m.t, m.h); break;
       case 'abort': endMatchBack(m.why || 'The match was stopped.'); break;
@@ -465,24 +482,42 @@
 
   // ---------- the match ----------
   function versionProblem() { const N = netplay; return N.slots.find(s => s.kind === 'human' && s.build && s.build !== BUILD); }
-  function hostStart() {
+  function hostStart(votedStage) {
     const N = netplay;
     if (!N || N.role !== 'host' || N.active) return;
-    syncFromPlayers();
-    if (!allReady()) return;
-    const bad = versionProblem();
-    if (bad) { flash(bad.name + ' HAS A DIFFERENT VERSION OF THE GAME - EVERYONE UPDATE FIRST'); return; }
+    if (votedStage === undefined) {
+      syncFromPlayers();
+      if (!allReady()) return;
+      const bad = versionProblem();
+      if (bad) { flash(bad.name + ' HAS A DIFFERENT VERSION OF THE GAME - EVERYONE UPDATE FIRST'); return; }
+      if (!(N.opts.stage >= 0)) {                       // STAGE: VOTE - everyone votes first (the host keeps the count)
+        const voters = N.slots.map((s, i) => s.kind === 'human' ? i : -1).filter(i => i >= 0);
+        broadcast({ k: 'vote', voters });
+        ui.hide(); openStageVote(voters);
+        return;
+      }
+    }
     // input delay: a guest's presses go guest -> host -> other guests, so allow for the worst round trip
     const worst = Math.max(80, ...N.slots.filter(s => s.kind === 'human').map(s => s.ping || 0));
     const relay = N.conns.size > 1 ? worst : worst / 2;
     const delay = clamp(Math.ceil((relay + 40) / (STEP * 1000)), 5, 40);   // (+40ms of headroom for ping spikes)
     // song = the battle song EVERYONE hears this match (the host's next pick) - so the big moments line up for everybody
     const m = { k: 'start', seed: (realRandom() * 2 ** 32) >>> 0, slots: N.slots.map(s => ({ ...s })), opts: { ...N.opts }, gore, delay, song: nextBattleSong() };
-    if (!(m.opts.stage >= 0)) m.opts.stage = Math.floor(realRandom() * STAGE_LIST.length);   // (STAGE: VOTE online = the host picks one at random for now)
+    if (Number.isInteger(votedStage) && votedStage >= 0) m.opts.stage = votedStage;    // (the stage everyone voted for)
+    if (!(m.opts.stage >= 0)) m.opts.stage = Math.floor(realRandom() * STAGE_LIST.length);
     broadcast(m);
     beginMatch(m);
   }
+  // ---------- the online STAGE VOTE (see openStageVote in the game) ----------
+  function voteSend(p, cur, vote) {
+    const N = netplay; if (!N) return;
+    const V = stageVote;
+    if (N.role === 'host') { if (V) broadcast({ k: 'vstate', cur: V.cur, vote: V.vote }); }
+    else toHost({ k: 'vpick', p, cur, vote: Number.isInteger(vote) ? vote : null });
+  }
+  function voteEnd(winner, counts, tie) { const N = netplay; if (N && N.role === 'host') broadcast({ k: 'vend', winner, counts, tie }); }
   function beginMatch(m) {
+    stageVote = null;
     const N = netplay;
     N.slots = m.slots; N.opts = m.opts;
     netSong = Number.isInteger(m.song) ? m.song : -1;   // (the host's battle song for this match)
@@ -1126,5 +1161,5 @@
   // hooks the game calls
   window.__netTest = { storeInputs, enc, dec, makeRng, RB };   // (for testing rollback without a real connection)
   Object.assign(window, { netTick, netAfterFrame, netInputFor, netPace, netEscape, netBackToLobby, netDrawOverlay,
-                          sbNet: { host, join, leave, leaveRoom, invite, addLocal, hostStart, BUILD, ui, enc, dec, simHash } });
+                          sbNet: { host, join, leave, leaveRoom, invite, addLocal, hostStart, voteSend, voteEnd, mySeats: () => netplay ? mySlots(netplay) : [], BUILD, ui, enc, dec, simHash } });
 })();
