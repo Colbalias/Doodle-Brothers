@@ -2776,13 +2776,17 @@ const COLBY_THUNDER_BOLT = COLBY_PUNCHES.sideGround = { name: 'Thunder Bolt', st
     const s = { owner: f, x: f.x + f.face * (up ? 12 : 40), y: f.y - (up ? 112 : 66), vx: Math.cos(ang) * THUNDER_BOLT.speed, vy: Math.sin(ang) * THUNDER_BOLT.speed, r: THUNDER_BOLT.r, ...THUNDER_BOLT.hit,
                 mult: powerOf(f), life: THUNDER_BOLT.life, kind: 'orb', color: '#7fd8ff', hit: new Set(), pierce: false, trail: [], grav: 0,
                 steer: true, ang, trailLen: THUNDER_BOLT.tail, electric: true };
+    if (up && f.char === 'COLBY') s.selfHit = true;              // (UP J: steer it back into himself = the THUNDER HEADBUTT)
     projectiles.push(s); a.bolt = s;
     burst(s.x, s.y, ['#ffffff', '#7fd8ff'], 12, f.face > 0 ? 0 : Math.PI, 0.6, 420, { grav: 0 });
     sfx.blast(); sfx.vanish(0.5);
   },
   step(f, a, dt, inp) {
     if (a.phase !== 'active') return false;
-    f.vx = approach(f.vx, 0, FRICTION * dt); if (!f.ground) f.vy = Math.min(f.vy, 120);
+    if (a.move.boltUp && f.char === 'COLBY') {                  // (UP J: HELD exactly where he fired it while he concentrates)
+      if (a.holdX === undefined) { a.holdX = f.x; a.holdY = f.y; }
+      f.x = a.holdX; f.y = a.holdY; f.vx = 0; f.vy = 0;
+    } else { f.vx = approach(f.vx, 0, FRICTION * dt); if (!f.ground) f.vy = Math.min(f.vy, 120); }
     const alive = a.bolt && projectiles.includes(a.bolt);
     if (!alive || (a.t > 0.12 && (inp.atkTap || inp.blockTap))) {     // it's gone (hit something / ran out) - or he lets it go
       if (alive) { a.bolt.steer = false; a.bolt.life = Math.min(a.bolt.life, 0.25); }
@@ -10024,6 +10028,113 @@ COLBY_PUNCHES.upGround = { ...COLBY_THUNDER_BOLT, boltUp: true,
   wind: pose({ lean: -0.05, bob: -6, legA: [0.7, 0.6], legB: [-0.6, 0.3], armA: [2.2, -0.6], armB: [2.4, -1.5] }),
   strike: pose({ lean: -0.1, bob: -8, legA: [0.8, 0.7], legB: [-0.7, 0.3], armA: [3.0, -0.05], armB: [2.5, -1.7] }) };   // (hand thrust UP, the other at his temple)
 CHARACTERS.COLBY.bareMoves = { ...COLBY_PUNCHES, uair: COLBY_PUNCHES.upGround };  // used while his scythe is thrown (his AIR up J is the Thunder Bolt too)
+// THE THUNDER HEADBUTT (Ness's PK Thunder 2): his own Thunder Bolt hits him and he's FIRED off the way it was going,
+// head first - a massive flying headbutt. It's his recovery too (and it uses it up).
+const THUNDER_HEAD = { speed: 1900, time: 0.42 };
+const COLBY_THUNDER_HEAD = { name: 'Thunder Headbutt', startup: 0, active: THUNDER_HEAD.time, endlag: 0.28, landLag: 0.2, noClash: true, electric: true, impactOnHit: true,
+  hitboxes: [{ x: 14, y: -56, r: 40, dmg: 15, base: 560, growth: 6.4, angle: 40 }],
+  wind: pose({ lean: 1.3, bob: 0, legA: [-0.3, 0.3], legB: [-0.6, 0.4], armA: [-2.0, 0.2], armB: [-2.3, 0.1] }),
+  strike: pose({ lean: 1.3, bob: 0, legA: [-0.3, 0.3], legB: [-0.6, 0.4], armA: [-2.0, 0.2], armB: [-2.3, 0.1] }),
+  step(f, a, dt) {
+    if (a.phase === 'active') {
+      f.vx = Math.cos(a.dirAng) * THUNDER_HEAD.speed; f.vy = Math.sin(a.dirAng) * THUNDER_HEAD.speed; f.ground = false;
+      if ((a.gT = (a.gT || 0) - dt) <= 0) { a.gT = 0.02; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#7fd8ff' }); }
+      if (Math.random() < dt * 40) bolt(f.x, f.y - 50, Math.random() * Math.PI * 2, 30 + Math.random() * 30, 0.06, Math.random() < 0.5 ? '#ffffff' : '#7fd8ff');
+    }
+    return false;
+  } };
+function thunderHeadbutt(f, s) {
+  if (!f || f.respawnTimer > 0) return;
+  const ang = Math.atan2(s.vy, s.vx), c = Math.cos(ang);
+  if (Math.abs(c) > 0.15) f.face = c > 0 ? 1 : -1;
+  const deg = Math.atan2(-Math.sin(ang), Math.abs(c)) * 180 / Math.PI;   // (they go flying the way he's going)
+  const lean = 1.3 * Math.abs(c) + (Math.sin(ang) > 0 ? 1.6 : 0) * (1 - Math.abs(c));   // (head first: forward, up or down)
+  const pz = pose({ lean, bob: 0, legA: [-0.3, 0.3], legB: [-0.6, 0.4], armA: [-2.0, 0.2], armB: [-2.3, 0.1] });
+  const move = { ...COLBY_THUNDER_HEAD, wind: pz, strike: pz, hitboxes: COLBY_THUNDER_HEAD.hitboxes.map(h => ({ ...h, angle: deg })) };
+  f.action = { type: 'attack', key: 'thunderHead', move, btn: 'atk', phase: 'active', t: 0, charge: 0, mult: 1, hit: new Set(), air: true, started: time, startupMul: 1, dirAng: ang };
+  f.upSpecialUsed = true; f.ground = false; f.onPlatform = null; f.y -= 2;
+  for (let k = 0; k < 8; k++) bolt(f.x, f.y - 50, Math.random() * Math.PI * 2, 50 + Math.random() * 50, 0.16, k % 2 ? '#ffffff' : '#7fd8ff');
+  burst(f.x, f.y - 50, ['#ffffff', '#7fd8ff'], 26, 0, Math.PI, 700, { grav: 0 }); ring(f.x, f.y - 50);
+  impactFrame = Math.max(impactFrame, 0.05); impactAt = { x: f.x, y: f.y - 50, ang, all: false, focus: true };
+  shake = Math.max(shake, 12); sfx.clash(true); sfx.blast();
+  painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'THUNDER HEADBUTT!', big: false });
+}
+
+// ---------------- JAJANKEN (bare-handed NEUTRAL J) - Gon's rock-paper-scissors ----------------
+// Neutral J drops him into the stance: crouched low, fist drawn back, his aura gathering in it ("JAN... KEN...") - the longer
+// he holds it, the harder it hits. LEFT / RIGHT in the stance = a big HOP that way (still in the stance). Then:
+//   J      = ROCK      - a GIANT punch
+//   K      = PAPER     - his aura thrown out of his open palm: a projectile
+//   BLOCK  = SCISSORS  - a huge slash rising from below: great range, slices up high - and cuts through anything thrown at him
+const JAJAN = { maxCharge: 1.2, chargeBonus: 0.6, hops: 2, hopVx: 820, hopVy: -760, timeout: 3, gold: '#ffd23f', orange: '#ff8a1a' };
+const JJ_POSE = {
+  stance: pose({ lean: 0.45, bob: -24, legA: [1.2, 1.4], legB: [-0.9, 0.4], armA: [-0.9, -1.6], armB: [0.6, -1.2] }),
+  rock: pose({ lean: 0.75, bob: -14, legA: [1.25, 0.6], legB: [-1.1, 0.2], armA: [1.6, 0], armB: [-1.0, -0.6] }),
+  paperWind: pose({ lean: 0.1, bob: -16, legA: [0.9, 0.9], legB: [-0.8, 0.4], armA: [-0.6, -0.4], armB: [-0.3, -0.6] }),
+  paper: pose({ lean: 0.3, bob: -10, legA: [0.9, 0.6], legB: [-0.8, 0.3], armA: [1.55, 0.05], armB: [1.4, -0.3] }),
+  scWind: pose({ lean: 0.6, bob: -26, legA: [1.2, 1.5], legB: [-0.8, 0.4], armA: [0.5, 0.1], armB: [-0.9, -0.8] }),
+  scissors: pose({ lean: -0.25, bob: -2, legA: [0.6, 0.3], legB: [-0.6, 0.3], armA: [2.8, 0.05], armB: [-1.2, -0.6] }),
+};
+const jjHand = f => ({ x: f.x - f.face * 18, y: f.y - 46 });
+function jjStart(f, key, mult) {
+  const move = CHARACTERS.COLBY.bareMoves[key];
+  f.action = { type: 'attack', key, move, btn: 'atk', phase: 'startup', t: 0, charge: 0, mult, hit: new Set(), air: !f.ground, started: time, startupMul: 1 };
+}
+CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active: 9, endlag: 0.12, landLag: 0.1, noClash: true, hitboxes: [],
+  wind: JJ_POSE.stance, strike: JJ_POSE.stance,
+  fire(f, mult, c, a) { a.ct = 0; a.hops = 0; a.lastD = 0; painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'JAN... KEN...', big: false }); sfx.parry(); },
+  step(f, a, dt, inp) {
+    if (a.phase !== 'active') return false;
+    a.ct = Math.min(JAJAN.maxCharge, (a.ct || 0) + dt);
+    const k = a.ct / JAJAN.maxCharge, h = jjHand(f);
+    if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt);
+    if (Math.random() < dt * (20 + 40 * k)) burst(h.x + (Math.random() - 0.5) * 16, h.y + (Math.random() - 0.5) * 16, [JAJAN.gold, JAJAN.orange, '#ffffff'], 1, 0, Math.PI, 120 + 160 * k, { grav: -80 });
+    if ((a.wT = (a.wT || 0) - dt) <= 0) { a.wT = 0.5 - 0.3 * k; auraWaves.push({ x: h.x, y: h.y, t: 0, dur: 0.3, max: 30 + 40 * k, color: JAJAN.gold }); }
+    // LEFT / RIGHT: a big hop that way (still in the stance)
+    const d = inp.dir || 0;
+    if (d && d !== a.lastD && f.ground && a.hops < JAJAN.hops) {
+      a.hops++; f.face = d; f.vx = d * JAJAN.hopVx; f.vy = JAJAN.hopVy; f.ground = false; f.onPlatform = null; f.y -= 2;
+      dust(f.x, f.y, 10, 1.6); sfx.whoosh(false);
+    }
+    a.lastD = d;
+    const mult = 1 + JAJAN.chargeBonus * k;
+    let pick = null;
+    if (a.t > 0.1) pick = inp.atkTap ? 'jjRock' : inp.spcTap ? 'jjPaper' : inp.blockTap ? 'jjScissors' : null;
+    if (!pick && (f.controller === 'dummy' || f.minion) && a.t > (a.aiT || (a.aiT = 0.35 + Math.random() * 0.5))) {   // (the CPU: picks by range)
+      const o = nearestFoe(f), dx = o ? Math.abs(o.x - f.x) : 999, dy = o ? o.y - f.y : 0;
+      pick = dy < -60 || projectiles.some(q => q.owner !== f && Math.hypot(q.x - f.x, q.y - f.y) < 220) ? 'jjScissors' : dx < 110 ? 'jjRock' : 'jjPaper';
+      if (o) f.face = Math.sign(o.x - f.x) || f.face;
+    }
+    if (pick) { f.atkBuf = f.spcBuf = f.dodgeBuf = 0; jjStart(f, pick, mult); painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: pick === 'jjRock' ? 'ROCK!' : pick === 'jjPaper' ? 'PAPER!' : 'SCISSORS!', big: true }); return true; }
+    if (a.t > JAJAN.timeout) { a.phase = 'end'; a.t = 0; }
+    return true;
+  } };
+CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, active: 0.1, endlag: 0.32, landLag: 0.14, lunge: 520, lungeFriction: 0.45, impactOnHit: true, noClash: true,
+  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 13, base: 520, growth: 6.2, angle: 38 }],
+  wind: JJ_POSE.stance, strike: JJ_POSE.rock,
+  fire(f) { const x = f.x + f.face * 56, y = f.y - 58; burst(x, y, [JAJAN.gold, JAJAN.orange, '#ffffff'], 30, f.face > 0 ? 0 : Math.PI, 0.7, 700, { grav: 0 }); ring(x, y); shake = Math.max(shake, 10); sfx.huge ? sfx.huge() : sfx.slam(); } };
+CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, active: 0.06, endlag: 0.26, landLag: 0.12, noClash: true, hitboxes: [],
+  wind: JJ_POSE.paperWind, strike: JJ_POSE.paper,
+  fire(f, mult, c, a) {
+    const m = (a && a.mult) || 1, sp = 950;
+    projectiles.push({ owner: f, x: f.x + f.face * 46, y: f.y - 62, vx: f.face * sp, vy: 0, r: 24 + 6 * (m - 1) / JAJAN.chargeBonus, dmg: 8 * m, base: 360, growth: 4.5, angle: 35,
+                       mult: powerOf(f), life: 0.9, kind: 'orb', color: JAJAN.gold, hit: new Set(), pierce: false, trail: [], grav: 0, trailLen: 10 });
+    burst(f.x + f.face * 46, f.y - 62, [JAJAN.gold, '#ffffff'], 16, f.face > 0 ? 0 : Math.PI, 0.5, 500, { grav: 0 }); sfx.blast();
+  } };
+CHARACTERS.COLBY.bareMoves.jjScissors = { name: 'Jajanken: Scissors', startup: 0.05, active: 0.2, endlag: 0.3, landLag: 0.14, noClash: true,
+  hitboxes: [{ x: 66, y: -14, r: 34, dmg: 11, base: 470, growth: 6, angle: 80, from: 0, to: 0.07, group: 0 },
+             { x: 78, y: -66, r: 38, dmg: 11, base: 470, growth: 6, angle: 80, from: 0.05, to: 0.13, group: 0 },
+             { x: 52, y: -124, r: 40, dmg: 11, base: 470, growth: 6, angle: 84, from: 0.11, to: 0.2, group: 0 }],
+  wind: JJ_POSE.scWind, strike: JJ_POSE.scissors,
+  fire(f) { slashLine(f.x + f.face * 70, f.y - 70, f.face > 0 ? -1.2 : -1.94, 260, 0.2); slashLine(f.x + f.face * 60, f.y - 60, f.face > 0 ? -1.3 : -1.84, 200, 0.16); sfx.cut ? sfx.cut(1) : sfx.whoosh(true); },
+  step(f, a, dt) {                                             // ...and it CUTS anything thrown at him out of the air
+    if (a.phase === 'active') for (let i = projectiles.length - 1; i >= 0; i--) {
+      const q = projectiles[i];
+      if (q.owner === f || allies(f, q.owner) || q.beam) continue;
+      if (Math.hypot(q.x - (f.x + f.face * 60), q.y - (f.y - 70)) < 120) { burst(q.x, q.y, ['#ffffff', JAJAN.gold], 12, 0, Math.PI, 420, { grav: 0 }); slashLine(q.x, q.y, Math.random() * Math.PI, 90, 0.12); projectiles.splice(i, 1); }
+    }
+    return false;
+  } };
 CHARACTERS.COLTEN.bareMoves = COLBY_PUNCHES; // Colten empty-handed (his Dragonslayer thrown and not picked back up)
 // AIDEN'S TAUNTS - three little skits (see HEEL_TAUNT / heelTauntStep / drawHeelTauntProps):
 //   UP   : RUM BARREL - hops up onto a barrel of rum, lights a cigar... puffs - and the smoke pours straight out of his
@@ -14418,7 +14529,7 @@ const TRANSFORM = { power: 1.2, speed: 1.1, drain: ULT_MAX / 14 };   // drain: f
 // Some characters' transformations are tuned differently (Lance's Super Saiyan: less power, more speed)
 const tfStats = f => (f.lanceForm && LANCE_FORMS[f.lanceForm]) || (f.ui ? UI_STATS : null) || (f.char && CHARACTERS[f.char] && CHARACTERS[f.char].transformStats) || TRANSFORM;
 // BALANCE: per-fighter damage (round robin, Nov 2026: Colten 85% and Sevon 60% wins - both are meant to sit UNDER Colbalias)
-const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95 };
+const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95, COLBY: 0.9 };   // (Colby: -10%)
 function powerOf(f) {
   if (!f) return 1;
   if (f.strikeClone) return powerOf(f.owner);                    // his J-string clones hit with HIS power (it's his combo)
@@ -15193,8 +15304,8 @@ function startLotusComeback(f) {
   const sL = stageL(), sR = stageR(), x = clamp(f.x, sL + 200, sR - 200);
   Object.assign(f, { x, y: STAGE.y, vx: 0, vy: 0, ground: true, onPlatform: null, respawnTimer: 0, shielding: false, invuln: 0 });
   f.ultPower = 1;
-  // ...and with his weights OFF he's 2% faster for the rest of the match (his own stats, and the ones under a transformation)
-  for (const st of [f.stats, f.baseStats, f.formBase]) if (st) { st.runSpeed *= 1.02; st.airSpeed *= 1.02; }
+  // ...and with his weights OFF he's 8% faster for the rest of the match (his own stats, and the ones under a transformation)
+  for (const st of [f.stats, f.baseStats, f.formBase]) if (st) { st.runSpeed *= 1.08; st.airSpeed *= 1.08; st.jumpVel *= 1.04; st.doubleJumpVel *= 1.04; }
   ultBanner = { t: 1.6, title: 'COMEBACK', name: 'PRIMARY LOTUS', color: '#ffe066', who: f };
   impactFrame = 0.12; impactAt = { x, y: STAGE.y - 50, ang: 0, all: true, focus: true, invert: true };
   shake = Math.max(shake, 14); sfx.huge();
@@ -17388,6 +17499,9 @@ function updateProjectiles(dt, only = null) {
         s.vx = Math.cos(s.ang) * THUNDER_BOLT.speed; s.vy = Math.sin(s.ang) * THUNDER_BOLT.speed;
       }
     }
+    if (s.selfHit && s.steer && (s.age = (s.age || 0) + dt) > 0.28 && s.owner && circleHitsFighter(s.x, s.y, s.r + 14, s.owner)) {   // turned back into HIMSELF
+      thunderHeadbutt(s.owner, s); projectiles.splice(i, 1); continue;
+    }
     if (s.groundWave) {                                     // Hunter's Tile Lift shockwave: tearing along the floor
       if (Math.random() < dt * 50) dust(s.x, STAGE.y, 2, 1.4);
       if (Math.random() < dt * 30) burst(s.x, STAGE.y - 4, ['#cdb79a', '#806b5a'], 1, -Math.PI / 2, 0.6, 300, { grav: 700 });
@@ -17407,7 +17521,7 @@ function updateProjectiles(dt, only = null) {
     }
     s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
     s.trail.push({ x: s.x, y: s.y }); if (s.trail.length > (s.trailLen || 6)) s.trail.shift();
-    let dead = s.life <= 0 || s.x < -150 || s.x > W + 150 || s.y < -150 || s.y > H + 150;
+    let dead = s.life <= 0 || (s.steer ? (s.x < BLAST.left || s.x > BLAST.right || s.y < BLAST.top || s.y > BLAST.bottom) : (s.x < -150 || s.x > W + 150 || s.y < -150 || s.y > H + 150));   // (a STEERED bolt can loop way up high and come back)
     // Hit the solid stage
     if (s.kind !== 'wave' && s.x > STAGE.x && s.x < STAGE.x + STAGE.w && s.y > STAGE.y && s.y < STAGE.y + STAGE.h) {
       burst(s.x, s.y, [s.color, '#ffffff'], 8, Math.PI / 2, 1, 300);
@@ -17435,8 +17549,10 @@ function updateProjectiles(dt, only = null) {
             continue;
           }
           const dirSign = Math.sign(s.vx) || (s.owner ? s.owner.face : 1);
+          const frozen0 = t.action && t.action.type === 'timeStop';
           if (applyHit(t, s, dirSign, s.mult, s.x, s.y, { shot: s })) {
             if (s.reflected) { s.reflected = false; break; }      // perfect-blocked: it's flying back now
+            if (s.owner && s.owner.look && s.owner.look.timeStop && !frozen0) s.owner.timeMeter = Math.min(100, (s.owner.timeMeter || 0) + TIME_STOP.gain);   // (Colby's shots fill his TIME meter too)
             // STUN (Colbalias's Hell Missile): frozen in place for a moment
             if (s.stun && !(s.owner && s.owner.minion) && t.action && t.action.type === 'hitstun' && !t.action.crit) {   // (a CLONE's never stuns)
               t.action.dur = Math.max(t.action.dur, s.stun); t.action.locked = true;   // (locked: landing doesn't end it)
@@ -17638,7 +17754,8 @@ function startAttack(f, inp, btn) {
   // SEVON: neutral K while his ODM hook is stuck in someone = REEL IN (then again = the LEVI SPIN)
   if (btn === 'spc' && f.look && f.look.odm && f.odmLedge && !inp.up) { f.spcBuf = 0; f.action = { type: 'odmLedge', t: 0 }; sfx.whoosh(true); return; }   // dangling: K = reel up onto the ledge
   if (btn === 'spc' && f.look && f.look.odm && f.odm && !inp.dir && !inp.up && !inp.down && odmAdvance(f)) { f.spcBuf = 0; return; }
-  const key = chooseMove(f, inp, btn);
+  let key = chooseMove(f, inp, btn);
+  if (f.noScythe && f.char === 'COLBY' && btn === 'atk' && f.ground && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(jab|[pk]1)$/.test(key)) key = 'jajanken';   // (bare Colby's neutral J: JAJANKEN)
   // COLBALIAS: summoning a shadow clone is INSTANT - no attack animation, he keeps running/jumping at full
   // speed. (With a full D-E-M-O-N meter he can summon ONE past his limit - see summonShadowClone.)
   if (key === 'downRanged' && f.look && f.look.demonMeter && !f.minion) {
@@ -20093,7 +20210,7 @@ function updateSim(dt) {
           if (f.strikeClone && f.owner && t.damage > d0) gainDemon(f.owner);  // (his J-string clones' hits count as his)
           if (demonBoost > 1) hellBurst(hx, hy, 20, 550);
           // Colby's TIME meter fills up as he lands hits
-          if (f.look && f.look.timeStop && t.damage > d0) f.timeMeter = Math.min(100, (f.timeMeter || 0) + TIME_STOP.gain);
+          if (f.look && f.look.timeStop && t.damage > d0 && !(t.action && t.action.type === 'timeStop')) f.timeMeter = Math.min(100, (f.timeMeter || 0) + TIME_STOP.gain);   // (not off someone frozen in time)
           // a clean hit (not blocked/dodged): some moves drop the game into slow motion when they land
           const clean = t.action && t.action.type === 'hitstun' && t.action.t === 0;
           if (a.move.slowmoHit && clean) startSlowmo(a.move.slowmoHit);
