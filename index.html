@@ -11665,6 +11665,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
     return true;
   }
   if (isIntangible(t)) { t.dodgedFlash = 0.35; return false; }
+  if (src.fighter && src.fighter !== t) t.lastHitBy = src.fighter;   // (who hit them last - a COMEBACK goes after them)
   if (uiAutoDodge(t, hx)) return false;                    // Lance in ULTRA INSTINCT: his body dodges it on its own (spends a Z vanish dot)
   if (sageAutoDodge(t, hx)) return false;                  // Colbalias in SAGE MODE: one auto dodge every 5 seconds
   const dmg = h.dmg * mult;
@@ -11697,6 +11698,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
 
 // Damage + launch. Used by attacks and by throws (throws skip shields, dodges and perfect blocks).
 function knock(t, h, dirSign, mult, hx, hy) {
+  if (typeof ult !== 'undefined' && ult && ult.user && ult.user !== t) t.lastHitBy = ult.user;   // (an ultimate's launch: its user knocked them out)
   const dmg = h.dmg * mult * (t.kaioken ? KAIOKEN.taken : 1) * (t.arcadeBoss ? ARCADE_BOSS.taken : 1);    // Kaioken: takes 7% more per hit (the ARCADE BOSS: less)
   // Colbalias hit WHILE charging his Hellfire Shot: the charge is lost
   if (t.action && t.action.type === 'attack' && t.action.charging && t.action.move.chargeShot && t.cshot > 0) {
@@ -15174,7 +15176,7 @@ function drawTsukuyomi(f) {
 const leeClipT = s => s < 8.0 ? s : s < 33.75 ? s + 4.75 : s < 36.75 ? s + 10.25 : s + 13.25;   // (and 38.5 - 44.0: the bandage wrap, quicker - and 47 - 50: less spinning before the slam)
 const LOTUS = { len: 54.3, vol: 1.0, drop1: 1.4, drop2: 4.8, smirk: 6.2, stance: 7.5, glitch: 7.85, power: 12.75, dash: 14.6, dashDur: 0.32, reach: 1700,
   dmg: { blow: 3, punch: 3.5, axe: 3.5, face: 4, pass: 0.45, blitz: 0.24, stomp: 3, up: 3, lotus: 7 },
-  final: { dmg: 5, base: 640, growth: 6.4, angle: 80, ultFinal: true, xray: 'SPINE' },
+  final: { dmg: 5, base: 140, growth: 0, angle: 80, ultFinal: true, xray: 'SPINE' },   // (a COMEBACK never kills: the damage, next to no knockback)
   dust: '#d9c9a0', blue: '#7fd8ff', bandage: '#f4f1e8' };
 function playLeeSong(f) {
   stopLeeSong(f);
@@ -15210,7 +15212,13 @@ function leeDropWeight(f, a, side) {
   const x = f.x + side * 8 * f.face, y = f.y - 22;
   a.weights.push({ x, y, vy: 0, side, landed: false });
 }
+// COMEBACKS go after whoever KNOCKED THEM OUT (if that was a clone - or they're gone - the nearest opponent instead)
+function comebackFoe(f) {
+  const k = f.lastHitBy;
+  return k && !k.minion && fighters.includes(k) && !allies(f, k) && k.respawnTimer <= 0 && !k.out && !k.dead ? k : null;
+}
 function leeFoeFor(f, anyRange = false) {
+  if (anyRange) { const k = comebackFoe(f); if (k) return k; }
   let best = null, bd = Infinity;
   for (const o of fighters) {
     if (o === f || o.minion || allies(f, o) || o.out || o.respawnTimer > 0 || o.dead || o.halo > 0) continue;
@@ -15644,7 +15652,7 @@ const SSG = { line: 1.5, lineEnd: 7.6, scream: 4.85, go: 8.1,   // (scream: the 
               pre: [{ t: 10.0, from: 0, to: 1 }, { t: 11.7, from: 1, to: 0 }], preDive: 0.12, drag: 0.5, preRise: 0.18,   // the DRAGS: slammed into the floor and DRAGGED the whole length of the stage (left to right, then back)
               preHit: { dmg: 1.5 }, preSelf: 1,
               speed: 1.4, color: '#ff3b3b', hair: '#e8343a',
-              slam: { dmg: 6, base: 330, growth: 2.2, angle: 84 }, selfDmg: 6 };   // (the final one LOOKS as hard as he can - but hits light: the comeback's already a free extra life)
+              slam: { dmg: 6, base: 120, growth: 0, angle: 84 }, selfDmg: 6 };   // (the final one LOOKS as hard as he can - but hits light: the comeback's already a free extra life)
 const SSG_FORM = 4;                                              // (his own form in LANCE_FORMS - separate from Super Saiyan 2)
 function startSsgCut(f) {
   f.sgUsed = true;                                              // (once a match - never again, even if he's revived)
@@ -15669,6 +15677,7 @@ function playSsgSong(f) {
 }
 function stopSsgSong(f) { if (f && f.sgSong) { try { f.sgSong.el.pause(); } catch (e) {} f.sgSong = null; } }
 function ssgVictimFor(f) {
+  { const k = comebackFoe(f); if (k) return k; }
   let best = null, bd = Infinity;
   for (const o of fighters) {
     if (o === f || o.minion || allies(f, o) || o.out || o.respawnTimer > 0 || o.dead) continue;
@@ -18872,7 +18881,8 @@ function updateFighter(f, inp, dt) {
       }
       startLotusComeback(f); return;
     }
-    if (f.char === 'LANCE' && !f.sgUsed && cbReady) {   // LANCE: SUPER SAIYAN GOD
+    const st0 = gameOptions.stocks > 0 ? gameOptions.stocks : Infinity, lanceStock = !isFinite(f.stocks) || !isFinite(st0) || f.stocks === st0 - 1 || f.stocks === 1;
+    if (f.char === 'LANCE' && !f.sgUsed && cbReady && lanceStock) {   // LANCE: SUPER SAIYAN GOD - only on his SECOND or LAST stock
       f.ult = 0;
       if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
         // (someone's ultimate is still playing: he's HELD at the edge - untouchable - and it starts the moment that's over)
