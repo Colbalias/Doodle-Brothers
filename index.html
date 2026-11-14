@@ -8631,6 +8631,7 @@ function drawHellcatHead(head, f, opts, look = {}) {
   ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   // THE HOOD: snug over the crown and the back of her head, two small cat-ear points on top, its tail hanging down her back
   ctx.fillStyle = col(HL.black);
+  ctx.beginPath(); ctx.arc(head.x, head.y, 13.2, 0, Math.PI * 2); ctx.fill();   // (under it all: her whole head covered)
   ctx.beginPath();
   ctx.moveTo(X(7), Y(9));                                         // the opening's edge, at her jaw...
   ctx.quadraticCurveTo(X(11.5), Y(0), X(8), Y(-9));               // ...up round her face
@@ -8645,31 +8646,32 @@ function drawHellcatHead(head, f, opts, look = {}) {
   ctx.closePath(); ctx.fill();
   if (!tint && !sk) {
     ctx.strokeStyle = look.body || HL.red; ctx.lineWidth = 1.8;   // the lining round the opening (her colour)
-    ctx.beginPath(); ctx.moveTo(X(6), Y(9.5)); ctx.quadraticCurveTo(X(10), Y(0), X(7.2), Y(-9)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(-0.8), Y(11.5)); ctx.quadraticCurveTo(X(-3), Y(0), X(-0.8), Y(-10)); ctx.lineTo(X(8.8), Y(-10)); ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.2; // a sheen across the crown
     ctx.beginPath(); ctx.moveTo(X(-9), Y(-8)); ctx.quadraticCurveTo(X(-3), Y(-13), X(4), Y(-11)); ctx.stroke();
   }
   // THE MASK: a gold faceplate filling the opening - a flat brow, an angled nose line, a narrow chin
   ctx.fillStyle = col(HL.gold);
   ctx.beginPath();
-  ctx.moveTo(X(0), Y(-8)); ctx.lineTo(X(7.5), Y(-8)); ctx.lineTo(X(11.8), Y(1)); ctx.lineTo(X(9.5), Y(6)); ctx.lineTo(X(6), Y(10.5)); ctx.lineTo(X(0.5), Y(9.5));
-  ctx.quadraticCurveTo(X(-2), Y(0), X(0), Y(-8)); ctx.closePath(); ctx.fill();
+  ctx.moveTo(X(-0.5), Y(-9.5)); ctx.lineTo(X(8.5), Y(-9.5)); ctx.lineTo(X(13.4), Y(0.5)); ctx.lineTo(X(12), Y(6.5)); ctx.lineTo(X(7), Y(12.6)); ctx.lineTo(X(0), Y(11.8));
+  ctx.quadraticCurveTo(X(-2.5), Y(0), X(-0.5), Y(-9.5)); ctx.closePath(); ctx.fill();
   if (!tint && !sk) {
     ctx.fillStyle = '#a8761c';                                    // the far side of it in shadow
-    ctx.beginPath(); ctx.moveTo(X(0), Y(-8)); ctx.lineTo(X(3), Y(-8)); ctx.lineTo(X(3.5), Y(10)); ctx.lineTo(X(0.5), Y(9.5)); ctx.quadraticCurveTo(X(-2), Y(0), X(0), Y(-8)); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(X(-0.5), Y(-9.5)); ctx.lineTo(X(3), Y(-9.5)); ctx.lineTo(X(3.5), Y(12)); ctx.lineTo(X(0), Y(11.8)); ctx.quadraticCurveTo(X(-2.5), Y(0), X(-0.5), Y(-9.5)); ctx.fill();
     ctx.strokeStyle = '#fff1b8'; ctx.lineWidth = 1;               // a highlight down the nose line
-    ctx.beginPath(); ctx.moveTo(X(8), Y(-6.5)); ctx.lineTo(X(11), Y(1)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(9), Y(-8)); ctx.lineTo(X(12.6), Y(0.5)); ctx.stroke();
     ctx.strokeStyle = HL.visor; ctx.lineWidth = 2.2; ctx.shadowColor = HL.visor; ctx.shadowBlur = 6;   // the VISOR: a glowing slit
-    ctx.beginPath(); ctx.moveTo(X(3.8), Y(-3.2)); ctx.lineTo(X(10.2), Y(-1.6)); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.moveTo(X(4), Y(-3.4)); ctx.lineTo(X(11.6), Y(-1.6)); ctx.stroke(); ctx.shadowBlur = 0;
     ctx.strokeStyle = 'rgba(90,55,0,0.55)'; ctx.lineWidth = 0.9; // a seam at the mouth
-    ctx.beginPath(); ctx.moveTo(X(10.4), Y(2.6)); ctx.lineTo(X(5.5), Y(4.8)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(11.8), Y(3.2)); ctx.lineTo(X(6), Y(5.6)); ctx.stroke();
   }
   ctx.restore();
 }
 // (in front of everyone) the RASENGAN spinning in Hailie's hand while she has one
 function drawHailieFx() {
   for (const f of fighters) {
-    if (f.char !== 'HAILIE' || !(f.rasen > 0) || f.respawnTimer > 0) continue;
+    const ra = f.action;
+    if (f.char !== 'HAILIE' || !(f.rasen > 0) || f.respawnTimer > 0 || !(ra && ra.type === 'attack' && ra.key === 'neutralRanged' && ra.phase === 'active')) continue;   // (only while charging / rushing with it)
     const c = f.rasen, x = f.x + f.face * 26, y = f.y - 58, r = 6 + 12 * c, now = time;
     ctx.save();
     ctx.fillStyle = sketch ? 'rgba(0,0,0,0.15)' : 'rgba(127,216,255,0.35)'; ctx.beginPath(); ctx.arc(x, y, r * 1.4, 0, Math.PI * 2); ctx.fill();
