@@ -595,7 +595,10 @@ const SHIELD_BREAK_STUN = 1.4;
 // Attacks & knockback
 const COMBO_GRACE  = 0.35;  // after a combo hit ends, pressing again this soon continues the combo
 const PARRY_WINDOW = 0.07;  // PRESS block this close to a hit landing = PERFECT block (an opening - no automatic counter). Holding it never counts.
-const PARRY_STUN   = 0.5;   // how long the attacker staggers after being perfect-blocked
+const PARRY_STUN   = 0.5;
+const PARRY_SPAM   = 0.45;  // a block press within this long of the PREVIOUS one can't perfect block (no mashing your way to parries)
+// (a fresh, deliberate press - for the moves that read it straight off the input: comebacks)
+const cleanParryPress = (t, win = 0.12) => t.controller === 'dummy' ? parryRoll(t) : (t.lastBlockTap !== undefined && time - t.lastBlockTap <= win && (t.blockGap ?? 99) >= PARRY_SPAM);   // how long the attacker staggers after being perfect-blocked
 // opening = how long the blocker's next attack comes out faster (startup x openStartup);
 // reWindow = the staggered fighter's one parry-back attempt (a perfect-block stance this long); rePenalty = extra
 // stagger if they mistime it
@@ -5893,6 +5896,7 @@ COLBALIAS_MOVES.twinAxe = { name: 'Twin Axe', startup: 0.1, active: 0.06, endlag
     if (f.minion) return COLBALIAS_MOVES.detonate.fire(f, mult);   // (a clone doing it: still blows itself up)
     for (const side of [1, -1])
       spawnStrikeClone(f, 'axeDrop', f.x + side * TWIN_AXE.off, side, { y: f.y - TWIN_AXE.high, vx: 0, vy: 0 });
+    spawnStrikeClone(f, 'axeDrop', f.x, f.face, { y: f.y - TWIN_AXE.high - 70, vx: 0, vy: 0 });   // ...and one straight down the MIDDLE
     sfx.whoosh(true);
   } };
 // ---- the new layout ----
@@ -5905,7 +5909,43 @@ COLBALIAS_MOVES.sideRanged = { ...COLBALIAS_MOVES.hellMissile, startup: 0.22, en
     hellBurst(f.x + f.face * 40, f.y - 70, 12, 380); shake = Math.max(shake, 5); sfx.blast();
   } };
 COLBALIAS_MOVES.hellMissile = COLBALIAS_MOVES.sideRanged;
-COLBALIAS_MOVES.nair = COLBALIAS_MOVES.cloneFlail;
+// NEUTRAL AIR J - TWIN SPIN: a clone poofs in facing him, they grab each other's hands and SPIN each other round their
+// middle with the force of the other - two full turns, both bodies hitting anything they sweep through
+const TWIN_SPIN = { R: 40, turns: 2, dur: 0.42 };
+const TWIN_POSE = pose({ lean: -0.35, legA: [0.7, 1.0], legB: [0.2, 0.8], armA: [1.55, 0], armB: [1.45, 0.05] });   // leaning back, both hands out to the other
+CLONE_STRING.twinPartner = { name: 'Twin Spin', startup: 0.01, active: TWIN_SPIN.dur + 0.06, endlag: 0.04, floatWhile: () => true,
+  hitboxes: [{ x: 0, y: -55, r: 44, dmg: 5, base: 380, growth: 5, angle: 45, from: 0.04, to: TWIN_SPIN.dur }],
+  step(f) { const o = f.owner; if (!o || !o.action || o.action.helper !== f) killMinion(f, true); return false; },
+  wind: TWIN_POSE, strike: TWIN_POSE };
+COLBALIAS_MOVES.twinSpin = { name: 'Twin Spin', startup: 0.07, active: TWIN_SPIN.dur, endlag: 0.16, landLag: 0.1, floatWhile: (f, a) => a.phase !== 'end',
+  hitboxes: [{ x: 0, y: -55, r: 46, dmg: 3, base: 140, growth: 0, angle: 70, from: 0, to: TWIN_SPIN.dur / 2, group: 0 },
+             { x: 0, y: -55, r: 50, dmg: 6, base: 390, growth: 5, angle: 45, from: TWIN_SPIN.dur / 2, to: TWIN_SPIN.dur, group: 1 }],
+  wind: handSign, strike: TWIN_POSE,
+  step(f, a, dt) {
+    if (a.phase === 'startup') return false;
+    if (!a.center) {                                              // POOF - the clone appears in front of him, and they lock hands
+      a.dir = f.face; a.center = { x: f.x + f.face * TWIN_SPIN.R, y: f.y };
+      a.helper = spawnStrikeClone(f, 'twinPartner', f.x + 2 * f.face * TWIN_SPIN.R, -f.face, { y: f.y, vx: 0, vy: 0 });
+      sfx.whoosh(true);
+    }
+    const h = a.helper, c = a.center;
+    const k = a.phase === 'active' ? clamp(a.t / TWIN_SPIN.dur, 0, 1) : 1;
+    const th = Math.PI * (a.dir > 0 ? 1 : 0) + a.dir * Math.PI * 2 * TWIN_SPIN.turns * k;   // (he starts on his side of the middle)
+    if (a.phase === 'active') {
+      f.x = c.x + Math.cos(th) * TWIN_SPIN.R; f.y = c.y + Math.sin(th) * TWIN_SPIN.R * 0.3; f.vx = f.vy = 0;
+      if (h && fighters.includes(h)) {
+        h.x = c.x - Math.cos(th) * TWIN_SPIN.R; h.y = c.y - Math.sin(th) * TWIN_SPIN.R * 0.3; h.vx = h.vy = 0;
+        f.face = Math.sign(h.x - f.x) || f.face; h.face = -f.face;
+        if (Math.random() < dt * 60) { ghosts.push({ fig: figureOf(f), life: 0.12, max: 0.12, color: '#ff2a2a' }); ghosts.push({ fig: figureOf(h), life: 0.12, max: 0.12, color: '#ff2a2a' }); }
+      }
+      if (Math.random() < dt * 30) burst(c.x, c.y - 55, ['#ff2a2a', '#ffffff'], 2, 0, Math.PI, 300, { grav: 0 });
+    } else if (a.phase === 'end' && !a.flung) {                   // let go: flung off the way the spin was going
+      a.flung = true; f.vx = -Math.sin(th) * a.dir * 420; f.vy = -120;
+      if (h && fighters.includes(h)) { h.vx = -f.vx; h.vy = -120; }
+    }
+    return false;
+  } };
+COLBALIAS_MOVES.nair = COLBALIAS_MOVES.twinSpin;
 COLBALIAS_MOVES.uair = COLBALIAS_MOVES.cloneSwipe;
 COLBALIAS_MOVES.dair = COLBALIAS_MOVES.cloneDive;
 COLBALIAS_MOVES.downGround = COLBALIAS_MOVES.twinAxe;          // (Clone Detonation is now only what his CLONES do with down J)
@@ -11799,6 +11839,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
     if (t.shieldHP <= 0) breakShield(t);
     return true;
   }
+  if (t.look && t.look.hype) t.hypeStreak = 0;                  // (Captain Heel got HIT: his hit streak's over)
 
   const hArm = hunterFormArmor(t) && !h.ultFinal && !h.ultHit;   // HUNTER (Legendary / Legendary 3): an ARMOR charge soaks it
   if (hArm) { t.hArmor--; t.hArmorT = 0; }
@@ -12140,6 +12181,8 @@ function stepGrab(f, a, dt) {
       startClash(f, t, 'grab', 'grab');
       return;
     }
+    // PERFECT BLOCKED: a shield pressed right as the hands arrive stops a grab too (a held shield still doesn't)
+    if (t.shielding && t.shieldAge <= PARRY_WINDOW && parryRoll(t)) { perfectBlock(t, { fighter: f }, gx, gy); return; }
     // Caught! (shields don't stop grabs)
     t.shielding = false;
     t.face = -f.face;
@@ -12720,6 +12763,13 @@ function stepFlyDash(f, a, dt) {
 //  Block within PARRY_WINDOW seconds of a hit landing: no shield damage, the attacker staggers,
 //  and you instantly fire your counter attack. Projectiles get reflected back instead.
 // =====================================================================
+// (just the perfect block's flash and sound - for a hit that's part of a cutscene, where nobody gets staggered)
+function perfectBlockFx(def, hx, hy) {
+  def.parryFlash = 0.6; if (!playPerfectShield()) sfx.parry(); if (soundOn && actx) smashClip('parry', 0.75);
+  burst(hx, hy, ['#ffd23f', '#fff3a8', '#ffffff'], 34, 0, Math.PI, 700, { grav: 200 }); ring(def.x, def.y - 40);
+  painTexts.push({ x: def.x, y: def.y - 150, t: 0.9, max: 0.9, text: 'PERFECT BLOCK!', big: true });
+  hitstop = Math.max(hitstop, 0.15);
+}
 function perfectBlock(def, src, hx, hy) {
   def.parryFlash = 0.6;
   if (!playPerfectShield()) sfx.parry();      // your Smash perfect shield sound (synth fallback if it isn't loaded)
@@ -12732,6 +12782,16 @@ function perfectBlock(def, src, hx, hy) {
   particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.2, max: 0.2, r: 30, type: 'impact' });
   ring(def.x, def.y - 40);
 
+  if (src.shot && (src.beam || src.shot.kind === 'beam')) {   // a BEAM (the Kamehameha - even the ultimate one): DISSIPATED
+    const s = src.shot;
+    s.life = 0; s.len = Math.min(s.len || 0, Math.abs((def.x - s.x)));
+    burst(hx, hy, [s.color || '#9be7ff', '#ffffff'], 40, 0, Math.PI, 800, { grav: 0 }); ring(hx, hy);
+    painTexts.push({ x: def.x, y: def.y - 150, t: 0.7, max: 0.7, text: 'DISSIPATED!', big: true });
+    const o = s.owner;
+    if (o && fighters.includes(o) && o.respawnTimer <= 0 && o.action && ['attack', 'ultBeam'].includes(o.action.type)) { o.action = { type: 'parried', t: 0, dur: PARRY_STUN }; o.comboTimer = 0; }
+    def.shielding = false; def.action = null; def.opening = PARRY.opening;
+    return;
+  }
   if (src.shot) {                                  // reflect the projectile back, faster and stronger
     // (no Tenma Kiai blast any more - perfect blocks never counter-attack; the shot just flies back)
     const s = src.shot;
@@ -15619,7 +15679,9 @@ function stepLeeLotus(f, a, dt) {
   } else {                                                         // 52.75: PRIMARY LOTUS - and the dust
     vx = cx - side * 40;
     if (ev('lotus')) {
-      hitV(C.dmg.lotus, 1, true); a.craters.push({ x: vx, y: gy, r: 170 });
+      if (!v.minion && cleanParryPress(v, 0.18)) { a.lotusParried = true; perfectBlockFx(v, vx, gy - 40); }   // PERFECT BLOCKED: the slam does nothing to them
+      else hitV(C.dmg.lotus, 1, true);
+      a.craters.push({ x: vx, y: gy, r: 170 });
       shake = 44; camPunch = 1; impactFrame = 0.25; impactAt = { x: vx, y: gy - 30, ang: 0, all: true, focus: true, invert: true };
       sfx.huge(); sfx.slam(); sfx.clash(true); dust(vx, gy, 60, 5); ring(vx, gy - 10); ring(vx, gy - 50);
       burst(vx, gy - 10, ['#8a7d6a', '#5a5246', C.dust, '#ffffff'], 80, -Math.PI / 2, 1.5, 1300, { grav: 1200 });
@@ -15642,7 +15704,7 @@ function stepLeeLotus(f, a, dt) {
     if (T >= C.len) {                                              // the clip's over: they're LAUNCHED out of the crater
       stopLeeSong(f);
       v.action = null; f.action = { type: 'land', t: 0, dur: 0.3 };
-      knock(v, C.final, -side || 1, pw, v.x, v.y - 40);
+      if (!a.lotusParried) knock(v, C.final, -side || 1, pw, v.x, v.y - 40);
       dust(vx, gy, 40, 4); shake = Math.max(shake, 24); sfx.huge();
       return;
     }
@@ -16018,7 +16080,8 @@ function stepSsgCut(f, a, dt) {
     a.slammed = true;
     v.action = null; v.x = cx; v.y = STAGE.y; v.ground = true; v.invuln = 0;
     f.x = cx - f.face * 10; f.y = STAGE.y;
-    knock(v, C.slam, f.face || 1, powerOf(f), v.x, v.y - 30);
+    if (!v.minion && cleanParryPress(v, 0.18)) perfectBlockFx(v, v.x, v.y - 40);   // PERFECT BLOCKED: no damage, no launch
+    else knock(v, C.slam, f.face || 1, powerOf(f), v.x, v.y - 30);
     f.damage += C.selfDmg; f.hitFlash = 0.15;                    // (it hurts him too)
     impactFrame = 0.26; impactAt = { x: cx, y: STAGE.y - 20, ang: Math.PI / 2, all: true, focus: true, invert: true };
     hitstop = Math.max(hitstop, 0.38); shake = 60; camPunch = 1; sfx.huge(); sfx.slam(); sfx.clash(true); sfx.ko();
@@ -17203,6 +17266,7 @@ function updateBeam(s, dt) {
     } else if (s.len > tip0) {                                       // still reaching out: does it run into anyone?
       let stop = s.len, who = null;
       for (const t of fighters) {
+        if (t.minion) continue;                                      // (clones don't stop it - it goes straight through them)
         const sp = span(t); if (!sp || sp[1] <= tip0 || sp[0] > s.len) continue;
         const at = Math.max(tip0, sp[0] + into(t)); if (at < stop) { stop = at; who = t; }
       }
@@ -17236,7 +17300,8 @@ function updateBeam(s, dt) {
       let h = last ? s.final : s.tick;
       if (last && s.final.lanceKO && s.startDmg.get(t) >= KAME_KO_AT) h = { ...s.final, koAt: 0.001 };   // (a one-hit KO only at 130%+)
       if ((o.action && o.action.type === 'ultBeam') || s.ultHit) h = { ...h, ultHit: true };   // (the ult's beam: no meter for being hit by it)
-      if (applyHit(t, h, s.dir, s.mult, s.vdir ? t.x : t.x - s.dir * 10, s.vdir ? t.y - 50 : s.y)) markKi(o, t, s);   // Lance's ki marks them (once per beam)
+      if (applyHit(t, h, s.dir, s.mult, s.vdir ? t.x : t.x - s.dir * 10, s.vdir ? t.y - 50 : s.y, { shot: s, beam: true })) markKi(o, t, s);   // Lance's ki marks them (once per beam)
+      if (s.life <= 0) break;                                        // (perfect blocked: it's gone)
     }
   }
   return s.life <= 0;
@@ -17754,6 +17819,10 @@ function startAttack(f, inp, btn) {
   // SEVON: neutral K while his ODM hook is stuck in someone = REEL IN (then again = the LEVI SPIN)
   if (btn === 'spc' && f.look && f.look.odm && f.odmLedge && !inp.up) { f.spcBuf = 0; f.action = { type: 'odmLedge', t: 0 }; sfx.whoosh(true); return; }   // dangling: K = reel up onto the ledge
   if (btn === 'spc' && f.look && f.look.odm && f.odm && !inp.dir && !inp.up && !inp.down && odmAdvance(f)) { f.spcBuf = 0; return; }
+  if (f.ground && !f.minion && !inp.dir && fighters.slice(0, REAL_FIGHTERS).filter(o => !o.out).length === 2) {   // 1v1: face them
+    const o = fighters.slice(0, REAL_FIGHTERS).find(q => q !== f && !q.out && q.respawnTimer <= 0);
+    if (o && Math.abs(o.x - f.x) > 4) f.face = Math.sign(o.x - f.x);
+  }
   let key = chooseMove(f, inp, btn);
   if (f.noScythe && f.char === 'COLBY' && btn === 'atk' && f.ground && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(jab|[pk]1)$/.test(key)) key = 'jajanken';   // (bare Colby's neutral J: JAJANKEN)
   // COLBALIAS: summoning a shadow clone is INSTANT - no attack animation, he keeps running/jumping at full
@@ -18543,7 +18612,7 @@ function stepAction(f, inp, dt) {
     if (Math.random() < dt * 8) burst(f.x, f.y - f.h - 6, ['#ffd23f'], 1, Math.PI / 2, 0.8, 90, { grav: -40 });
     // STAGGERED - but not helpless: ONE shield press = a split-second parry stance. Time it right as their punish
     // lands and it's YOUR perfect block (and their opening is gone). Mistime it and you're stuck a little longer.
-    if (inp.blockTap && !a.tried && a.t < a.dur - 0.04) {
+    if (inp.blockTap && !a.tried && a.t < a.dur - 0.04 && (f.blockGap ?? 99) >= PARRY_SPAM) {
       f.action = { type: 'reparry', t: 0, dur: PARRY.reWindow, rest: Math.max(0.05, a.dur - a.t) + PARRY.rePenalty };
       return;
     }
@@ -18649,7 +18718,7 @@ function freeControl(f, inp, dt) {
       return;
     }
     if (inp.blockHeld && f.jumpBuf <= 0 && f.shieldHP > 0 && f.slide <= 0) {
-      f.shieldAge = f.prevShield ? f.shieldAge + dt : (inp.blockTap || f.controller === 'dummy' ? 0 : 99);   // how long since the PRESS (for perfect blocks) - a shield that comes up from block being HELD (out of another move...) can't perfect block
+      f.shieldAge = f.prevShield ? f.shieldAge + dt : ((inp.blockTap && (f.blockGap ?? 99) >= PARRY_SPAM) || f.controller === 'dummy' ? 0 : 99);   // (a MASHED press: no perfect block)   // how long since the PRESS (for perfect blocks) - a shield that comes up from block being HELD (out of another move...) can't perfect block
       f.shielding = true;
       f.shieldHP -= SHIELD_DRAIN * dt;
       f.vx = approach(f.vx, 0, FRICTION * dt);
@@ -18757,6 +18826,7 @@ function updateFighter(f, inp, dt) {
   f.lastInp = inp;                                                // (things he controls from afar - e.g. Colby's Thunder Bolt - read it)
   f.jumpBuf  = inp.jumpTap  ? BUFFER : Math.max(0, f.jumpBuf - dt);
   f.dodgeBuf = inp.blockTap ? BUFFER : Math.max(0, f.dodgeBuf - dt);
+  if (inp.blockTap) { f.blockGap = time - (f.lastBlockTap ?? -99); f.lastBlockTap = time; }   // (how long since the last press - mashing can't perfect block)
   f.dirBuf   = inp.dirTap   ? BUFFER : Math.max(0, f.dirBuf - dt);
   // C-stick flick: remember its direction until the attack actually comes out (it may be buffered)
   if (inp.cFlick) f.cFlick = { ...inp.cFlick, t: C_STICK.buffer };
@@ -20210,6 +20280,8 @@ function updateSim(dt) {
           if (f.strikeClone && f.owner && t.damage > d0) gainDemon(f.owner);  // (his J-string clones' hits count as his)
           if (demonBoost > 1) hellBurst(hx, hy, 20, 550);
           // Colby's TIME meter fills up as he lands hits
+          // CAPTAIN HEEL: landing hit after hit WITHOUT getting hit himself pumps up the crowd - more HYPE the longer the streak
+          if (f.look && f.look.hype && t.damage > d0 && !t.minion) { f.hypeStreak = (f.hypeStreak || 0) + 1; f.hype = Math.min(100, (f.hype || 0) + 2 + 1.5 * Math.min(f.hypeStreak, 8)); if (f.hypeStreak >= 4 && f.hypeStreak % 4 === 0) painTexts.push({ x: f.x, y: f.y - 150, t: 0.6, max: 0.6, text: f.hypeStreak + ' IN A ROW!', big: false }); }
           if (f.look && f.look.timeStop && t.damage > d0 && !(t.action && t.action.type === 'timeStop')) f.timeMeter = Math.min(100, (f.timeMeter || 0) + TIME_STOP.gain);   // (not off someone frozen in time)
           // a clean hit (not blocked/dodged): some moves drop the game into slow motion when they land
           const clean = t.action && t.action.type === 'hitstun' && t.action.t === 0;
@@ -25166,9 +25238,9 @@ const COLBY_SECTIONS = {
     ['AIR BACK K', 'Backhand Reap', 'A flat swing round to behind him.'],
     ['AIR DOWN K', 'Grave Drop', 'Raises the scythe, then dives with it plunged straight down (spike).'] ] },
   bare: { title: 'BARE-HANDED (AFTER THROWING THE SCYTHE)', rows: [
-    ['J J J...', 'Jab > Blink: Back of the Head', 'A punch-and-kick string - he blinks round them for the back-of-the-head shot.'],
+    ['J (GROUND)', 'Jajanken', 'The stance - his aura gathers in his fist, the longer the harder. LEFT / RIGHT = a big hop that way. Then J = ROCK (a giant punch), K = PAPER (a projectile), BLOCK = SCISSORS (a huge rising slash that cuts projectiles out of the air).'],
     ['SIDE J, J, J', 'Flying Spin Kicks', 'Three flying spinning kicks, each one carrying him forward off his feet. Press J again for the next - the third sends them flying.'],
-    ['UP J', 'Thunder Bolt', 'A ball of lightning shot straight up - then STEER it anywhere with the stick while he concentrates (it turns fast). Hits once. J or block lets it go.'],
+    ['UP J', 'Thunder Bolt / Thunder Headbutt', 'A ball of lightning shot straight up - he is HELD where he fired it while he STEERS it with the stick. Steer it back into HIMSELF and it fires him off as a massive flying headbutt the way it was going (his recovery too). J or block lets it go.'],
     ['DOWN J', 'Inferno Axe Kick', 'A blazing axe kick.'],
     ['RUN + J', 'Superman Punch', 'Leaps into a flying punch.'],
     ['AIR J / FWD / BACK / UP / DOWN', 'Split Kick Spin / Air Dash Kick / Back Spin Kick / Dragon Bicycle / Meteor Punch', 'His bare-handed airs - Meteor Punch spikes.'],
@@ -25339,10 +25411,10 @@ const MOVESETS = {
       ['J J J J', 'Clone Catapult > Slingshot Sweep > Clone Vault > Twin Crush', 'He and his clones throw each other around: a clone is hurled into a flying kick, a clone shoves him into a slide, a clone vaults over them into an axe kick - then TWO clones punch their head from both sides at once.'],
       ['SIDE J (HOLD)', 'Red Chidori', 'Charge red lightning, then a clone spins him and HURLS him. On the ground he skims the floor and stops at the edge; in the air it is a huge rising throw. A hit IMPALES them right where it catches them - then he swings them up on his arm and THROWS them.'],
       ['UP J', 'Clone Launch Headbutt', 'A clone crouches, he steps into its hands and it heaves him skyward into a giant headbutt.'],
-      ['DOWN J', 'Twin Axe', 'Two clones pop in high on either side of him and come crashing down with AXE KICKS - one on each side.'],
+      ['DOWN J', 'Twin Axe', 'Three clones pop in high - one on either side of him and one right over the middle - and come crashing down with AXE KICKS.'],
       ['RUN + J', 'Demon Scissors', 'A flying flip that comes down on them legs-first, scissoring.'] ] },
     { title: 'AIR J', rows: [
-      ['AIR J', 'Clone Flail', 'Summons a clone, grabs its ankle and swings it a full 360 round himself like a weapon.'],
+      ['AIR J', 'Twin Spin', 'A clone pops in facing him, they grab hands and whip each other round two full turns - both of them hitting.'],
       ['AIR FWD J', 'Jumping Knuckle', 'A big overhand punch hammered forward.'],
       ['AIR BACK J', 'Devil Back Kick', 'A straight mule kick behind him.'],
       ['AIR UP J', 'Clone Swipe', 'Swings a clone\'s body in one big arc over his head.'],
