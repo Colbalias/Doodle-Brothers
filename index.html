@@ -8625,18 +8625,44 @@ function drawHellcat(hip, shoulder, f, fig, opts, layer, pz) {
   }
   ctx.restore(); ctx.lineWidth = w0;
 }
-function drawHellcatHead(head, f, opts) {
+function drawHellcatHead(head, f, opts, look = {}) {
   const tint = opts.tint, sk = sketch, col = c => tint || (sk ? '#333333' : c);
-  ctx.save();
-  ctx.fillStyle = col(HL.black);                                                             // the hood: over the top and back
-  ctx.beginPath(); ctx.arc(head.x - f * 1.5, head.y - 1, 15, Math.PI * (f > 0 ? 0.62 : -0.38), Math.PI * (f > 0 ? 2.12 : 1.12), f < 0); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(head.x - f * 12, head.y + 2); ctx.lineTo(head.x - f * 20, head.y + 20); ctx.lineTo(head.x - f * 6, head.y + 12); ctx.closePath(); ctx.fill();   // (its tail down her back)
-  if (!tint && !sk) { ctx.strokeStyle = HL.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(head.x - f * 1.5, head.y - 1, 13, Math.PI * (f > 0 ? 1.2 : 1.8), Math.PI * (f > 0 ? 1.85 : 1.15), f < 0); ctx.stroke(); }   // red lining
-  ctx.fillStyle = col(HL.gold);                                                              // THE MASK: gold, over her face
-  ctx.beginPath(); ctx.ellipse(head.x + f * 4.5, head.y + 1.5, 7.5, 10, f * 0.15, 0, Math.PI * 2); ctx.fill();
+  const X = dx => head.x + f * dx, Y = dy => head.y + dy;
+  ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // THE HOOD: snug over the crown and the back of her head, two small cat-ear points on top, its tail hanging down her back
+  ctx.fillStyle = col(HL.black);
+  ctx.beginPath();
+  ctx.moveTo(X(7), Y(9));                                         // the opening's edge, at her jaw...
+  ctx.quadraticCurveTo(X(11.5), Y(0), X(8), Y(-9));               // ...up round her face
+  ctx.lineTo(X(6.5), Y(-17.5));                                   // front ear point
+  ctx.lineTo(X(1.5), Y(-13));
+  ctx.lineTo(X(-4.5), Y(-18.5));                                  // back ear point
+  ctx.lineTo(X(-8.5), Y(-11));
+  ctx.quadraticCurveTo(X(-15.5), Y(-4), X(-13.5), Y(8));          // round the back of her head
+  ctx.quadraticCurveTo(X(-16), Y(17), X(-20), Y(25));             // the tail, down her back
+  ctx.lineTo(X(-8), Y(16));
+  ctx.quadraticCurveTo(X(0), Y(15), X(7), Y(9));
+  ctx.closePath(); ctx.fill();
   if (!tint && !sk) {
-    ctx.fillStyle = HL.visor; ctx.fillRect(head.x + f * 2 - (f < 0 ? 9 : 0), head.y - 3, 9, 3.2);   // the visor
-    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(head.x + f * 6, head.y + 5, 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = look.body || HL.red; ctx.lineWidth = 1.8;   // the lining round the opening (her colour)
+    ctx.beginPath(); ctx.moveTo(X(6), Y(9.5)); ctx.quadraticCurveTo(X(10), Y(0), X(7.2), Y(-9)); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.2; // a sheen across the crown
+    ctx.beginPath(); ctx.moveTo(X(-9), Y(-8)); ctx.quadraticCurveTo(X(-3), Y(-13), X(4), Y(-11)); ctx.stroke();
+  }
+  // THE MASK: a gold faceplate filling the opening - a flat brow, an angled nose line, a narrow chin
+  ctx.fillStyle = col(HL.gold);
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(-8)); ctx.lineTo(X(7.5), Y(-8)); ctx.lineTo(X(11.8), Y(1)); ctx.lineTo(X(9.5), Y(6)); ctx.lineTo(X(6), Y(10.5)); ctx.lineTo(X(0.5), Y(9.5));
+  ctx.quadraticCurveTo(X(-2), Y(0), X(0), Y(-8)); ctx.closePath(); ctx.fill();
+  if (!tint && !sk) {
+    ctx.fillStyle = '#a8761c';                                    // the far side of it in shadow
+    ctx.beginPath(); ctx.moveTo(X(0), Y(-8)); ctx.lineTo(X(3), Y(-8)); ctx.lineTo(X(3.5), Y(10)); ctx.lineTo(X(0.5), Y(9.5)); ctx.quadraticCurveTo(X(-2), Y(0), X(0), Y(-8)); ctx.fill();
+    ctx.strokeStyle = '#fff1b8'; ctx.lineWidth = 1;               // a highlight down the nose line
+    ctx.beginPath(); ctx.moveTo(X(8), Y(-6.5)); ctx.lineTo(X(11), Y(1)); ctx.stroke();
+    ctx.strokeStyle = HL.visor; ctx.lineWidth = 2.2; ctx.shadowColor = HL.visor; ctx.shadowBlur = 6;   // the VISOR: a glowing slit
+    ctx.beginPath(); ctx.moveTo(X(3.8), Y(-3.2)); ctx.lineTo(X(10.2), Y(-1.6)); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(90,55,0,0.55)'; ctx.lineWidth = 0.9; // a seam at the mouth
+    ctx.beginPath(); ctx.moveTo(X(10.4), Y(2.6)); ctx.lineTo(X(5.5), Y(4.8)); ctx.stroke();
   }
   ctx.restore();
 }
@@ -10021,7 +10047,8 @@ const CHAR_NAMES = Object.keys(CHARACTERS);
 // Lance's other gi: dark blue-green, with a light green belt (on his purple skins and his dark blue one)
 const LANCE_TEAL_GI = { main: '#1d5c63', dark: '#123e44', blue: '#8fe38a' };
 const CHAR_ALTS = {
-  LANCE:     { name: 'PURPLE', swatch: '#7b3fd1', look: { body: '#7b3fd1', gi: LANCE_TEAL_GI } },
+  LANCE:     [{ name: 'PURPLE', swatch: '#7b3fd1', look: { body: '#7b3fd1', gi: LANCE_TEAL_GI } },
+              { name: 'PURPLE CLASSIC', swatch: '#9b5ae8', look: { body: '#7b3fd1', gi: { main: '#f2761e', dark: '#c4560f', blue: '#5a2aa8' } } }],   // (the old orange gi)
   SEVON:     { name: 'BLUE RANGER', swatch: '#1f55d6', look: { body: '#1f55d6', haori: false, flameHair: false, ranger: true } },
   COLBY:     [{ name: 'WHITE', swatch: '#ececec', look: { body: '#ececec', headColor: '#ececec' } }, { name: 'GREEN', swatch: '#2ef06a', look: { body: '#2ef06a', headColor: '#2ef06a' } },
               { name: 'RED', swatch: '#c4271f', look: { body: '#c4271f' } }],   // (RED: his old all-red look, still in Lee's gear)   // (GREEN: bright)
@@ -10046,6 +10073,8 @@ for (const ch of Object.keys(CHARACTERS)) {
   CHAR_ALTS[ch] = [...A0, ...extra];
 }
 for (const A of CHAR_ALTS.LANCE) if (A.name === 'DARK') A.look.gi = LANCE_TEAL_GI;   // (the dark blue skin wears it too)
+{ const L = CHAR_ALTS.LANCE, d = L.find(A => A.name === 'DARK');      // ...and the dark blue skin in the CLASSIC orange gi, as its own skin
+  if (d) L.push({ name: 'DARK CLASSIC', swatch: shade(d.swatch, 1.25), look: { body: d.look.body, gi: { ...CHARACTERS.LANCE.look.gi } } }); }
 const altLooks = {};
 const altList = ch => { const a = CHAR_ALTS[ch]; return !a ? [] : Array.isArray(a) ? a : [a]; };   // (a fighter can have SEVERAL alt skins)
 function lookFor(ch, alt) {
@@ -22740,7 +22769,7 @@ function drawFigure(fig, opts = {}) {
 
   if (S && S.depth >= -8) drawScythe3D(S, opts.tint);    // scythe is in front of his body
 
-  if (look.hellcat) drawHellcatHead(head, f, opts);                 // HAILIE: the hood and the gold mask
+  if (look.hellcat) drawHellcatHead(head, f, opts, look);                 // HAILIE: the hood and the gold mask
   // Near arm last, so the gripping hand sits on top of the shaft
   ctx.lineWidth = ARM_W;
   ctx.strokeStyle = main;
