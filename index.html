@@ -567,10 +567,11 @@ const AIR_DODGES = 2;      // (old limit, no longer used - air dodges now spend 
 // Air dodge ("Z vanish") allowed while you have a blue dodge dot left: up to AIR_DODGE_MAX (5) in a row
 const AIR_DODGE_MAX = 5;
 // (per character: look.airDodges / look.groundDodges override them - Colbalias spends dots on his clones, so he gets more)
-const airDodgeMax = f => ((f && f.look && f.look.airDodges) || AIR_DODGE_MAX) + (f && f.ui && f.transformed ? 1 : 0)   // (Ultra Instinct: +1)
-                         + (f && f.look && f.look.rage ? Math.min(f.hForm || 0, 5 - f.look.airDodges) : 0)   // (HUNTER: +1 per rage form, 5 at most)
+const Z_BONUS = 1;                                  // (+1 Z vanish for everyone, in the air and on the ground)
+const airDodgeMax = f => ((f && f.look && f.look.airDodges) || AIR_DODGE_MAX) + Z_BONUS + (f && f.ui && f.transformed ? 1 : 0)   // (Ultra Instinct: +1)
+                         + (f && f.look && f.look.rage ? Math.min(f.hForm || 0, 5 - f.look.airDodges + Z_BONUS) : 0)   // (HUNTER: +1 per rage form, 5 at most)
                          + (f && f.swapBonus || 0);   // (SWAPPED by Colbalias's Demon's Gaze: +3 till you're back on the stage or KO'd - see gazeSwap)
-const dodgeFree = f => ((f && f.look && f.look.groundDodges) || DODGE_FREE) + (f && f.ui && f.transformed ? 1 : 0);
+const dodgeFree = f => ((f && f.look && f.look.groundDodges) || DODGE_FREE) + Z_BONUS + (f && f.ui && f.transformed ? 1 : 0);
 const MOVE_REPEAT = { from: 3 };                    // (the 3rd use of the same move in a row, and every one after, costs a Z vanish dot - see startAttack)
 function canAirDodge(f) { return f.dodgeCount < airDodgeMax(f); }
 const WAVEDASH_FRICTION = 0.3;
@@ -578,6 +579,7 @@ const WAVEDASH_FRICTION = 0.3;
 // Dodge fatigue
 const DODGE_FREE = 4;        // ground dodges before fatigue kicks in (air dodges get AIR_DODGE_MAX)
 const DODGE_RECOVER = 0.6;
+const DODGE_RECOVER_TIRED = 0.68;   // (TIRED - past your Z vanish dots - each dot comes back a touch slower)
 const FATIGUE_MAX = 3;
 const FATIGUE_SLOWER = 0.1;
 const FATIGUE_SHORTER = 0.05;
@@ -14746,7 +14748,7 @@ function drawHunterL3Cut(f) {
   const a = f.action, C = H_L3_CUT, T = a.songT, ph = hL3Phase(T), S = hScale(f);
   const P = toScreen(f.x, f.y - 55 * S), Z = camZ(), now = performance.now() / 1000, sc = sctx;
   sc.save();
-  const fill = (col) => { sc.save(); if (liveCutDraw) sc.globalAlpha *= 0.35; sc.fillStyle = col; sc.fillRect(-OX, -OY, SW, SH); sc.restore(); };   // (live: just a tint over the fight)
+  const fill = (col) => { sc.save(); if (liveCutDraw) sc.globalAlpha *= 0.15; sc.fillStyle = col; sc.fillRect(-OX, -OY, SW, SH); sc.restore(); };   // (live: just a tint over the fight)
   // the green FLOODING the screen with his power (heaviest in the chaos)
   const flood = { scream: 0.22 + 0.06 * Math.sin(T * 25), chaos: 0.42 + 0.08 * Math.sin(T * 30), pillar: 0.18, orb: 0.12, dome: 0.06, after: 0.25 * clamp(1 - (T - C.flash1) / 1.5, 0, 1) }[ph] || 0;
   if (flood > 0) fill(`rgba(134,230,60,${flood})`);
@@ -16110,7 +16112,7 @@ function drawSsj2Backdrop(f, c) {
   const a = f.action, T = a.songT, C = SSJ2_CUT, now = performance.now() / 1000;
   const fade = clamp(T / 0.8, 0, 1) * clamp((C.len - T) / 0.9, 0, 1);
   c.save();
-  c.globalAlpha = 0.6 * fade; c.fillStyle = '#0a0302'; c.fillRect(-OX - 60, -OY - 60, SW + 120, SH + 120);   // (the sky going dark)
+  c.globalAlpha = 0.28 * fade; c.fillStyle = '#0a0302'; c.fillRect(-OX - 60, -OY - 60, SW + 120, SH + 120);   // (the sky going dark)
   const x0 = -80, y0 = H * 0.18, x1 = W + 80, y1 = H * 0.5, ang = Math.atan2(y1 - y0, x1 - x0), len = Math.hypot(x1 - x0, y1 - y0);
   if (T >= C.line) {
     const pLine = easeOut(clamp((T - C.line) / (C.lineDone - C.line), 0, 1));
@@ -17461,6 +17463,39 @@ function fatigued(f, base, free = dodgeFree(f)) {
   return d;
 }
 
+// Lance's / Hunter's TRANSFORMATIONS: nothing moves them while they power up (knockback, pushes, gravity, the stage...) -
+// they stay exactly where the transformation puts them. But they CAN Z vanish out of the spot (a short blink in any
+// direction, still transforming) to get somewhere better.
+const ROOT_TF = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'sgCut'];
+const rootedTf = f => !!(f.action && ROOT_TF.includes(f.action.type));
+function rootMark(f, a) { if (f.action === a) { a.rootX = f.x; a.rootY = f.y; } }
+const TF_VANISH = 260;
+function tfVanish(f, inp) {
+  const a = f.action;
+  let dx = inp.dir || 0, dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+  if (!dx && !dy) dx = f.face;
+  const L = Math.hypot(dx, dy); dx /= L; dy /= L;
+  f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;
+  ghosts.push({ fig: figureOf(f), life: 0.35, max: 0.35, color: '#ffffff' });
+  burst(f.x, f.y - 45, [f.energy, '#ffffff'], 14, 0, Math.PI, 420, { grav: 0 });
+  const nx = clamp(f.x + dx * TF_VANISH, BLAST.left + 120, BLAST.right - 120);
+  let ny = clamp(f.y + dy * TF_VANISH, BLAST.top + 160, BLAST.bottom - 200);
+  if (nx > STAGE.x && nx < STAGE.x + STAGE.w && ny > STAGE.y && f.y <= STAGE.y + 1) ny = STAGE.y;   // (never into the stage)
+  f.x = nx; f.y = ny; f.ground = ny === STAGE.y && nx > STAGE.x && nx < STAGE.x + STAGE.w; f.onPlatform = null;
+  if (a) { a.rootX = f.x; a.rootY = f.y; if (a.y0 !== undefined) a.y0 = f.y; if (a.x0 !== undefined) a.x0 = f.x; }
+  if (dx) f.face = dx > 0 ? 1 : -1;
+  sfx.vanish();
+}
+// ANY TRANSFORMATION (anyone's - a new form, a power-up, a comeback form): their Z vanish dots are all refilled
+function tfRefillCheck(f) {
+  const key = (f.transformed ? 1 : 0) + ':' + (f.lanceForm || 0) + ':' + (f.hForm || 0) + ':' + (f.ui ? 1 : 0) + ':' + (f.ssg ? 1 : 0) + ':' + (f.sage ? 1 : 0)
+            + ':' + (f.action && (ROOT_TF.includes(f.action.type) || f.action.type === 'uiTransform') ? f.action.type : '');
+  const was = f.tfKey; f.tfKey = key;
+  if (was === undefined || was === key) return;
+  const [t0, l0, h0, u0, g0, s0, c0] = was.split(':'), [t1, l1, h1, u1, g1, s1, c1] = key.split(':');
+  const up = (t1 === '1' && t0 !== '1') || +l1 > +l0 || +h1 > +h0 || (u1 === '1' && u0 !== '1') || (g1 === '1' && g0 !== '1') || (s1 === '1' && s0 !== '1') || (c1 && c1 !== c0);
+  if (up) { f.dodgeCount = 0; f.dodgeRecover = 0; f.airDodges = AIR_DODGES; }
+}
 function startDodge(f, dir, down, up) {
   if (f.odm) odmBreak(f);                         // Sevon: any dodge / Z vanish while tethered cuts the ODM line (ready to re-fire)
   f.dodgeBuf = 0; f.jumpBuf = 0; f.flip = 0; f.squat = 0;
@@ -18084,9 +18119,9 @@ function stepAction(f, inp, dt) {
   if (a.type === 'uiDash') return stepUiDash(f, a, dt);          // Lance: the Ultra Instinct dash
   if (a.type === 'kiCharge') return stepKiCharge(f, a, inp, dt);   // Lance: holding down K - the ki charge
   if (a.type === 'uiTransform') return stepUiTransform(f, a, dt);
-  if (a.type === 'ss1Cut') return stepSs1Cut(f, a, dt);
+  if (a.type === 'ss1Cut') { const r = stepSs1Cut(f, a, dt); rootMark(f, a); return r; }
   if (a.type === 'tsukuyomi') return stepTsukuyomi(f, a, dt);      // Colbalias: Tsukuyomi
-  if (a.type === 'sgCut') return stepSsgCut(f, a, dt);             // Lance: Super Saiyan God
+  if (a.type === 'sgCut') { const r = stepSsgCut(f, a, dt); rootMark(f, a); return r; }             // Lance: Super Saiyan God
   if (a.type === 'leeUlt') return stepLeeLotus(f, a, dt);          // Colby: Primary Lotus
   if (a.type === 'hGrindCut') return stepHunterGrindCut(f, a, dt);  // Hunter: Glacier Grind (Broly demolishes Goku)
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
@@ -18095,8 +18130,8 @@ function stepAction(f, inp, dt) {
   if (a.type === 'fxFrozen') { if (!a.by.action || a.by.action.type !== 'fxSac') { f.action = { type: 'hitstun', t: 0, dur: 0.5 }; } f.vx = f.vy = 0; return; }
   if (a.type === 'sgVictim') { if (!a.by.action || a.by.action.type !== 'sgCut') f.action = null; return; }
   if (a.type === 'tsukuVictim') { if (!a.by.action || a.by.action.type !== 'tsukuyomi') f.action = null; return; }        // Lance: the Super Saiyan moment
-  if (a.type === 'hL3Cut') return a.l2 ? stepHunterL2Cut(f, a, dt) : stepHunterL3Cut(f, a, dt);    // Hunter: the Legendary 3 cutscene
-  if (a.type === 'ssj2Cut') return stepSsj2Cut(f, a, dt);   // Lance: the Super Saiyan 2 cutscene   // Lance: Ultra Instinct awakening + teleport combo   // Sevon: summoning / releasing the Flame Dragon
+  if (a.type === 'hL3Cut') { const r = a.l2 ? stepHunterL2Cut(f, a, dt) : stepHunterL3Cut(f, a, dt); rootMark(f, a); return r; }    // Hunter: the Legendary 3 cutscene
+  if (a.type === 'ssj2Cut') { const r = stepSsj2Cut(f, a, dt); rootMark(f, a); return r; }   // Lance: the Super Saiyan 2 cutscene   // Lance: Ultra Instinct awakening + teleport combo   // Sevon: summoning / releasing the Flame Dragon
   if (a.type === 'shipUlt') return stepShipUlt(f, a, dt);
   if (a.type === 'kiBarrage') return stepKiBarrage(f, a, dt);    // Lance: It's My Turn's ki barrage
   if (a.type === 'ledge') return stepLedge(f, a, inp, dt);       // hanging off the edge of the stage
@@ -18590,6 +18625,8 @@ function updateFighter(f, inp, dt) {
   if (inp.spcTap) f.spcTapT = time;                                // (for catching the rival's thrown weapon)
   if (f.look && f.look.spd) noteStickCircle(f, inp);
   f.ultBuf   = inp.ultTap   ? BUFFER : Math.max(0, (f.ultBuf || 0) - dt);
+  tfRefillCheck(f);                                               // (a transformation: Z vanish dots refilled)
+  if (rootedTf(f) && inp.blockTap && canAirDodge(f)) tfVanish(f, inp);   // (transforming: a Z vanish blinks them somewhere better)
   if (f.look && f.look.odm) updateOdm(f, dt);                     // Sevon: the ODM hook in flight + the cable
   f.flyCD = Math.max(0, (f.flyCD || 0) - dt);
   if (f.kiMark) { f.kiMark.time -= dt; kiMarkTarget(f); }         // Lance's ki mark wears off
@@ -18656,7 +18693,7 @@ function updateFighter(f, inp, dt) {
   // Blue dodge dots only refill while you're on the ground (so you can't vanish forever in the air)
   if (!dodging && f.dodgeCount > 0 && (f.ground || f.halo > 0)) {
     f.dodgeRecover -= dt;
-    if (f.dodgeRecover <= 0) { f.dodgeCount--; f.dodgeRecover = DODGE_RECOVER; }
+    if (f.dodgeRecover <= 0) { f.dodgeCount--; f.dodgeRecover = f.dodgeCount > airDodgeMax(f) ? DODGE_RECOVER_TIRED : DODGE_RECOVER; }
   }
   if (!f.shielding) f.shieldHP = Math.min(SHIELD_MAX, f.shieldHP + SHIELD_REGEN * dt);
 
@@ -18799,6 +18836,7 @@ function updateFighter(f, inp, dt) {
     if (Math.abs(f.vx) > 300 && Math.random() < dt * 10) dust(f.x - f.face * 10, f.y, 1, 0.4);
   }
 
+  if (rootedTf(f) && f.action.rootX !== undefined) { f.x = f.action.rootX; f.y = f.action.rootY; f.vx = f.vy = 0; }   // (transforming: nothing moves them)
   if (stageDef.pit) pitWalls(f, dt);                    // THE PIT: the walls (and wall bounces)
   // Blast zones
   if (f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
@@ -23047,7 +23085,7 @@ function drawHUD() {
     const ty = tf.action && tf.action.type;
     const cb = ty === 'sgCut' || (ty === 'leeUlt' && tf.action.comeback);   // (the COMEBACKS too)
     if (ty !== 'hL3Cut' && ty !== 'ss1Cut' && ty !== 'ssj2Cut' && ty !== 'uiTransform' && !cb) continue;
-    liveCutDraw = true; sctx.save(); sctx.globalAlpha = (ty === 'hL3Cut' && !tf.action.l2) ? 1 : cb ? 0.6 : 0.35;
+    liveCutDraw = true; sctx.save(); sctx.globalAlpha = (ty === 'hL3Cut' && !tf.action.l2) ? 1 : cb ? 0.4 : 0.2;   // (kept light: the fight has to stay easy to see)
     if (ty === 'sgCut') drawSsgCut(tf); else if (ty === 'leeUlt') drawLeeCut(tf);
     else if (ty === 'hL3Cut') { if (tf.action.l2) drawHunterL2Cut(tf); else drawHunterL3Cut(tf); }
     else if (ty === 'ss1Cut') drawSs1Cut(tf);
