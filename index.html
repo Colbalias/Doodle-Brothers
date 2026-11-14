@@ -8598,6 +8598,61 @@ function drawMadara(hip, shoulder, f, fig, opts, main, layer, pz) {
 // COLBY - ROCK LEE'S CLOTHES: the jumpsuit (his body colour - ivory), orange leg warmers over the shins, blue sandals, the
 // red forehead-protector belt round his waist (its metal plate at the front) and a dark holster strapped to his thigh.
 const LEE = { warmer: '#f0962e', warmerD: '#c26a14', sandal: '#2f4fa8', belt: '#c8322a', plate: '#b9c0c6', holster: '#2d3a4a', strap: '#c8322a' };   // (the thigh strap: the same red as his belt)
+// HAILIE - WRAITH'S HELLCAT: black pants with red, boots fading GOLD to ORANGE, a black harness over a red top with a gold
+// buckle, a black hood with a red lining - and the GOLD mask with its visor
+function drawHellcat(hip, shoulder, f, fig, opts, layer, pz) {
+  const tint = opts.tint, sk = sketch, col = c => tint || (sk ? '#333333' : c);
+  const w0 = ctx.lineWidth; ctx.save(); ctx.lineCap = 'round';
+  if (layer === 'legs') {
+    const th = pz[0], bend = pz[1], mid = { x: hip.x + Math.sin(th) * LEG_UP * f, y: hip.y + Math.cos(th) * LEG_UP }, a2 = th - bend;
+    const end = { x: mid.x + Math.sin(a2) * LEG_LOW * f, y: mid.y + Math.cos(a2) * LEG_LOW };
+    const P = k => ({ x: lerp(mid.x, end.x, k), y: lerp(mid.y, end.y, k) });
+    ctx.strokeStyle = col(HL.black); ctx.lineWidth = 7.5;                                     // the pants
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(P(0.45).x, P(0.45).y); ctx.stroke();
+    ctx.strokeStyle = col(HL.gold); ctx.lineWidth = 8.5;                                     // the boots: gold...
+    ctx.beginPath(); ctx.moveTo(P(0.4).x, P(0.4).y); ctx.lineTo(P(0.72).x, P(0.72).y); ctx.stroke();
+    ctx.strokeStyle = col(HL.orange);                                                        // ...to orange at the foot
+    ctx.beginPath(); ctx.moveTo(P(0.72).x, P(0.72).y); ctx.lineTo(end.x, end.y); ctx.stroke();
+  } else {
+    const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO, px = -uy * f, py = ux * f;
+    const at = (o, up, fw) => ({ x: o.x + ux * up + px * fw, y: o.y + uy * up + py * fw });
+    ctx.strokeStyle = col(HL.black); ctx.lineWidth = 4;                                     // the harness strap, across her chest
+    const s1 = at(hip, TORSO - 2, -5), s2 = at(hip, 3, 5); ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+    ctx.strokeStyle = col(HL.black); ctx.lineWidth = 5; ctx.lineCap = 'butt';               // the belt...
+    const b1 = at(hip, 3, 6.5), b2 = at(hip, 3, -6.5); ctx.beginPath(); ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+    const bk = at(hip, 3, 4); ctx.fillStyle = col(HL.gold); ctx.fillRect(bk.x - 2.5, bk.y - 2.5, 5, 5);   // ...and its gold buckle
+    const sc = at(shoulder, 2, 0); ctx.fillStyle = col(HL.black); ctx.beginPath(); ctx.arc(sc.x, sc.y, 6, 0, Math.PI * 2); ctx.fill();   // the scarf at her neck
+  }
+  ctx.restore(); ctx.lineWidth = w0;
+}
+function drawHellcatHead(head, f, opts) {
+  const tint = opts.tint, sk = sketch, col = c => tint || (sk ? '#333333' : c);
+  ctx.save();
+  ctx.fillStyle = col(HL.black);                                                             // the hood: over the top and back
+  ctx.beginPath(); ctx.arc(head.x - f * 1.5, head.y - 1, 15, Math.PI * (f > 0 ? 0.62 : -0.38), Math.PI * (f > 0 ? 2.12 : 1.12), f < 0); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(head.x - f * 12, head.y + 2); ctx.lineTo(head.x - f * 20, head.y + 20); ctx.lineTo(head.x - f * 6, head.y + 12); ctx.closePath(); ctx.fill();   // (its tail down her back)
+  if (!tint && !sk) { ctx.strokeStyle = HL.red; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(head.x - f * 1.5, head.y - 1, 13, Math.PI * (f > 0 ? 1.2 : 1.8), Math.PI * (f > 0 ? 1.85 : 1.15), f < 0); ctx.stroke(); }   // red lining
+  ctx.fillStyle = col(HL.gold);                                                              // THE MASK: gold, over her face
+  ctx.beginPath(); ctx.ellipse(head.x + f * 4.5, head.y + 1.5, 7.5, 10, f * 0.15, 0, Math.PI * 2); ctx.fill();
+  if (!tint && !sk) {
+    ctx.fillStyle = HL.visor; ctx.fillRect(head.x + f * 2 - (f < 0 ? 9 : 0), head.y - 3, 9, 3.2);   // the visor
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(head.x + f * 6, head.y + 5, 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+// (in front of everyone) the RASENGAN spinning in Hailie's hand while she has one
+function drawHailieFx() {
+  for (const f of fighters) {
+    if (f.char !== 'HAILIE' || !(f.rasen > 0) || f.respawnTimer > 0) continue;
+    const c = f.rasen, x = f.x + f.face * 26, y = f.y - 58, r = 6 + 12 * c, now = time;
+    ctx.save();
+    ctx.fillStyle = sketch ? 'rgba(0,0,0,0.15)' : 'rgba(127,216,255,0.35)'; ctx.beginPath(); ctx.arc(x, y, r * 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = sketch ? '#ffffff' : '#bfeaff'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = sketch ? '#333333' : '#3aa0ff'; ctx.lineWidth = 1.6;
+    for (let k = 0; k < 3; k++) { const a0 = now * 14 + k * 2.1; ctx.beginPath(); ctx.arc(x, y, r * (0.45 + 0.18 * k), a0, a0 + 2.2); ctx.stroke(); }
+    ctx.restore();
+  }
+}
 function drawLee(hip, shoulder, f, fig, opts, main, layer, pz) {
   const C = LEE, tint = opts.tint, sk = sketch, col = c => tint || (sk ? (c === C.sandal || c === C.holster ? main : PAPER) : c);
   const w0 = ctx.lineWidth;
@@ -9506,6 +9561,281 @@ const HUNTER_DFIST  = { ...HUNTER_ULT_BASE, name: 'Dragon Fist', dragonFist: tru
 const hunterUltAction = (f, m) => ({ type: 'attack', key: 'ult', move: m, btn: 'ult', phase: 'active', t: 0, charge: 0, mult: 1, hit: new Set(), air: false, started: time });
 function hunterMouth(f) { const S = hScale(f); return { x: f.x + f.face * 9 * S, y: f.y - 96 * S }; }
 
+
+// =====================================================================
+//  HAILIE - Kunimitsu meets Wraith (her Hellcat skin): a knife, kunai she teleports to, a Rasengan, PORTALS, and the voices
+//  telling her when to phase out. Extremely light (easy to launch) but she hits HARD. One more jump than anyone, a touch higher.
+// =====================================================================
+const HL = { red: '#d4202a', black: '#141414', gold: '#e8b23a', orange: '#ff7a1a', visor: '#7fd8ff' };
+const H_KUNAI = { speed: 1650, life: 0.6, r: 9, stick: 6, upSpeed: 1750, upLife: 0.3 };
+const H_RASEN = { full: 1.1, rush: 980, rushT: 0.36, blue: ['#7fd8ff', '#ffffff', '#3aa0ff'] };
+const H_PORTAL = { r: 38, life: 15, cd: 0.5 };
+const H_PHASE = { dur: 4, dbl: 0.3 };
+const hPortalColor = f => (f && f.look && (f.look.portal || f.look.body)) || '#ff3a1a';
+const H_POSE = {
+  idle: pose({ lean: 0.2, bob: -12, legA: [0.75, 0.8], legB: [-0.6, 0.35], armA: [0.9, -1.5], armB: [0.5, -1.9] }),   // low, knife held forward
+  throwW: pose({ lean: -0.1, bob: -6, legA: [0.6, 0.5], legB: [-0.5, 0.2], armA: [-1.6, -0.8], armB: [0.6, -1.6] }),
+  throwS: pose({ lean: 0.35, bob: -8, legA: [0.8, 0.5], legB: [-0.7, 0.2], armA: [1.7, 0.05], armB: [-0.4, -1.2] }),
+  palmW: pose({ lean: -0.05, bob: -10, legA: [0.7, 0.7], legB: [-0.6, 0.3], armA: [1.2, -0.4], armB: [0.9, -1.4] }),
+  palm: pose({ lean: 0.5, bob: -12, legA: [1.0, 0.6], legB: [-0.9, 0.2], armA: [1.6, 0], armB: [-0.8, -0.6] }),
+  stab: pose({ lean: 0.55, bob: -8, legA: [0.9, 0.6], legB: [-0.8, 0.2], armA: [1.6, 0.02], armB: [-0.9, -0.5] }),
+  stab2: pose({ lean: 0.3, bob: -14, legA: [1.1, 0.9], legB: [-0.6, 0.3], armA: [2.2, 0.3], armB: [-1.2, -0.4] }),
+  chest: pose({ lean: 0.75, bob: -10, legA: [1.15, 0.6], legB: [-1.0, 0.15], armA: [1.58, 0], armB: [-1.3, -0.3] }),
+};
+function hHit(f, t, h, hx, hy) { return applyHit(t, h, Math.sign(t.x - f.x) || f.face, powerOf(f), hx ?? t.x, hy ?? t.y - 55, { fighter: f }); }
+// ---- the KUNAI: thrown (side K), it STICKS in whoever it hits; side K again = teleport to it (or to them, with a stab -
+//      then a grab that throws them at her nearest portal). Up K: thrown straight up, and she teleports to it.
+function hailieKunai(f) { return projectiles.find(q => q.kunai && q.owner === f && !q.up); }
+function hailieThrowKunai(f, up) {
+  const k = { owner: f, kunai: true, up, x: f.x + f.face * (up ? 8 : 30), y: f.y - (up ? 96 : 62), vx: up ? 0 : f.face * H_KUNAI.speed, vy: up ? -H_KUNAI.upSpeed : 0,
+              r: H_KUNAI.r, dmg: 3, base: 40, growth: 0, angle: 30, mult: powerOf(f), life: up ? H_KUNAI.upLife : H_KUNAI.life, kind: 'orb', color: HL.gold,
+              hit: new Set(), pierce: false, trail: [], grav: 0, trailLen: 6, stuck: null };
+  projectiles.push(k); sfx.whoosh(false);
+  return k;
+}
+function hTeleport(f, x, y) {
+  ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: hPortalColor(f) });
+  burst(f.x, f.y - 50, [hPortalColor(f), '#ffffff'], 12, 0, Math.PI, 380, { grav: 0 });
+  f.x = x; f.y = y; f.vx = 0; f.vy = Math.min(f.vy, 0); f.onPlatform = null;
+  f.ground = x > STAGE.x && x < STAGE.x + STAGE.w && Math.abs(y - STAGE.y) < 3;
+  burst(f.x, f.y - 50, [hPortalColor(f), '#ffffff'], 12, 0, Math.PI, 380, { grav: 0 }); sfx.vanish(0.8);
+}
+function hailieKunaiTp(f, k) {
+  const i = projectiles.indexOf(k); if (i >= 0) projectiles.splice(i, 1);
+  const t = k.stuck;
+  if (t && fighters.includes(t) && t.respawnTimer <= 0 && !t.out) { hailieStrike(f, t); return; }
+  hTeleport(f, k.x, k.y + (k.up ? 96 : 62));
+}
+// teleported onto them: a STAB... then a grab that throws them at her nearest portal (with a Rasengan in her hand: THAT instead)
+const H_STRIKE = { name: 'Kunai Strike', startup: 0, active: 0.32, endlag: 0.16, landLag: 0.1, noClash: true, hitboxes: [], wind: H_POSE.stab, strike: H_POSE.stab2,
+  step(f, a, dt) {
+    const t = a.target;
+    if (a.phase === 'active' && a.t >= 0.16 && !a.thrown) {
+      a.thrown = true;
+      if (t && fighters.includes(t) && t.respawnTimer <= 0 && Math.abs(t.x - f.x) < 120 && Math.abs(t.y - f.y) < 120 && !isIntangible(t)) hailiePortalThrow(f, t);
+    }
+    return false;
+  } };
+function hailieStrike(f, t) {
+  const dir = Math.sign(t.x - f.x) || f.face;
+  hTeleport(f, t.x - dir * 44, t.y); f.face = dir;
+  if ((f.rasen || 0) > 0) { rasenHit(f, t); f.action = { type: 'land', t: 0, dur: 0.2 }; return; }
+  hHit(f, t, { dmg: 6, base: 90, growth: 0, angle: 40 }, t.x - dir * 10, t.y - 60);
+  slashLine(t.x, t.y - 60, dir > 0 ? 0.3 : Math.PI - 0.3, 120, 0.12);
+  f.action = { type: 'attack', key: 'hStrike', move: H_STRIKE, btn: 'spc', phase: 'active', t: 0, charge: 0, mult: 1, hit: new Set(), air: !f.ground, started: time, startupMul: 1, target: t };
+}
+// throws them AT her nearest portal (they come out the other side) - no portal out: straight down into the ground
+function hailiePortalThrow(f, v) {
+  const P = f.hPortal, ends = P && P.b ? [P.a, P.b] : [];
+  let best = null, bd = Infinity;
+  for (const e of ends) { const d = Math.hypot(e.x - v.x, (e.y - 50) - (v.y - 50)); if (d < bd) { bd = d; best = e; } }
+  if (v.action && ['grabbed', 'thrown'].includes(v.action.type)) v.action = null;
+  if (best && bd > 30) {
+    const dx = best.x - v.x, dy = (best.y - 50) - (v.y - 50), deg = Math.atan2(-dy, Math.abs(dx)) * 180 / Math.PI;
+    knock(v, { dmg: 6, base: 1250, growth: 0, angle: deg }, Math.sign(dx) || f.face, 1, v.x, v.y - 50);
+    painTexts.push({ x: v.x, y: v.y - 140, t: 0.6, max: 0.6, text: 'THROUGH THE PORTAL!', big: false });
+  } else {
+    knock(v, { dmg: 8, base: 480, growth: 3, angle: -82 }, f.face, powerOf(f), v.x, v.y - 40);   // (no portal: SLAMMED into the ground)
+    dust(v.x, v.y, 12, 2);
+  }
+  sfx.whoosh(true); shake = Math.max(shake, 8);
+}
+// ---- the RASENGAN (neutral K): HOLD to charge it (and once it's full she can keep holding it); let go and she KEEPS it in her
+//      hand - even through a Z vanish. TAP K: she RUNS at them and drives it in (whatever charge she has). A kunai teleport with
+//      one in her hand hits with the Rasengan instead of the stab.
+function rasenHit(f, t) {
+  const c = Math.max(0.15, f.rasen || 0); f.rasen = 0;
+  const h = { dmg: 5 + 13 * c, base: 260 + 320 * c, growth: 2 + 5.5 * c, angle: 32 };
+  hHit(f, t, h, t.x, t.y - 55);
+  for (let k = 0; k < 3; k++) auraWaves.push({ x: t.x, y: t.y - 55, t: -k * 0.05, dur: 0.35, max: 60 + 60 * c, color: H_RASEN.blue[k % 3] });
+  burst(t.x, t.y - 55, H_RASEN.blue, 20 + 30 * c, 0, Math.PI, 500 + 500 * c, { grav: 0 }); ring(t.x, t.y - 55);
+  shake = Math.max(shake, 6 + 14 * c); hitstop = Math.max(hitstop, 0.04 + 0.1 * c);
+  if (c > 0.6) { painTexts.push({ x: t.x, y: t.y - 150, t: 0.8, max: 0.8, text: 'RASENGAN!', big: true }); impactFrame = Math.max(impactFrame, 0.07); impactAt = { x: t.x, y: t.y - 55, ang: 0, all: false, focus: true }; }
+  sfx.blast(); sfx.hit(1);
+}
+// ---- PORTALS (down K): places one end where she stands; down K again opens the other end where she is NOW and she steps
+//      through to the first. Anyone who touches an end comes out the other - and so do shots (even ultimate ones). 15s.
+function hailiePortal(f) {
+  const P = f.hPortal;
+  if (!P || P.b) {
+    f.hPortal = { a: { x: f.x, y: f.y }, b: null, life: H_PORTAL.life };
+    burst(f.x, f.y - 50, [hPortalColor(f), '#ffffff'], 16, 0, Math.PI, 300, { grav: 0 }); sfx.parry();
+    painTexts.push({ x: f.x, y: f.y - 140, t: 0.5, max: 0.5, text: 'PORTAL', big: false });
+  } else {
+    P.b = { x: f.x, y: f.y }; P.life = H_PORTAL.life;
+    f.portalCD = H_PORTAL.cd; hTeleport(f, P.a.x, P.a.y);
+  }
+}
+function updatePortals(dt) {
+  for (const g of fighters) if (g.portalCD > 0) g.portalCD -= dt;
+  for (const q of projectiles) if (q.portalCD > 0) q.portalCD -= dt;
+  for (const o of fighters) {
+    const P = o.hPortal; if (!P) continue;
+    P.life -= dt;
+    if (P.life <= 0 || o.respawnTimer > 0 || o.out || !fighters.includes(o)) { o.hPortal = null; continue; }
+    if (!P.b) continue;
+    const ends = [[P.a, P.b], [P.b, P.a]];
+    for (const g of fighters) {                                  // anyone who touches an end comes out the other
+      if (g.respawnTimer > 0 || g.portalCD > 0 || (g.action && ['grabbed', 'holding', 'ultSeq', 'ultVictim', 'thrown', 'whipped'].includes(g.action.type))) continue;
+      for (const [A, B] of ends) {
+        if (Math.hypot(g.x - A.x, (g.y - 45) - (A.y - 50)) > H_PORTAL.r + 8) continue;
+        burst(A.x, A.y - 50, [hPortalColor(o), '#ffffff'], 10, 0, Math.PI, 320, { grav: 0 });
+        g.x += B.x - A.x; g.y += B.y - A.y; g.onPlatform = null; g.ground = false; g.portalCD = H_PORTAL.cd;
+        burst(B.x, B.y - 50, [hPortalColor(o), '#ffffff'], 10, 0, Math.PI, 320, { grav: 0 }); sfx.vanish(0.5);
+        break;
+      }
+    }
+    for (const q of projectiles) {                               // ...and shots (beams and the big scenery ones aside)
+      if (q.portalCD > 0 || ['beam', 'dragon', 'disc', 'batarang'].includes(q.kind) || q.stuck) continue;
+      for (const [A, B] of ends) {
+        if (Math.hypot(q.x - A.x, q.y - (A.y - 50)) > H_PORTAL.r + (q.r || 6)) continue;
+        q.x += B.x - A.x; q.y += B.y - A.y; q.portalCD = H_PORTAL.cd;
+        if (q.trail) q.trail.length = 0;
+        burst(B.x, B.y - 50, [hPortalColor(o), '#ffffff'], 6, 0, Math.PI, 260, { grav: 0 });
+        break;
+      }
+    }
+  }
+}
+function drawPortals() {
+  for (const o of fighters) {
+    const P = o.hPortal; if (!P) continue;
+    const col = hPortalColor(o), fade = clamp(P.life / 1.2, 0, 1);
+    for (const e of [P.a, P.b]) {
+      if (!e) continue;
+      const cx = e.x, cy = e.y - 50, open = P.b ? 1 : 0.55, pulse = 1 + 0.06 * Math.sin(time * 6 + cx);
+      ctx.save(); ctx.globalAlpha = fade;
+      ctx.fillStyle = 'rgba(10,0,20,0.75)'; ctx.beginPath(); ctx.ellipse(cx, cy, 20 * open * pulse, 46 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.shadowColor = col; ctx.shadowBlur = sketch ? 0 : 14; ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.globalAlpha = fade * 0.6;
+      for (let k = 0; k < 3; k++) { const a0 = time * 3 + k * 2.1; ctx.beginPath(); ctx.ellipse(cx, cy, 12 * open, 32, 0, a0, a0 + 1.4); ctx.stroke(); }   // the swirl inside
+      ctx.restore();
+    }
+  }
+}
+// ---- INCORPOREAL (double-tap BLOCK): she phases out for 4s - nothing can touch her, but she can't attack (attacking pulls her
+//      straight back in). BLOCK again ends it early. TRANSFORMED: 3 automatic phase-outs when she's about to be hit.
+function hailiePhaseDodge(t, hx) {
+  if (t.char !== 'HAILIE' || !t.transformed || !((t.phaseDodges || 0) > 0)) return false;
+  t.phaseDodges--; t.invuln = Math.max(t.invuln, 0.3);
+  ghosts.push({ fig: figureOf(t), life: 0.35, max: 0.35, color: '#b06aff' });
+  painTexts.push({ x: t.x, y: t.y - 140, t: 0.5, max: 0.5, text: 'PHASED (' + t.phaseDodges + ')', big: false });
+  sfx.vanish(0.6);
+  return true;
+}
+const HAILIE_MOVES = {
+  counter: STICKMAN_MOVES.counter,
+  // NEUTRAL J: a 3-hit string - a DOWN strike, a SIDE slash, an UP slash that pops them up the same little bit at ANY percent
+  // (so she can always follow it). Every hit carries her forward.
+  jab: { name: 'Knife Drop', startup: 0.04, active: 0.06, endlag: 0.12, combo: 'jab2', lunge: 680, lungeFriction: 0.32,
+    hitboxes: [{ x: 34, y: -46, r: 26, dmg: 4, base: 110, growth: 0.3, angle: 55 }],
+    wind: pose({ lean: -0.1, armA: [2.6, 0.4], armB: [0.4, -1.6], legA: [0.5, 0.4], legB: [-0.5, 0.2] }),
+    strike: pose({ lean: 0.45, bob: -6, armA: [1.0, 0.1], armB: [0.2, -1.5], legA: [0.8, 0.5], legB: [-0.7, 0.2] }) },
+  jab2: { name: 'Side Slash', startup: 0.04, active: 0.07, endlag: 0.13, combo: 'jab3', lunge: 720, lungeFriction: 0.32,
+    hitboxes: [{ x: 42, y: -62, r: 28, dmg: 4, base: 130, growth: 0.3, angle: 45 }],
+    wind: pose({ lean: 0.1, armA: [-1.2, -0.6], armB: [0.5, -1.6], legA: [0.6, 0.4], legB: [-0.6, 0.2] }),
+    strike: pose({ lean: 0.4, armA: [1.7, 0.05], armB: [-0.6, -1.0], legA: [0.9, 0.5], legB: [-0.8, 0.1] }) },
+  jab3: { name: 'Rising Slash', startup: 0.05, active: 0.08, endlag: 0.2, lunge: 700, lungeFriction: 0.32,
+    hitboxes: [{ x: 34, y: -88, r: 32, dmg: 6, base: 560, growth: 0, angle: 84 }],
+    wind: pose({ lean: 0.4, bob: -10, armA: [0.4, 0.1], armB: [-0.8, -1.0], legA: [0.9, 0.9], legB: [-0.6, 0.3] }),
+    strike: pose({ lean: -0.2, bob: 2, armA: [2.9, 0.05], armB: [-1.0, -0.8], legA: [0.4, 0.2], legB: [-0.5, 0.3] }) },
+  dashAttack: { name: 'Slide Cut', startup: 0.06, active: 0.14, endlag: 0.24, lunge: 720, lungeFriction: 0.35,
+    hitboxes: [{ x: 30, y: -22, r: 30, dmg: 8, base: 380, growth: 5, angle: 70 }],
+    wind: pose({ lean: 0.3, bob: -10, armA: [0.4, -1.4], legA: [0.9, 0.9], legB: [-0.6, 0.3] }),
+    strike: pose({ lean: -0.7, bob: -30, legA: [1.5, 0.05], legB: [0.4, 1.6], armA: [1.2, 0.05], armB: [-0.9, -0.2] }) },
+  // SIDE J: PHASE DASH (Mythra) - she streaks across the stage, wide slashing arcs as she goes
+  sideGround: { name: 'Phase Dash', startup: 0.08, active: 0.42, endlag: 0.26, landLag: 0.12, travel: 1150, hover: true,
+    hitboxes: [{ x: 30, y: -60, r: 48, dmg: 3.5, base: 140, growth: 0, angle: 40, from: 0, to: 0.1, group: 0 },
+               { x: 30, y: -60, r: 48, dmg: 3.5, base: 140, growth: 0, angle: 40, from: 0.14, to: 0.24, group: 1 },
+               { x: 34, y: -60, r: 52, dmg: 7, base: 420, growth: 6, angle: 38, from: 0.28, to: 0.42, group: 2 }],
+    wind: pose({ lean: 0.2, bob: -14, legA: [1.0, 1.2], legB: [-0.6, 0.4], armA: [-1.4, -0.4], armB: [0.6, -1.4] }),
+    strike: pose({ lean: 0.65, bob: -10, legA: [1.1, 0.6], legB: [-1.1, 0.3], armA: [1.7, 0.05], armB: [-1.2, -0.4] }),
+    step(f, a, dt) {
+      if (a.phase === 'active') {
+        const k = Math.floor(a.t / 0.14);
+        if (k !== a.lastArc) { a.lastArc = k; const up = k % 2 ? 0.7 : -0.7; slashLine(f.x + f.face * 46, f.y - 60, f.face > 0 ? up : Math.PI - up, 220, 0.16); sfx.whoosh(false); }
+        if (Math.random() < dt * 50) ghosts.push({ fig: figureOf(f), life: 0.15, max: 0.15, color: HL.red });
+      }
+      return false;
+    } },
+  // UP J (ground): a spinning 360 with the knife
+  upGround: { name: 'Spin Slash', startup: 0.06, active: 0.18, endlag: 0.2, mirrorSpin: 0.045,
+    hitboxes: [{ x: 36, y: -54, r: 36, dmg: 8, base: 380, growth: 5, angle: 75 }, { x: -36, y: -54, r: 36, dmg: 8, base: 380, growth: 5, angle: 105 }],
+    wind: pose({ lean: 0.15, bob: -10, legA: [0.8, 0.9], legB: [-0.6, 0.4], armA: [-1.2, -0.4], armB: [0.6, -1.4] }),
+    strike: pose({ lean: 0, bob: -4, legA: [0.6, 0.3], legB: [-0.6, 0.3], armA: [1.6, 0], armB: [-1.6, 0] }) },
+  downGround: { name: 'Low Sweep', startup: 0.07, active: 0.12, endlag: 0.22,
+    hitboxes: [{ x: 40, y: -10, r: 26, dmg: 8, base: 340, growth: 5, angle: 30 }, { x: -40, y: -10, r: 26, dmg: 8, base: 340, growth: 5, angle: 150 }],
+    wind: pose({ bob: -16, lean: 0.3, legA: [0.9, 1.4], legB: [0.5, 1.2], armA: [0.5, -1.4], armB: [0.2, -1.6] }),
+    strike: pose({ bob: -28, lean: 0.1, legA: [1.5, 0.05], legB: [-1.5, 0.3], armA: [1.6, 0], armB: [-1.6, 0] }) },
+  // AIR J: a full FLIP with the knife round her
+  nair: { name: 'Flip Slash', startup: 0.05, active: 0.18, endlag: 0.14, landLag: 0.08, flip: true,
+    hitboxes: [{ x: 0, y: -50, r: 48, dmg: 7, base: 330, growth: 4.5, angle: 45 }],
+    wind: pose({ legA: [1.0, 1.8], legB: [0.6, 1.6], armA: [1, -1.8], armB: [0.5, -1.8], lean: 0.2 }),
+    strike: pose({ legA: [1.2, 1.6], legB: [0.8, 1.4], armA: [2.6, 0.05], armB: [-1.2, -0.4], lean: 0.3 }) },
+  // AIR SIDE J: a DOUBLE roundhouse
+  fair: { name: 'Double Roundhouse', startup: 0.06, active: 0.22, endlag: 0.16, landLag: 0.1, mirrorSpin: 0.05,
+    hitboxes: [{ x: 44, y: -50, r: 26, dmg: 4, base: 120, growth: 0, angle: 40, from: 0, to: 0.08, group: 0 },
+               { x: 46, y: -54, r: 28, dmg: 6, base: 390, growth: 5.6, angle: 40, from: 0.12, to: 0.22, group: 1 }],
+    wind: pose({ lean: 0.2, legA: [1.2, 1.8], legB: [0.4, 1.0], armA: [-1.2, -0.6], armB: [0.8, -1.4] }),
+    strike: pose({ lean: -0.55, legA: [1.95, 0.05], legB: [-0.2, 0.3], armA: [-0.7, -0.5], armB: [0.9, -1.0] }) },
+  bair: { name: 'Back Slash', startup: 0.07, active: 0.08, endlag: 0.18, landLag: 0.1,
+    hitboxes: [{ x: -42, y: -56, r: 28, dmg: 9, base: 400, growth: 6, angle: 145 }],
+    wind: pose({ armA: [1.4, -1.2], armB: [0.6, -1.6], lean: 0.2, legA: [0.8, 1.7], legB: [0.4, 1.4] }),
+    strike: pose({ armA: [-1.6, 0.05], armB: [-0.8, -1.2], lean: 0.35, legA: [0.6, 1.4], legB: [0.2, 1.1] }) },
+  // AIR UP J: a RISING spin (it lifts her - once a jump, like Link's) that finishes with a slash right above her
+  uair: { name: 'Rising Spin', startup: 0.05, active: 0.3, endlag: 0.18, landLag: 0.12, mirrorSpin: 0.04,
+    hitboxes: [{ x: 30, y: -54, r: 34, dmg: 2.5, base: 160, growth: 0, angle: 80, from: 0, to: 0.2, group: 0 },
+               { x: -30, y: -54, r: 34, dmg: 2.5, base: 160, growth: 0, angle: 100, from: 0, to: 0.2, group: 0 },
+               { x: 6, y: -112, r: 34, dmg: 7, base: 410, growth: 5.2, angle: 88, from: 0.2, to: 0.3, group: 1 }],
+    wind: pose({ lean: 0.1, legA: [1.0, 1.6], legB: [0.5, 1.2], armA: [0.8, -1.4], armB: [0.3, -1.6] }),
+    strike: pose({ lean: -0.1, legA: [0.4, 0.4], legB: [-0.3, 0.5], armA: [3.0, 0.05], armB: [-1.5, -0.3] }),
+    fire(f, mult, c, a) { if (!f.upSpecialUsed) { f.upSpecialUsed = true; f.vy = -1250; f.ground = false; f.y -= 2; a.air = true; sfx.whoosh(true); } } },
+  // AIR DOWN J: a slash from her side straight DOWN - it spikes
+  dair: { name: 'Edge Drop', startup: 0.09, active: 0.14, endlag: 0.2, landLag: 0.14, spike: true,
+    hitboxes: [{ x: 28, y: -34, r: 26, dmg: 4, base: 160, growth: 1, angle: -50, from: 0, to: 0.06, group: 0 },
+               { x: 8, y: 6, r: 30, dmg: 9, base: 420, growth: 6, angle: -85, from: 0.05, to: 0.14, group: 1 }],
+    wind: pose({ legA: [0.9, 1.8], legB: [0.5, 1.6], armA: [1.8, -0.3], armB: [0.4, -1.6], lean: -0.1 }),
+    strike: pose({ legA: [0.7, 1.4], legB: [0.3, 1.2], armA: [0.1, 0.02], armB: [-0.6, -1.0], lean: 0.4 }) },
+  // ---- K ----
+  neutralRanged: { name: 'Rasengan', startup: 0.04, active: 9, endlag: 0.14, landLag: 0.1, noClash: true, hitboxes: [],
+    wind: H_POSE.palmW, strike: H_POSE.palmW,
+    fire(f, mult, c, a) { a.held = 0; a.mode = 'charge'; },
+    step(f, a, dt, inp) {
+      if (a.phase !== 'active') return false;
+      if (a.mode === 'rush') {                                     // RUNNING at them with it
+        a.rt += dt; f.vx = f.face * H_RASEN.rush; a.poseOverride = H_POSE.palm;
+        if (Math.random() < dt * 60) ghosts.push({ fig: figureOf(f), life: 0.14, max: 0.14, color: '#7fd8ff' });
+        const hx = f.x + f.face * 36, hy = f.y - 55;
+        for (const t of fighters) {
+          if (t === f || allies(f, t) || t.respawnTimer > 0 || isIntangible(t) || t.halo > 0) continue;
+          if (circleHitsFighter(hx, hy, 34, t)) { rasenHit(f, t); a.phase = 'end'; a.t = 0; f.vx *= 0.2; return true; }
+        }
+        if (a.rt > H_RASEN.rushT) { a.phase = 'end'; a.t = 0; f.vx *= 0.3; }
+        return true;
+      }
+      if (inp.blockTap) { f.action = null; startDodge(f, inp.dir, inp.down, inp.up); return true; }   // (Z vanish: she KEEPS the charge)
+      if (inp.spcHeld) {                                          // charging (full: she can keep holding it)
+        a.held += dt; f.rasen = Math.min(1, (f.rasen || 0) + dt / H_RASEN.full);
+        if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 160);
+        if (f.rasen >= 1 && !a.full) { a.full = true; ring(f.x + f.face * 26, f.y - 60); sfx.parry(); }
+        return true;
+      }
+      if (a.held < 0.16) { a.mode = 'rush'; a.rt = 0; f.rasen = Math.max(f.rasen || 0, 0.15); sfx.whoosh(true); return true; }   // a TAP: run in with it
+      a.phase = 'end'; a.t = 0; return true;                      // let go after charging: she keeps it in her hand
+    } },
+  sideRanged: { name: 'Kunai', startup: 0.05, active: 0.04, endlag: 0.14, landLag: 0.06, noClash: true, hitboxes: [],
+    wind: H_POSE.throwW, strike: H_POSE.throwS,
+    fire(f) { const k = hailieKunai(f); if (k) { hailieKunaiTp(f, k); return; } hailieThrowKunai(f, false); } },
+  upRanged: { name: 'Kunai Rise', startup: 0.06, active: 0.05, endlag: 0.16, landLag: 0.1, noClash: true, hitboxes: [],
+    wind: pose({ lean: 0, bob: -10, legA: [0.7, 0.9], legB: [-0.5, 0.4], armA: [0.4, -1.6], armB: [0.6, -1.6] }),
+    strike: pose({ lean: -0.1, bob: -2, legA: [0.5, 0.4], legB: [-0.5, 0.3], armA: [3.0, 0.05], armB: [-0.6, -1.2] }),
+    fire(f, mult, c, a) { hailieThrowKunai(f, true); a.air = !f.ground; } },
+  downRanged: { name: 'Portal', startup: 0.08, active: 0.04, endlag: 0.16, landLag: 0.08, noClash: true, hitboxes: [],
+    wind: pose({ lean: 0.1, bob: -12, legA: [0.8, 0.9], legB: [-0.6, 0.4], armA: [1.0, -1.2], armB: [0.8, -1.4] }),
+    strike: pose({ lean: 0.2, bob: -14, legA: [0.9, 0.9], legB: [-0.7, 0.4], armA: [1.6, 0.05], armB: [1.4, 0.1] }),
+    fire(f) { hailiePortal(f); } },
+};
+
 const CHARACTERS = {
   COLBY: {
     moves: COLBY_MOVES,
@@ -9559,6 +9889,12 @@ const CHARACTERS = {
     },
   },
   STICKMAN: { moves: STICKMAN_MOVES, stats: {}, look: {} },
+  HAILIE: {
+    moves: HAILIE_MOVES,
+    // extremely LIGHT (easy to launch) - but she hits hard (CHAR_POWER) - quick, jumps a touch higher, and one more jump
+    stats: { runSpeed: 730, airSpeed: 610, jumpVel: 1310, doubleJumpVel: 1190, weight: 0.7 },
+    look: { body: HL.red, hellcat: true, ki: '#7fd8ff', extraJump: 1, transformAura: '#ff3a1a', idle: H_POSE.idle },
+  },
   COLTEN: {
     moves: COLTEN_MOVES,
     // THE KNIGHT: slow on his feet, in plate armor - heavy, hard to launch, and every swing hits like a truck
@@ -9692,6 +10028,9 @@ const CHAR_ALTS = {
   COLBALIAS: [{ name: 'BLACK', swatch: '#161616', look: { body: '#161616', headColor: '#161616', madara: '#2e2e2e' } },
               { name: 'ALL WHITE', swatch: '#f6f6f6', look: { body: '#f6f6f6', headColor: '#f6f6f6', madara: '#dcdcdc', longHair: '#ffffff', bossAura: '#f2f2f2', transformAura: '#ffffff' } }],
   HUNTER:    [{ name: 'YELLOW', swatch: '#f2c230', look: { body: '#f2c230' } }, { name: 'RED', swatch: '#c4271f', look: { body: '#c4271f' } }],
+  HAILIE:    [{ name: 'VOID', swatch: '#6a2ad8', look: { body: '#6a2ad8', portal: '#b06aff' } },          // (each one's portals match)
+              { name: 'ICE', swatch: '#2ab0e8', look: { body: '#2ab0e8', portal: '#7fe8ff' } },
+              { name: 'GOLD', swatch: '#e8b23a', look: { body: '#e8b23a', portal: '#ffd23f' } }],
   AIDEN:     { name: 'BLACK BONES', swatch: '#1e1e1e', look: { body: '#1e1e1e', detail: '#6b6b6b', eyepatchColor: '#f4f4f4', beard: '#3a3a3a',
                                                              hat: { main: '#f2f2f2', fold: '#dadada', pipe: '#141414', emblem: '#141414' } } },
 };
@@ -10861,6 +11200,82 @@ CHARACTERS.STICKMAN.ult = ({
 });
 CHARACTERS.HUNTER.ult = { name: 'ERASER CANNON', hunterMove: HUNTER_ERASER };
 CHARACTERS.HUNTER.altUlt = { name: 'GIGANTIC ROAR', hunterMove: HUNTER_ROAR };
+// HAILIE: FLYING RAIJIN - she rings them with kunai, then teleports between them, cutting through them from every side (anyone
+// close by gets caught in it too) - and finishes with the knife through their chest: a launch that's PURELY HORIZONTAL
+CHARACTERS.HAILIE.ult = { name: 'FLYING RAIJIN', raijin: true, finalWind: H_POSE.stab, finalStrike: H_POSE.chest, final: { dmg: 6, base: 780, growth: 7, angle: 0 } };
+CHARACTERS.HAILIE.transformName = 'THE VOICES';
+const RAIJIN = { throwT: 0.35, strikes: 14, every: 0.075, R: 170, hitR: 220, dmg: 1.6, final: 0.32 };
+function updateRaijinUlt(U, dt) {
+  const u = U.user, v = U.target, once = k => !U.events.has(k) && U.events.add(k);
+  watchUltBlocks(U);
+  u.vx = u.vy = 0; v.vx = v.vy = 0; u.anim += dt; v.anim += dt;
+  v.hitFlash = Math.max(0, v.hitFlash - dt); U.jolt = Math.max(0, (U.jolt || 0) - dt);
+  if (once('setup')) {
+    U.phase = 'throw'; U.t = 0; U.kunais = []; U.n = 0;
+    const s = v.onPlatform || ((v.x > STAGE.x && v.x < STAGE.x + STAGE.w) ? STAGE : null);
+    if (s && Math.abs(v.y - s.y) < 6) U.baseY = s.y;
+    U.cx = U.baseX; U.cy = U.baseY - 55;
+    for (let k = 0; k < 8; k++) { const ang = k / 8 * Math.PI * 2 + 0.2; U.kunais.push({ x: U.cx + Math.cos(ang) * RAIJIN.R, y: U.cy + Math.sin(ang) * RAIJIN.R * 0.75, ang: ang + Math.PI, t0: k * 0.035 }); }
+    U.near = fighters.filter(o => o !== u && o !== v && !o.out && o.respawnTimer <= 0 && !allies(u, o) && !isIntangible(o) && Math.hypot(o.x - v.x, o.y - v.y) < RAIJIN.hitR);
+    for (const o of U.near) { o.action = { type: 'ultVictim', t: 0, pose: LV.hurtA }; o.vx = o.vy = 0; o.shielding = false; }
+    sfx.whoosh(true);
+  }
+  v.x = U.baseX + (U.jolt > 0 ? (Math.random() - 0.5) * 6 : 0); v.y = U.baseY;
+  if (U.phase === 'throw') {                                       // the kunai fanned out round them
+    U.userPose = U.t < RAIJIN.throwT / 2 ? H_POSE.throwW : H_POSE.throwS; u.face = Math.sign(v.x - u.x) || u.face;
+    U.victimPose = LV.guard;
+    if (U.t >= RAIJIN.throwT) { U.phase = 'combo'; U.t = 0; U.next = 0; }
+    return;
+  }
+  if (U.phase === 'combo') {                                       // teleport - cut - teleport - cut...
+    U.next -= dt;
+    while (U.next <= 0 && U.n < RAIJIN.strikes) {
+      U.next += RAIJIN.every;
+      const k = U.kunais[(U.n * 3) % U.kunais.length];
+      ghosts.push({ fig: figureOf(u), life: 0.2, max: 0.2, color: hPortalColor(u) });
+      u.x = k.x; u.y = k.y + 55; u.face = Math.sign(v.x - u.x) || u.face;
+      U.userPose = U.n % 2 ? H_POSE.stab : H_POSE.stab2;
+      const hit = t => { t.damage += RAIJIN.dmg * U.power; if (!t.transformed) t.ult = Math.min(ULT_MAX, (t.ult || 0) + RAIJIN.dmg * 0.5); t.hitFlash = 0.06; burst(t.x, t.y - 55, [HL.gold, '#ffffff', hPortalColor(u)], 8, 0, Math.PI, 500, { grav: 0 }); };
+      hit(v); U.jolt = 0.06;
+      for (const o of U.near) if (fighters.includes(o) && o.respawnTimer <= 0) hit(o);
+      slashLine(v.x, v.y - 55, Math.atan2((v.y - 55) - k.y, v.x - k.x), 240, 0.12);
+      sfx.hit(0.5); sfx.vanish(0.4); shake = Math.max(shake, 6); hitstop = Math.max(hitstop, 0.015);
+      U.victimPose = U.n % 2 ? LV.hurtA : LV.hurtB; U.n++;
+    }
+    if (U.n >= RAIJIN.strikes && U.next <= 0) { U.phase = 'final'; U.t = 0; }
+    return;
+  }
+  if (U.phase === 'final') {                                       // right in front of them - and the knife through the chest
+    if (once('finalTp')) { ghosts.push({ fig: figureOf(u), life: 0.25, max: 0.25, color: hPortalColor(u) }); u.x = v.x - U.dir * 44; u.y = U.baseY; u.face = U.dir; sfx.vanish(1); }
+    U.userPose = U.t < RAIJIN.final * 0.6 ? H_POSE.stab2 : H_POSE.chest;
+    if (U.t >= RAIJIN.final) {
+      impactFrame = Math.max(impactFrame, 0.14); impactAt = { x: v.x, y: v.y - 60, ang: 0, all: true, focus: true };
+      burst(v.x, v.y - 60, [HL.gold, '#ffffff', HL.red], 40, U.dir > 0 ? 0 : Math.PI, 0.5, 900, { grav: 0 }); shake = Math.max(shake, 20); sfx.huge ? sfx.huge() : sfx.slam();
+      endRaijinUlt(U);
+    }
+  }
+}
+function endRaijinUlt(U) {
+  const u = U.user, v = U.target;
+  for (const o of U.near || []) if (o.action && o.action.type === 'ultVictim') { o.action = null; knock(o, { dmg: 3, base: 420, growth: 3, angle: 0 }, Math.sign(o.x - u.x) || U.dir, U.power, o.x, o.y - 55); }
+  ult = null;
+  v.action = null; v.x = U.baseX; v.y = U.baseY;
+  u.action = { type: 'land', t: 0, dur: 0.3 };
+  if (ultFinalParried(U, v, v.x, v.y - 60)) return;                 // (REPELLED: the last stab is perfect-blocked)
+  knock(v, { ...U.def.final, ultFinal: true }, U.dir, U.power, v.x, v.y - 60);
+  v.vy = 0; v.ground = false; v.y -= 3; if (v.action && v.action.type === 'hitstun') v.action.flat = 0.55;   // PURELY HORIZONTAL
+}
+function drawRaijin(U) {
+  if (!U.kunais || U.phase === 'final') return;
+  for (const k of U.kunais) {
+    if (U.t < k.t0 && U.phase === 'throw') continue;
+    ctx.save(); ctx.translate(k.x, k.y); ctx.rotate(k.ang);
+    ctx.fillStyle = sketch ? '#333333' : '#c8ccd6'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(0, -4); ctx.lineTo(0, 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = sketch ? '#333333' : HL.black; ctx.fillRect(-10, -1.5, 10, 3);
+    ctx.strokeStyle = hPortalColor(U.user); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(-12, 0, 3, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+}
 CHARACTERS.HUNTER.l3Ult = { name: 'DRAGON FIST', hunterMove: HUNTER_DFIST };   // (his I ult once he's Legendary 3)
 
 // ---------------- Fighters ----------------
@@ -11824,6 +12239,7 @@ function powerUpLocked(f) {
 }
 function isIntangible(f) {
   if (f.invuln > 0) return true;
+  if (f.phaseT > 0) return true;                                  // (Hailie, incorporeal: nothing touches her)
   const a = f.action;
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return true;   // (vanished: nothing can touch him)
   if (a && a.type === 'attack' && a.move && a.move.dragonFist && a.ph && a.ph !== 'wind' && a.ph !== 'dash') return true;   // (Hunter mid-Dragon Fist)
@@ -11858,6 +12274,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (src.fighter && src.fighter !== t) t.lastHitBy = src.fighter;   // (who hit them last - a COMEBACK goes after them)
   if (uiAutoDodge(t, hx)) return false;                    // Lance in ULTRA INSTINCT: his body dodges it on its own (spends a Z vanish dot)
   if (sageAutoDodge(t, hx)) return false;                  // Colbalias in SAGE MODE: one auto dodge every 5 seconds
+  if (hailiePhaseDodge(t, hx)) return false;               // Hailie, TRANSFORMED: 3 automatic phase-outs
   const dmg = h.dmg * mult;
 
   // PERFECT BLOCK: shield went up just as the hit arrived
@@ -12657,6 +13074,9 @@ function drawCracks() {
 }
 
 function doThrow(f, v, kind) {
+  if (f.char === 'HAILIE' && kind === 'down') {                   // HAILIE: DOWN THROW = straight at her nearest portal (or the ground)
+    f.action = { type: 'land', t: 0, dur: 0.22 }; v.action = null; hailiePortalThrow(f, v); return;
+  }
   if (kind === 'down' && CHARACTERS[f.char].downThrow === 'broly') kind = 'broly';   // Lance's down throw
   const own = CHARACTERS[f.char].throwKinds;                                          // Aiden's own throws
   const asked = kind;
@@ -14249,7 +14669,8 @@ function updateUlt(dt) {
   if (U.def.wrestle) return updateWrestleUlt(U, dt);         // Aiden: Max Malicious Moonsault
   if (U.def.deck) return updateDeckUlt(U, dt);               // Aiden (from a grab): Dead Man's Deck Match
   if (U.def.statue) return updateStatueUlt(U, dt);           // Colbalias: 100-Type Guanyin Bodhisattva
-  if (U.def.legion) return updateLegionUlt(U, dt);           // Colbalias (DOWN + ult): Hundred Clone Rush
+  if (U.def.legion) return updateLegionUlt(U, dt);
+  if (U.def.raijin) return updateRaijinUlt(U, dt);            // Hailie: Flying Raijin           // Colbalias (DOWN + ult): Hundred Clone Rush
   if (U.def.godChidori) return updateGodChidoriUlt(U, dt);    // Colby (DOWN + ult): God Speed: Lightning Blade
   if (U.def.greatsword || U.def.tripleThreat) return updateSwordUlt(U, dt);   // Colten: Warlord's Judgment / Hunter: Triple Threat
   if (U.def.rush) return updateRushUlt(U, dt);               // Lance: It's My Turn
@@ -14659,7 +15080,7 @@ const TRANSFORM = { power: 1.2, speed: 1.1, drain: ULT_MAX / 14 };   // drain: f
 // Some characters' transformations are tuned differently (Lance's Super Saiyan: less power, more speed)
 const tfStats = f => (f.lanceForm && LANCE_FORMS[f.lanceForm]) || (f.ui ? UI_STATS : null) || (f.char && CHARACTERS[f.char] && CHARACTERS[f.char].transformStats) || TRANSFORM;
 // BALANCE: per-fighter damage (round robin, Nov 2026: Colten 85% and Sevon 60% wins - both are meant to sit UNDER Colbalias)
-const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95, COLBY: 0.9 };   // (Colby: -10%)
+const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95, COLBY: 0.9, HAILIE: 1.18 };   // (Hailie: she hits HARD - she's made of glass)   // (Colby: -10%)
 function powerOf(f) {
   if (!f) return 1;
   if (f.strikeClone) return powerOf(f.owner);                    // his J-string clones hit with HIS power (it's his combo)
@@ -14695,6 +15116,7 @@ function drawGodSpeedArcs(p) {
 }
 function startTransform(f) {
   f.transformed = true; f.ultBuf = 0;
+  if (f.char === 'HAILIE') f.phaseDodges = 3;                     // (Hailie: three automatic phase-outs)
   // COLBALIAS: TWO BARS - he transforms on ONE bar (the top one): it drains like a normal meter, and the bar under it is kept
   if (f.look && f.look.doubleUlt) { f.tfFloor = (f.ult || 0) >= ULT_MAX ? ULT_MAX / 2 : 0; f.dodgeCount = 0; f.airDodges = AIR_DODGES; }   // (Colbalias: every Z vanish back as he transforms)
   heelSay(f, 'roar');                                        // (Captain Heel roars as the cage drops)
@@ -17613,6 +18035,31 @@ function updateProjectiles(dt, only = null) {
     if (s.kind === 'disc') { if (updateDisc(s, dt)) projectiles.splice(i, 1); continue; }   // Lance's Destructo Disc
     if (s.kind === 'dragon') { if (updateDragon(s, dt)) projectiles.splice(i, 1); continue; }   // Sevon's Flame Dragon
     if (s.kind === 'batarang') { if (updateBatarang(s, dt)) projectiles.splice(i, 1); continue; }   // Sevon's batarang
+    if (s.kunai) {                                         // HAILIE'S KUNAI: flying - or stuck in someone
+      const o = s.owner;
+      if (!o || !fighters.includes(o) || o.respawnTimer > 0) { projectiles.splice(i, 1); continue; }
+      if (s.stuck) {
+        const t = s.stuck; s.life -= dt;
+        if (!fighters.includes(t) || t.respawnTimer > 0 || t.out || s.life <= 0) { projectiles.splice(i, 1); continue; }
+        s.x = t.x - (s.side || 1) * 6; s.y = t.y - 62; s.trail.length = 0;
+        if (s.up) { projectiles.splice(i, 1); if (!o.upSpecialUsed || o.ground) { o.upSpecialUsed = true; hailieStrike(o, t); } continue; }   // (up K: it auto-teleports her in)
+        continue;
+      }
+      s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+      s.trail.push({ x: s.x, y: s.y }); if (s.trail.length > s.trailLen) s.trail.shift();
+      let stuck = null;
+      for (const t of fighters) {
+        if (t === o || allies(o, t) || t.respawnTimer > 0 || isIntangible(t)) continue;
+        if (circleHitsFighter(s.x, s.y, s.r, t)) { if (applyHit(t, s, Math.sign(s.vx) || o.face, s.mult, s.x, s.y, { shot: s })) { stuck = t; } break; }
+      }
+      if (stuck && !s.reflected) { s.stuck = stuck; s.life = H_KUNAI.stick; s.side = Math.sign(s.vx) || o.face; burst(s.x, s.y, [HL.gold, '#ffffff'], 8, 0, Math.PI, 300, { grav: 0 }); painTexts.push({ x: stuck.x, y: stuck.y - 130, t: 0.5, max: 0.5, text: 'MARKED', big: false }); continue; }
+      if (s.reflected) { s.reflected = false; s.kunai = false; continue; }      // (perfect-blocked: just a knife flying back)
+      if (s.life <= 0 || s.x < BLAST.left || s.x > BLAST.right || s.y < BLAST.top) {
+        projectiles.splice(i, 1);
+        if (s.up && o.respawnTimer <= 0) { if (!o.upSpecialUsed || o.ground) { o.upSpecialUsed = true; hTeleport(o, s.x, s.y + 96); o.vy = -320; } }   // UP K: she teleports up to it (her recovery)
+      }
+      continue;
+    }
     if (s.eraser && s.phase === 'hold') {                  // Hunter's Eraser Cannon, still forming in his hand
       const oa = s.owner && s.owner.action;
       if (!oa || oa.ball !== s || s.owner.respawnTimer > 0) projectiles.splice(i, 1);
@@ -17893,6 +18340,7 @@ function startAttack(f, inp, btn) {
     const o = fighters.slice(0, REAL_FIGHTERS).find(q => q !== f && !q.out && q.respawnTimer <= 0);
     if (o && Math.abs(o.x - f.x) > 4) f.face = Math.sign(o.x - f.x);
   }
+  if (f.phaseT > 0) { f.phaseT = 0; ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#b06aff' }); }   // (Hailie: attacking pulls her straight back in)
   let key = chooseMove(f, inp, btn);
   if (f.noScythe && f.char === 'COLBY' && btn === 'atk' && f.ground && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(jab|[pk]1)$/.test(key)) key = 'jajanken';   // (bare Colby's neutral J: JAJANKEN)
   // COLBALIAS: summoning a shadow clone is INSTANT - no attack animation, he keeps running/jumping at full
@@ -18847,7 +19295,7 @@ function freeMove(f, dir, inp, dt) {
       f.jumpBuf = 0;
       f.squat = JUMP_SQUAT;
       f.squash = 0.15;
-    } else if (f.airJumps > 0) {
+    } else if (f.airJumps > (f.look && f.look.extraJump ? -f.look.extraJump : 0)) {   // (Hailie: one more)
       f.jumpBuf = 0;
       f.airJumps--;
       f.vy = -f.stats.doubleJumpVel * JUMP_SCALE;
@@ -18904,6 +19352,13 @@ function updateFighter(f, inp, dt) {
   f.jumpBuf  = inp.jumpTap  ? BUFFER : Math.max(0, f.jumpBuf - dt);
   f.dodgeBuf = inp.blockTap ? BUFFER : Math.max(0, f.dodgeBuf - dt);
   if (inp.blockTap) { f.blockGap = time - (f.lastBlockTap ?? -99); f.lastBlockTap = time; }   // (how long since the last press - mashing can't perfect block)
+  if (f.char === 'HAILIE' && !f.minion) {                          // HAILIE: double-tap BLOCK = INCORPOREAL (4s); block again = back in
+    if (f.phaseT > 0) { f.phaseT -= dt; if (inp.blockTap && f.phaseT < H_PHASE.dur - 0.12) { f.phaseT = 0; f.dodgeBuf = 0; sfx.vanish(0.5); } }
+    else if (inp.blockTap && f.blockGap < H_PHASE.dbl && !(f.action && ['hitstun', 'grabbed', 'thrown', 'ultVictim', 'timeStop'].includes(f.action.type))) {
+      f.phaseT = H_PHASE.dur; f.shielding = false; f.dodgeBuf = 0; if (f.action && ['spot', 'roll'].includes(f.action.type)) f.action = null;
+      ghosts.push({ fig: figureOf(f), life: 0.4, max: 0.4, color: '#b06aff' }); sfx.vanish(1); painTexts.push({ x: f.x, y: f.y - 140, t: 0.5, max: 0.5, text: 'INCORPOREAL', big: false });
+    }
+  }
   f.dirBuf   = inp.dirTap   ? BUFFER : Math.max(0, f.dirBuf - dt);
   // C-stick flick: remember its direction until the attack actually comes out (it may be buffered)
   if (inp.cFlick) f.cFlick = { ...inp.cFlick, t: C_STICK.buffer };
@@ -20454,6 +20909,7 @@ function updateSim(dt) {
   if (!cutNow) updateProjectiles(dt);                      // (frozen while Lance's Ultra Instinct plays)
   else if (cutNow === 'flameDragon') updateProjectiles(dt, 'dragon');   // (Sevon's cutscene: only his dragon moves)
   updateScythes(dt);
+  updatePortals(dt);                                       // Hailie's portals
   weaponWatchdog(dt);
   if (!RB.resim) updateAuraWaves(dt);
   updateRopes(dt);
@@ -21912,6 +22368,7 @@ function drawFigure(fig, opts = {}) {
   if (look.haori) drawHaori(hip, shoulder, f, fig, opts, main, 'front');   // SEVON: the haori's front panel, over his torso and near leg
   if (look.madara) { drawMadara(hip, shoulder, f, fig, opts, main, 'legs', pz.legB); drawMadara(hip, shoulder, f, fig, opts, main, 'legs', pz.legA);
                      drawMadara(hip, shoulder, f, fig, opts, main, 'front'); }   // COLBALIAS: shin wraps + sandals, then the armour
+  if (look.hellcat) { drawHellcat(hip, shoulder, f, fig, opts, 'legs', pz.legB); drawHellcat(hip, shoulder, f, fig, opts, 'legs', pz.legA); drawHellcat(hip, shoulder, f, fig, opts, 'front'); }   // HAILIE
   if (look.lee) { drawLee(hip, shoulder, f, fig, opts, main, 'legs', pz.legB); drawLee(hip, shoulder, f, fig, opts, main, 'legs', pz.legA);
                   drawLee(hip, shoulder, f, fig, opts, main, 'front', pz.legA); }   // COLBY: leg warmers + sandals, holster, belt
   // FLAME BELT (Incineroar): a ring of flickering fire around his waist
@@ -22283,6 +22740,7 @@ function drawFigure(fig, opts = {}) {
 
   if (S && S.depth >= -8) drawScythe3D(S, opts.tint);    // scythe is in front of his body
 
+  if (look.hellcat) drawHellcatHead(head, f, opts);                 // HAILIE: the hood and the gold mask
   // Near arm last, so the gripping hand sits on top of the shaft
   ctx.lineWidth = ARM_W;
   ctx.strokeStyle = main;
@@ -22699,7 +23157,7 @@ function drawFighter(p) {
 
   // Z vanish: almost invisible while air-dodging, with a faint flicker as you zip across
   const vanished = intangible && a && a.type === 'air';
-  const alpha = blink ? 0.45 : vanished ? (Math.floor(p.anim * 40) % 3 === 0 ? 0.28 : 0.06) : intangible ? 0.75 : 1;
+  const alpha = p.phaseT > 0 ? 0.32 + 0.12 * Math.sin(time * 14) : blink ? 0.45 : vanished ? (Math.floor(p.anim * 40) % 3 === 0 ? 0.28 : 0.06) : intangible ? 0.75 : 1;   // (Hailie incorporeal: a flickering ghost of herself)
   // Ki AURA: flickers around ki fighters while charging, firing ki or flying
   const powered = p.look && p.look.aura && a && (a.type === 'flydash' || charging || a.type === 'ultBeam' ||
     (a.type === 'attack' && (a.move.rapid || a.move.beam) && a.phase !== 'end') ||
@@ -23928,6 +24386,7 @@ function render() {
     applyCamera(ctx);
     if (arc) drawArctic(); else if (sketch) drawStageSketch(); else drawStage();
     drawCracks();
+    drawPortals();                                      // Hailie's portals
     drawRopes();
     drawShipUlts();                                     // Aiden's pirate ship (behind everyone)
     drawIceWalls();                                     // Hunter's Glacier Grind: the ice wall (behind everyone)
@@ -23950,6 +24409,8 @@ function render() {
       drawShipUlts(true);                               // Aiden's pirate ship crashing down on them
       if (ult && ult.statue) drawGuanyinFront(ult);    // the statue's palms flying in + the Zero Hand beam
       if (ult && ult.def && ult.def.legion) drawLegionFront(ult);   // the clone rush: their eyes lighting up
+      if (ult && ult.def && ult.def.raijin) drawRaijin(ult);        // Hailie's Flying Raijin: the kunai ring
+      drawHailieFx();                                               // Hailie: the Rasengan in her hand
     }
     drawProjectiles();
     drawBeamClashes();                                // a BEAM CLASH: the flare where the two attacks meet
@@ -24071,7 +24532,7 @@ addEventListener('pointerdown', unlockAudio);
 // ---------------- CHARACTER SELECT ----------------
 // Roster grid (Smash-style face tiles): fill the nulls in as new characters are made (null = "coming soon").
 // The last tile after these is RANDOM.
-const ROSTER = ['COLBY', 'LANCE', 'STICKMAN', 'AIDEN', 'COLBALIAS', 'COLTEN', 'SEVON', 'HUNTER', null];
+const ROSTER = ['COLBY', 'LANCE', 'STICKMAN', 'AIDEN', 'COLBALIAS', 'COLTEN', 'SEVON', 'HUNTER', 'HAILIE'];
 const RANDOM_TILE = ROSTER.length;                 // tile index of the RANDOM tile
 const GRID_TILES = ROSTER.length + 1;
 const CHAR_INFO = {
@@ -24083,6 +24544,7 @@ const CHAR_INFO = {
   LANCE:    { title: 'LAST STAND',   a: '#1f5fa8', b: '#0b1626' },
   STICKMAN: { title: 'THE ORIGINAL', a: '#52525c', b: '#141418' },
   HUNTER:   { title: 'TRIPLE H', a: '#8a4a12', b: '#1a0c04' },
+  HAILIE:   { title: 'THE VOICES', a: '#a8141c', b: '#120405' },
 };
 // The name a fighter is SHOWN by (their id - AIDEN, COLBY... - never changes, so saves and online play aren't affected)
 const charName = c => (c && CHAR_INFO[c] && CHAR_INFO[c].name) || c;
@@ -25437,6 +25899,7 @@ const MOVESETS = {
       ['AIR DOWN J', 'Spinning Axe Kick', 'A spinning heel brought down on them.'] ] },
     { title: 'K (KI)', rows: [
       ['K (HOLD)', 'Kamehameha', 'Hold to charge, let go to fire a beam that hits over and over. AIM IT while charging: the last direction you press decides where it fires - left / right / UP on the ground, and DOWN too in the air (up launches, down spikes). Z VANISH while charging = blink (up to 3 times, still charging). With someone MARKED = Instant Transmission behind them and fire at once.'],
+      ['K, K (DOUBLE-TAP)', 'Flight', 'He FLIES - every direction, no gravity. Double-tap K again while flying = an air dash straight at the opponent. 4 seconds are free; after that every second costs a Z vanish dot, and when he is tired he drops out of it.'],
       ['SIDE K', 'Destructo Disc', 'A spinning disc of ki that flies out and comes back like a boomerang - it cuts on the way out AND back (and can nick him).'],
       ['UP K', 'Rising Axe Kick', 'His recovery: flips upward driving his heel up - carries them up with him, then pops them higher to keep the combo going.'],
       ['DOWN K (TAP)', 'Kaioken', 'Toggles KAIOKEN: x1 > x2 > x3 > off. More damage at each level (+5 / +10 / +16%), but it strains him (0.8% / 1.3% / 2.2% damage every second).'],
@@ -25457,6 +25920,30 @@ const MOVESETS = {
       'A Kamehameha fired by Instant Transmission never gives a mark back.',
       'FLY DASH: double-tap a direction to rocket at the opponent (strong, but punishable if it misses).',
       'AURA SHIELD: instead of a bubble, his aura flares up around him when he blocks.' ] } ] },
+  HAILIE: { blurb: 'Kunimitsu meets Wraith: a knife, kunai she teleports to, a Rasengan and PORTALS. Extremely light - she flies far - but she hits HARD. One more jump than anyone.', sections: [
+    { title: 'GROUND J', rows: [
+      ['J, J, J', 'Knife Drop > Side Slash > Rising Slash', 'A down strike, a side slash and an up slash - every hit carries her forward, and the last pops them up the SAME little bit at any percent, so she can always follow it.'],
+      ['SIDE J', 'Phase Dash', 'She streaks across the stage in wide slashing arcs (Mythra style).'],
+      ['UP J', 'Spin Slash', 'A spinning 360 with the knife.'],
+      ['DOWN J', 'Low Sweep', 'A low slash out to both sides.'],
+      ['RUN + J', 'Slide Cut', 'A sliding cut that pops them up.'] ] },
+    { title: 'AIR J', rows: [
+      ['AIR J', 'Flip Slash', 'A full flip with the knife cutting all the way round her.'],
+      ['AIR SIDE J', 'Double Roundhouse', 'Two roundhouse kicks.'],
+      ['AIR BACK J', 'Back Slash', 'A cut behind her.'],
+      ['AIR UP J', 'Rising Spin', 'A spin that LIFTS her (once a jump) and finishes with a slash right above her.'],
+      ['AIR DOWN J', 'Edge Drop', 'A slash from her side straight down - it spikes.'] ] },
+    { title: 'K', rows: [
+      ['K (HOLD)', 'Rasengan', 'Hold to charge it (full: keep holding it). Let go and she keeps it in her hand - even through a Z vanish. TAP K: she runs in and drives it into them.'],
+      ['SIDE K', 'Kunai', 'Throws a kunai - it STICKS in whoever it hits. Side K again: teleport to it. Stuck in someone: she teleports in with a stab, then a grab that throws them at her nearest portal (with a Rasengan in hand: the Rasengan instead).'],
+      ['UP K', 'Kunai Rise', 'Throws a kunai straight up and teleports to it (her recovery) - if it hits someone, she teleports in on them.'],
+      ['DOWN K, DOWN K', 'Portal', 'Opens one end where she stands - down K again opens the other end where she is and she steps through. Anyone who touches an end comes out the other, and so do shots - even ultimate ones. (Each colour has its own portals.)'] ] },
+    { title: 'DEFENCE + THROWS', rows: [
+      ['BLOCK, BLOCK', 'Incorporeal', 'Double-tap block: she phases out for 4 seconds - nothing can touch her, but attacking pulls her straight back in. Block again to end it early.'],
+      ['DOWN THROW', 'Portal Toss', 'Throws them straight at her nearest portal - no portal out: down into the ground.'] ] },
+    { title: 'TRANSFORM + ULTIMATE (I)', rows: [
+      ['I (FULL METER)', 'THE VOICES', 'Harder, faster - and three AUTOMATIC phase-outs when a hit is coming.'],
+      ['I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'] ] } ] },
   STICKMAN: { blurb: 'The original: a balanced all-rounder with simple smash attacks and energy shots. The best place to start.', sections: [
     { title: 'GROUND J', rows: [
       ['J', 'Jab', 'A quick punch.'],
