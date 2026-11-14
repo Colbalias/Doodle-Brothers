@@ -658,7 +658,25 @@ const STAGE_LIST = [
     { x: 50, y: 335, w: 1180 }, { x: 50, y: 170, w: 1180 }, { x: 50, y: 5, w: 1180 },
     { x: 150, y: -160, w: 980 }, { x: 150, y: -325, w: 980 },
     { x: 270, y: -490, w: 740, roof: true } ] },
+  // WRESTLING RING: an arena floor, flat, with the RING in the middle of it (on the floor - ropes and corner posts, the mat)
+  // and RINGSIDE out past the ropes on both sides to fight on too - then the edges of the arena floor. (Captain Heel's CAGE
+  // MATCH drags everyone here - see startCage.)
+  { name: 'WRESTLING RING', ring: true, platforms: [] },
 ];
+const RING = { w: 760, cageH: 400 };
+const ringL = () => STAGE.x + (STAGE.w - RING.w) / 2, ringR = () => ringL() + RING.w;
+// CAPTAIN HEEL'S CAGE MATCH teleports the whole match to the ring (and back, when the cage comes down)
+let ringTrip = null;
+function switchStage(i) {
+  applyStage(i);
+  for (const f of fighters) {
+    f.onPlatform = null;
+    if (f.x > STAGE.x && f.x < STAGE.x + STAGE.w && f.y > STAGE.y && f.y < STAGE.y + STAGE.h) { f.y = STAGE.y; f.ground = true; }   // (never left inside the floor)
+    else if (f.ground && !(f.x > STAGE.x && f.x < STAGE.x + STAGE.w && Math.abs(f.y - STAGE.y) < 2)) f.ground = false;
+  }
+  impactFrame = Math.max(impactFrame, 0.12); impactAt = { x: cam.x, y: cam.y, ang: 0, all: true, focus: false };
+  shake = Math.max(shake, 14);
+}
 const TOWER = { top: -1400, ceil: -980, zMin: 0.5, follow: 0.85, steadyFollow: 0.7 };   // (its KO line on top / how high the camera goes / how far it pulls out)
 const STAGE_HOME = { x: STAGE.x, w: STAGE.w };                  // (the normal stage size - the walk-off stage stretches it)
 // THE PIT: walls just inside the stage's edges; the KO line is only at the top (lower than usual - it's the only way out)
@@ -4458,6 +4476,26 @@ let cage = null;                     // { owner, members: [everyone inside, owne
 function startCage(f) {
   const t = nearestFoe(f);
   if (!t) return;
+  if (!stageDef.ring) {                                          // TO THE RING: the whole match is teleported into the arena
+    ringTrip = { prev: Math.max(0, STAGE_LIST.indexOf(stageDef)) };
+    switchStage(STAGE_LIST.findIndex(q => q.ring));
+    painTexts.push({ x: STAGE.x + STAGE.w / 2, y: STAGE.y - 260, t: 1.4, max: 1.4, text: 'TO THE RING!', big: true, ult: true });
+  }
+  if (stageDef.ring) {                                           // THE RING: the cage fills it - and EVERYONE is inside it
+    const members = [f, ...fighters.filter(p => p !== f && p.respawnTimer <= 0 && !p.out && !p.dead && !(p.poofT > 0))];
+    const x0 = ringL(), w = RING.w;
+    cage = { owner: f, members, x0, x1: x0 + w, y: STAGE.y, top: STAGE.y - RING.cageH, drop: 0, ring: true };
+    for (const p of members) {
+      const inside = p.x > x0 + 20 && p.x < x0 + w - 20 && p.y <= STAGE.y + 2 && p.y > cage.top + 60;
+      if (!inside) {
+        ghosts.push({ fig: figureOf(p), life: 0.25, max: 0.25, color: '#ffffff' });
+        p.x = clamp(p.x, x0 + 50, x0 + w - 50); p.y = STAGE.y; p.vx = p.vy = 0; p.ground = true; p.onPlatform = null;
+        if (p.action && p.action.type !== 'attack') p.action = null;
+      }
+    }
+    painTexts.push({ x: (cage.x0 + cage.x1) / 2, y: cage.top - 30, t: 1.2, max: 1.2, text: 'CAGE MATCH!', big: true });
+    return;
+  }
   const s = STAGE;
   const caught = fighters.filter(p => p !== f && p.respawnTimer <= 0 && !p.out && !p.dead && !(p.poofT > 0) &&
                                       Math.abs(p.x - f.x) <= CAGE.range && Math.abs(p.y - f.y) <= CAGE.rangeY);
@@ -4481,6 +4519,7 @@ function breakCage() {
   const C = cage;
   if (!C) return;
   cage = null;
+  if (ringTrip) { const prev = ringTrip.prev; ringTrip = null; switchStage(prev); }   // ...and straight back to the old stage (everyone keeps their momentum)
   for (let k = 0; k < 6; k++) burst(lerp(C.x0, C.x1, k / 5), lerp(C.top, C.y, Math.random()), ['#3a3a44', '#7a7a88', '#ffffff'], 6, Math.PI / 2, Math.PI, 500, { grav: 1400 });
   shake = Math.max(shake, 8); sfx.block();
 }
@@ -10859,7 +10898,7 @@ function resetFighter(f, atSpawn) {
     halo: atSpawn ? 2 : 0, invuln: atSpawn ? 2 : 0, trailT: 0,
     damage: 0, respawnTimer: 0, dodgedFlash: 0, blockedFlash: 0, hitFlash: 0,
     shieldAge: 99, prevShield: false, parryFlash: 0, running: false,
-    comboTimer: 0, chainStep: 0, comboKey: null, revenge: 0, revengeT: 0, bleed: null, hype: 0,
+    comboTimer: 0, chainStep: 0, comboKey: null, revenge: 0, revengeT: 0, bleed: null, hype: 0, flight: null,
   });
 }
 
@@ -12717,7 +12756,38 @@ function stepThrown(f, a, dt) {
 //  FLY DASH (Lance): double-tap a direction to rocket toward the opponent.
 //  Homes in if they're roughly that way. Contact = strong rush punch. Miss = he tumbles (punishable).
 // =====================================================================
-const FLY_DASH = { speed: 1500, dur: 0.288, recover: 0.5, cooldown: 0.4 };   // dur 0.32 -> 0.288 = 10% less distance
+const FLY_DASH = { speed: 1500, dur: 0.288, recover: 0.5, cooldown: 0.4 };
+// LANCE'S FLIGHT (double-tap neutral K): he FLIES - free movement in every direction, no gravity. Double-tap K again while
+// flying = his air dash straight at the opponent. 4 seconds are free; past that, every second costs a Z vanish dot - and
+// when he's TIRED (none left) he drops out of it and falls, back to normal. Landing ends it too.
+const LANCE_FLIGHT = { free: 4, speed: 660, accel: 4200, every: 1 };
+function startFlight(f) {
+  f.flight = { t: 0, drainT: LANCE_FLIGHT.every }; f.running = false;
+  f.ground = false; f.onPlatform = null; f.y -= 3; f.vy = Math.min(f.vy, -260);
+  for (let k = 0; k < 2; k++) auraWaves.push({ x: f.x, y: f.y - 50, t: -k * 0.06, dur: 0.35, max: 110 + k * 30, color: kiColor(f) });
+  burst(f.x, f.y - 40, [kiColor(f), '#ffffff'], 18, Math.PI / 2, 0.9, 420, { grav: 0 });
+  painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'FLIGHT', big: false });
+  sfx.whoosh(true);
+}
+function endFlight(f, tired) {
+  if (!f.flight) return;
+  f.flight = null;
+  if (tired) { painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'TIRED', big: false }); f.vy = Math.max(f.vy, 120); }
+}
+function updateFlight(f, dt) {
+  const F = f.flight; if (!F) return;
+  const a = f.action;
+  if (a && ['hitstun', 'grabbed', 'thrown', 'whipped', 'ultVictim', 'timeStop', 'ledge'].includes(a.type)) { endFlight(f); return; }   // (knocked out of the sky)
+  F.t += dt;
+  if (f.ground && F.t > 0.3) { endFlight(f); return; }                  // (touched down)
+  if (F.t > LANCE_FLIGHT.free && (F.drainT -= dt) <= 0) {             // past 4 seconds: a Z vanish dot a second...
+    F.drainT = LANCE_FLIGHT.every;
+    if (!canAirDodge(f)) { endFlight(f, true); return; }                // ...and TIRED = he falls
+    f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;
+    painTexts.push({ x: f.x, y: f.y - 130, t: 0.4, max: 0.4, text: '-1 Z', big: false });
+  }
+  if (Math.random() < dt * 30) burst(f.x + (Math.random() - 0.5) * 30, f.y - 10 - Math.random() * 70, [kiColor(f), '#ffffff'], 1, Math.PI / 2, 0.5, 160, { grav: 0 });   // his aura trailing
+}   // dur 0.32 -> 0.288 = 10% less distance
 const RUSH_HIT = { dmg: 9, base: 430, growth: 6.5, angle: 38 };
 function startFlyDash(f, dir) {
   const o = fighters.find(t => t !== f && t.respawnTimer <= 0);
@@ -18643,6 +18713,13 @@ function stepAction(f, inp, dt) {
 // ---------------- Free movement (not attacking/dodging) ----------------
 function freeControl(f, inp, dt) {
   const dir = inp.dir;
+  if (f.flight) {                                                 // LANCE FLYING: every direction, no gravity
+    const S = LANCE_FLIGHT.speed * hSpd(f), ty = ((inp.down ? 1 : 0) - (inp.up ? 1 : 0)) * S;
+    f.vx = approach(f.vx, dir * S, LANCE_FLIGHT.accel * dt); f.vy = approach(f.vy, ty, LANCE_FLIGHT.accel * dt);
+    if (dir) f.face = dir;
+    f.ground = false;
+    return;
+  }
 
   // DOUBLE-TAP a direction:
   //   on the ground -> RUN (Naruto run) that way. Lance: double-tap AGAIN while running = Fly Dash.
@@ -18841,6 +18918,16 @@ function updateFighter(f, inp, dt) {
   if (f.look && f.look.spd) noteStickCircle(f, inp);
   f.ultBuf   = inp.ultTap   ? BUFFER : Math.max(0, (f.ultBuf || 0) - dt);
   tfRefillCheck(f);                                               // (a transformation: Z vanish dots refilled)
+  if (f.look && f.look.flyDash && !f.minion && inp.spcTap && !inp.dir && !inp.up && !inp.down) {   // LANCE: DOUBLE-TAP neutral K
+    const dbl = time - (f.lastSpcN ?? -9) < DOUBLE_TAP + 0.05; f.lastSpcN = dbl ? -9 : time;
+    const a = f.action, starting = !a || a.type === 'land' || (a.type === 'attack' && a.key === 'neutralRanged' && a.t < 0.4) || a.type === 'kiCharge';
+    if (dbl && starting) {
+      f.spcBuf = 0; if (typeof stopKameCharge === 'function') stopKameCharge(f);
+      if (f.flight) { const o = nearestFoe(f); f.action = null; f.flyUsed = false; f.flyCD = 0; startFlyDash(f, o ? (Math.sign(o.x - f.x) || f.face) : f.face); }   // flying: the AIR DASH at them
+      else { f.action = null; startFlight(f); }
+    }
+  }
+  if (f.flight) updateFlight(f, dt);
   if (rootedTf(f) && inp.blockTap && canAirDodge(f)) tfVanish(f, inp);   // (transforming: a Z vanish blinks them somewhere better)
   if (f.look && f.look.odm) updateOdm(f, dt);                     // Sevon: the ODM hook in flight + the cable
   f.flyCD = Math.max(0, (f.flyCD || 0) - dt);
@@ -18944,7 +19031,7 @@ function updateFighter(f, inp, dt) {
 
   // Gravity
   const a = f.action;
-  const floating = a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
+  const floating = (f.flight && !(a && a.type === 'hitstun')) || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
     (a.type === 'attack' && a.move.floatWhile && a.move.floatWhile(f, a)) ||
     a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
     (a.type === 'hitstun' && (a.impaled || (a.flat && a.t < a.flat))) ||
@@ -20588,7 +20675,27 @@ function drawTowerBackground() {
   }
   ctx.fillStyle = 'rgba(243,154,90,0.18)'; ctx.fillRect(-OX, 520 + up * 300, SW, 60);   // (the haze over the city)
 }
+// ---- WRESTLING RING: a dark arena - the crowd in the stands, camera flashes, spotlights down on the ring ----
+const ringCrowd = Array.from({ length: 140 }, (_, i) => ({ x: (i * 37.3) % 1.0, row: i % 5, s: rnd(), c: rnd() }));
+function drawRingBackground() {
+  const g = ctx.createLinearGradient(0, -OY, 0, H + OY);
+  g.addColorStop(0, '#07070d'); g.addColorStop(0.55, '#141426'); g.addColorStop(1, '#1d1a2e');
+  ctx.fillStyle = g; ctx.fillRect(-OX, -OY, SW, SH);
+  const px = -(cam.x - W / 2) * 0.12;
+  for (const c of ringCrowd) {                                    // the stands: rows of heads and shoulders
+    const x = -OX + ((c.x * (SW + 200) + px) % (SW + 200)) - 100, y = 300 + c.row * 34 + Math.sin(time * 3 + c.s * 20) * (c.c < 0.3 ? 3 : 1);
+    ctx.fillStyle = c.row % 2 ? '#24223a' : '#1c1a30';
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(x - 12, y + 6, 24, 30);
+    if (c.c > 0.985 - 0.02 * Math.sin(time * 7 + c.s * 50)) { ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(x + 4, y - 2, 3, 0, Math.PI * 2); ctx.fill(); }   // camera flashes
+  }
+  for (const [x0, col] of [[W * 0.2, 'rgba(255,240,200,0.07)'], [W * 0.5, 'rgba(255,255,255,0.06)'], [W * 0.8, 'rgba(255,240,200,0.07)']]) {   // spotlights
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x0 - 20, -OY); ctx.lineTo(x0 + 20, -OY); ctx.lineTo(W / 2 + (x0 - W / 2) * 0.25 + 260, H); ctx.lineTo(W / 2 + (x0 - W / 2) * 0.25 - 260, H); ctx.fill();
+  }
+  ctx.fillStyle = '#0d0c18'; ctx.fillRect(-OX, 470, SW, 60);       // the barricade
+  ctx.fillStyle = '#2a2a44'; ctx.fillRect(-OX, 470, SW, 4);
+}
 function drawBackground() {
+  if (stageDef.ring) return drawRingBackground();
   if (stageDef.tower) return drawTowerBackground();
   if (stageDef.walkoff) return drawHillsBackground();
   if (stageDef.pit) return drawPitBackground();
@@ -20929,7 +21036,31 @@ function drawTowerStage() {
   for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
   ctx.globalAlpha = 1;
 }
+// the arena floor (black mats, a blue skirt on the ring), the RING on it: the mat, the corner posts with their pads, and
+// three ropes (red, white, blue) - flat on the floor, so the fight runs straight across it
+function drawRingStage() {
+  const s = STAGE, L = ringL(), R = ringR();
+  ctx.fillStyle = '#16161f'; ctx.fillRect(s.x, s.y, s.w, s.h);                         // the arena floor's front
+  ctx.fillStyle = '#22222e'; for (let y = s.y + 22; y < s.y + s.h; y += 30) ctx.fillRect(s.x, y, s.w, 3);
+  ctx.fillStyle = '#2c2c3a'; ctx.fillRect(s.x, s.y, s.w, 8);                            // the floor mats (ringside)
+  ctx.fillStyle = '#1b3a8a'; ctx.fillRect(L, s.y, R - L, 60);                            // the ring's skirt
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.globalAlpha = 0.8;
+  ctx.fillText('DOODLE BROTHERS WRESTLING', (L + R) / 2, s.y + 40); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#d9d6cc'; ctx.fillRect(L, s.y, R - L, 8);                            // the mat
+  ctx.fillStyle = '#b8b4a8'; ctx.fillRect(L, s.y + 6, R - L, 3);
+  const ropes = [['#d8262a', 34], ['#f2f2f2', 62], ['#2a5bd8', 90]];
+  for (const [col, h] of ropes) {                                                        // the ropes (sagging a touch)
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(L, s.y - h); ctx.quadraticCurveTo((L + R) / 2, s.y - h + 5, R, s.y - h); ctx.stroke();
+  }
+  for (const x of [L, R]) {                                                              // the corner posts + turnbuckle pads
+    ctx.fillStyle = '#9aa0ab'; ctx.fillRect(x - 6, s.y - 108, 12, 108);
+    for (const [col, h] of ropes) { ctx.fillStyle = col; ctx.fillRect(x - 9, s.y - h - 9, 18, 18); }
+  }
+  for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
+  ctx.globalAlpha = 1;
+}
 function drawStage() {
+  if (stageDef.ring) return drawRingStage();
   if (stageDef.tower) return drawTowerStage();
   if (stageDef.walkoff) return drawHillsStage();
   if (stageDef.pit) return drawPitStage();
@@ -24132,6 +24263,7 @@ function drawStageThumb(k, r) {
   else if (st.hell) { sky.addColorStop(0, '#2a0503'); sky.addColorStop(1, '#a3260c'); }
   else if (st.pit) { sky.addColorStop(0, '#0d0d10'); sky.addColorStop(1, '#2a2a30'); }
   else if (st.tower) { sky.addColorStop(0, '#0b1030'); sky.addColorStop(0.6, '#2a2a5e'); sky.addColorStop(1, '#f39a5a'); }
+  else if (st.ring) { sky.addColorStop(0, '#07070d'); sky.addColorStop(1, '#1d1a2e'); }
   else { sky.addColorStop(0, '#1a1716'); sky.addColorStop(1, '#56493f'); }
   c.fillStyle = sky; c.fillRect(r.x, r.y, r.w, r.h);
   if (st.walkoff) {                                                 // hills + the endless checkered ground
@@ -24140,6 +24272,13 @@ function drawStageThumb(k, r) {
     for (let x = 0; x < r.w; x += 16) for (let y = 0; y < r.h; y += 16) { c.fillStyle = ((x + y) / 16) % 2 ? '#c17a2e' : '#8f5420'; c.fillRect(r.x + x, gy + 6 + y, 16, 16); }
     c.fillStyle = '#3cc23f'; c.fillRect(r.x, gy, r.w, 7);
     c.fillStyle = 'rgba(255,255,255,0.9)'; c.beginPath(); c.arc(r.x + r.w * 0.3, r.y + 30, 16, 0, 7); c.arc(r.x + r.w * 0.3 + 18, r.y + 26, 20, 0, 7); c.fill();
+  } else if (st.ring) {                                             // the arena floor and the ring (ropes, posts)
+    c.fillStyle = '#16161f'; c.fillRect(r.x + r.w * 0.06, gy, r.w * 0.88, r.y + r.h - gy);
+    const L = r.x + r.w * 0.22, R = r.x + r.w * 0.78;
+    c.fillStyle = '#1b3a8a'; c.fillRect(L, gy, R - L, 16); c.fillStyle = '#d9d6cc'; c.fillRect(L, gy, R - L, 3);
+    for (const [col, h] of [['#d8262a', 10], ['#f2f2f2', 18], ['#2a5bd8', 26]]) { c.fillStyle = col; c.fillRect(L, gy - h, R - L, 2); }
+    c.fillStyle = '#9aa0ab'; c.fillRect(L - 2, gy - 32, 4, 32); c.fillRect(R - 2, gy - 32, 4, 32);
+    c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.moveTo(r.x + r.w / 2 - 8, r.y); c.lineTo(r.x + r.w / 2 + 8, r.y); c.lineTo(R, gy); c.lineTo(L, gy); c.fill();
   } else if (st.tower) {                                            // the tower: storeys of windows, slabs, the antenna
     const fl = [{ x: 50, y: 500, w: 1180 }, ...st.platforms].sort((a, b) => b.y - a.y), sy = y => r.y + r.h - 14 - (500 - y) * (r.h - 40) / 990, sx = x => r.x + r.w * (0.1 + 0.8 * (x - 50) / 1180);
     for (let i = 0; i < fl.length - 1; i++) { const hi = fl[i + 1], lo = fl[i]; c.fillStyle = '#2b3246'; c.fillRect(sx(hi.x), sy(hi.y), sx(hi.x + hi.w) - sx(hi.x), sy(lo.y) - sy(hi.y));
@@ -24448,7 +24587,7 @@ function showResults() {
 function startMatch() {
   for (const f of fighterPool) { endShipSong(f); stopUiSong(f, 0.3); stopSsj2Song(f, 0.3); stopSs1Song(f); }    // (a pirate-ship song / UI theme still playing from the last match)
   removeAllMinions();
-  cage = null;
+  cage = null;  ringTrip = null;                                  // (a new match: no trip to the ring left over)
   kbTaps.l = kbTaps.r = -9;                       // (no double-tap carried over from the last match - everyone starts STILL)
   for (const ps of padPrev) if (ps) { ps.l = ps.r = -9; }
   for (const f of fighterPool) { f.running = false; f.vx = 0; }
