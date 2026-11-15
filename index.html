@@ -13885,11 +13885,11 @@ function stepThrown(f, a, dt) {
 // =====================================================================
 const FLY_DASH = { speed: 1500, dur: 0.288, recover: 0.5, cooldown: 0.4, chain: 2 };   // (chain: dashes in a row when NOT flying - any attack / grab resets it)
 // LANCE'S FLIGHT (double-tap neutral K): he FLIES - free movement in every direction, no gravity. Double-tap K again while
-// flying = his air dash straight at the opponent. 4 seconds are free; past that, every second costs a Z vanish dot - and
-// when he's TIRED (none left) he drops out of it and falls, back to normal. Landing ends it too.
-const LANCE_FLIGHT = { free: 4, speed: 660, accel: 4200, every: 1, dashes: 2 };   // (dashes: air dashes per flight - then he has to land / start a new flight to get them back)
+// flying = his air dash straight at the opponent. A flat 5 SECONDS - then he's TIRED, drops out of it and falls, back to
+// normal. Landing ends it too.
+const LANCE_FLIGHT = { cap: 5, speed: 660, accel: 4200, dashes: 2 };   // (cap: seconds of flight - then he drops)   // (dashes: air dashes per flight - then he has to land / start a new flight to get them back)
 function startFlight(f) {
-  f.flight = { t: 0, drainT: LANCE_FLIGHT.every, dashes: 0 }; f.running = false;
+  f.flight = { t: 0, dashes: 0 }; f.running = false;
   f.ground = false; f.onPlatform = null; f.y -= 3; f.vy = Math.min(f.vy, -260);
   for (let k = 0; k < 2; k++) auraWaves.push({ x: f.x, y: f.y - 50, t: -k * 0.06, dur: 0.35, max: 110 + k * 30, color: kiColor(f) });
   burst(f.x, f.y - 40, [kiColor(f), '#ffffff'], 18, Math.PI / 2, 0.9, 420, { grav: 0 });
@@ -13907,12 +13907,7 @@ function updateFlight(f, dt) {
   if (a && ['hitstun', 'grabbed', 'thrown', 'whipped', 'ultVictim', 'timeStop', 'ledge'].includes(a.type)) { endFlight(f); return; }   // (knocked out of the sky)
   F.t += dt;
   if (f.ground && F.t > 0.3) { endFlight(f); return; }                  // (touched down)
-  if (F.t > LANCE_FLIGHT.free && (F.drainT -= dt) <= 0) {             // past 4 seconds: a Z vanish dot a second...
-    F.drainT = LANCE_FLIGHT.every;
-    if (!canAirDodge(f)) { endFlight(f, true); return; }                // ...and TIRED = he falls
-    f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;
-    painTexts.push({ x: f.x, y: f.y - 130, t: 0.4, max: 0.4, text: '-1 Z', big: false });
-  }
+  if (F.t >= LANCE_FLIGHT.cap) { endFlight(f, true); return; }        // 5 SECONDS, flat: then he's TIRED and falls
   if (Math.random() < dt * 30) burst(f.x + (Math.random() - 0.5) * 30, f.y - 10 - Math.random() * 70, [kiColor(f), '#ffffff'], 1, Math.PI / 2, 0.5, 160, { grav: 0 });   // his aura trailing
 }   // dur 0.32 -> 0.288 = 10% less distance
 const RUSH_HIT = { dmg: 9, base: 430, growth: 6.5, angle: 38 };
@@ -26917,7 +26912,7 @@ const MOVESETS = {
       ['AIR DOWN J', 'Spinning Axe Kick', 'A spinning heel brought down on them.'] ] },
     { title: 'K (KI)', rows: [
       ['K (HOLD)', 'Kamehameha', 'Hold to charge, let go to fire a beam that hits over and over. AIM IT while charging: the last direction you press decides where it fires - left / right / UP on the ground, and DOWN too in the air (up launches, down spikes). Z VANISH while charging = blink (up to 3 times, still charging). With someone MARKED = Instant Transmission behind them and fire at once.'],
-      ['K, K (DOUBLE-TAP)', 'Flight', 'He FLIES - every direction, no gravity. Double-tap K again while flying = an air dash straight at the opponent. 4 seconds are free; after that every second costs a Z vanish dot, and when he is tired he drops out of it.'],
+      ['K, K (DOUBLE-TAP)', 'Flight', 'He FLIES - every direction, no gravity. Double-tap K again while flying = an air dash straight at the opponent (two per flight). It lasts 5 seconds - then he is tired and drops out of it.'],
       ['SIDE K', 'Destructo Disc', 'A spinning disc of ki that flies out and comes back like a boomerang - it cuts on the way out AND back (and can nick him).'],
       ['UP K', 'Rising Axe Kick', 'His recovery: flips upward driving his heel up - carries them up with him, then pops them higher to keep the combo going.'],
       ['DOWN K (TAP)', 'Kaioken', 'Toggles KAIOKEN: x1 > x2 > x3 > off. More damage at each level (+5 / +10 / +16%), but it strains him (0.8% / 1.3% / 2.2% damage every second).'],
@@ -27126,7 +27121,7 @@ const MOVESETS = {
       ['AIR UP J', 'Sky Flame', 'A slash straight up over his head.'],
       ['AIR DOWN J', 'Downward Thrust', 'The katana driven straight down underneath him - stabs anyone below him and spikes them.'] ] },
     { title: 'K (BREATH OF FLAME + ODM GEAR)', rows: [
-      ['K', 'ODM Hook', 'Fires the grapple hook at the nearest opponent ANYWHERE on the stage - it tracks them in flight and almost always lands (a Z vanish shakes it off, and once in a while it misses). If it sticks, they are TETHERED for 4 seconds. Falling below the ledge, it grabs the LEDGE instead: K again reels him up onto it. GAS: two hooks in the air (the gauges on his hips), refilled when he lands. In TOTAL CONCENTRATION the cable burns - whoever it holds slowly takes fire damage.'],
+      ['K', 'ODM Hook', 'Fires the grapple hook at the nearest opponent ANYWHERE on the stage - it tracks them in flight and almost always lands (only a Z vanish shakes it off). If it sticks, they are TETHERED for 4 seconds. Falling below the ledge, it grabs the LEDGE instead: K again reels him up onto it. GAS: two hooks in the air (the gauges on his hips), refilled when he lands. In TOTAL CONCENTRATION the cable burns - whoever it holds slowly takes fire damage.'],
       ['K (TETHERED)', 'Reel In', 'Fires the gas and yanks himself straight to them.'],
       ['K (AGAIN)', 'Levi Spin', 'Whirls at them like a saw blade. While the cable holds it ALWAYS reaches them - only a last-second shield or Z vanish stops it.'],
       ['Z VANISH (TETHERED)', 'Cut the Line', 'At ANY point while the cable is connected: cut it and vanish - the hook is ready to fire again straight away.'],
