@@ -568,8 +568,8 @@ const AIR_DODGES = 2;      // (old limit, no longer used - air dodges now spend 
 const AIR_DODGE_MAX = 5;
 // (per character: look.airDodges / look.groundDodges override them - Colbalias spends dots on his clones, so he gets more)
 const Z_BONUS = 1;                                  // (+1 Z vanish for everyone, in the air and on the ground)
-const airDodgeMax = f => ((f && f.look && f.look.airDodges) || AIR_DODGE_MAX) + Z_BONUS + (f && f.ui && f.transformed ? 1 : 0)   // (Ultra Instinct: +1)
-                         + (f && f.look && f.look.rage ? Math.min(f.hForm || 0, 5 - f.look.airDodges + Z_BONUS) : 0)   // (HUNTER: +1 per rage form, 5 at most)
+const airDodgeMax = f => ((f && f.look && f.look.airDodges) || AIR_DODGE_MAX) + (f && f.look && f.look.rage ? 0 : Z_BONUS) + (f && f.ui && f.transformed ? 1 : 0)   // (Ultra Instinct: +1) (HUNTER has his own: 3, +1 per rage form = 6 fully transformed)
+                         + (f && f.look && f.look.rage ? Math.min(f.hForm || 0, 3) : 0)   // (HUNTER: +1 per rage form, 5 at most)
                          + (f && f.swapBonus || 0);   // (SWAPPED by Colbalias's Demon's Gaze: +3 till you're back on the stage or KO'd - see gazeSwap)
 const dodgeFree = f => ((f && f.look && f.look.groundDodges) || DODGE_FREE) + Z_BONUS + (f && f.ui && f.transformed ? 1 : 0);
 const MOVE_REPEAT = { from: 3 };                    // (the 3rd use of the same move in a row, and every one after, costs a Z vanish dot - see startAttack)
@@ -577,7 +577,7 @@ function canAirDodge(f) { return f.dodgeCount < airDodgeMax(f); }
 const WAVEDASH_FRICTION = 0.3;
 
 // Dodge fatigue
-const DODGE_FREE = 4;        // ground dodges before fatigue kicks in (air dodges get AIR_DODGE_MAX)
+const DODGE_FREE = 5;        // ground dodges before fatigue kicks in (air dodges get AIR_DODGE_MAX) - +1 (Z_BONUS) = 6 on the ground, 6 in the air
 const DODGE_RECOVER = 0.6;
 const DODGE_RECOVER_TIRED = 0.68;   // (TIRED - past your Z vanish dots - each dot comes back a touch slower)
 const FATIGUE_MAX = 3;
@@ -9943,7 +9943,7 @@ const CHARACTERS = {
       transformAura: '#ffd23f',  // Super Saiyan: golden aura
       ssjHair: '#ffe066',        // ...and layered golden Super Saiyan hair (Ultra Instinct: his bowl cut, white)
       kiMark: true,              // passive: ki hits MARK them -> his next Z vanish teleports behind them
-      airDodges: 4,              // one Z vanish fewer than everyone else (4, not 5)
+      airDodges: 5,              // (the same as everyone now: 6 with the +1)
       // GOKU-STYLE GI: orange top and pants, blue undershirt, blue sash belt, blue boots (no tail any more)
       gi: { main: '#f2761e', dark: '#c4560f', blue: '#1f45b0' },
       // Last-stand stance (Future Gohan vs the androids): very wide and low, front knee bent deep,
@@ -10040,7 +10040,7 @@ const CHARACTERS = {
       hunter: true,             // gold championship belt (ruby), big gold bracers, white gi pants, boots (see drawHunterGear)
       rage: true,               // the RAGE meter + his Super Saiyan forms (see HUNTER_RAGE / HUNTER_FORMS)
       chainGrab: true,          // U while holding = the next link of his chain grab
-      airDodges: 3,             // only 3 Z vanishes - the price for all that armor (+1 per rage form, up to 5)
+      airDodges: 3,             // only 3 Z vanishes - the price for all that armor (+1 per rage form: 6 at Legendary 3)
       ki: '#4dff6a',            // green ki
                                 // (no weapon - his hands are enough; drawSledge is kept for later)
       grows: true,              // transformed: bigger still (see HUNTER_SIZE)
@@ -17165,7 +17165,8 @@ function drawSsj2Arcs(p) {
 function endTransform(f, ko = false) {
   // LANCE'S FORMS: Super Saiyan / Super Saiyan 2 STAY on (buffs and all) when the meter runs out - only Ultra Instinct
   // ending (or a KO) drops him all the way back to base, to climb the ladder again
-  if (f.lanceForm === 3) setLanceForm(f, f.ssg ? SSG_FORM : 0);   // (KOs never cost him Super Saiyan / Super Saiyan 2 - only Ultra Instinct ending does; SUPER SAIYAN GOD stays)
+  if (ko && f.ssg) { f.ssg = false; setLanceForm(f, 0); stopSsgSong(f); }   // (KO'd in SUPER SAIYAN GOD: all the way back to BASE)
+  if (f.lanceForm === 3) setLanceForm(f, f.ssg ? SSG_FORM : 0);   // (KOs never cost him Super Saiyan / Super Saiyan 2 - only Ultra Instinct ending does; Super Saiyan God is lost on a KO - see above)
   if (!f.transformed) return;
   f.transformed = false;
   // (the cage comes down with the transformation - unless he's mid PIRATE SHIP SLAM: then the ship smashes it)
