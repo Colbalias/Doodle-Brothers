@@ -9115,7 +9115,7 @@ const hSpd = f => f.look && f.look.rage ? 1 + 0.008 * (f.hForm || 0) : 1;   // (
 // (he takes the damage, but doesn't flinch or fly). Each soaked hit's charge comes back after 2 seconds. Ultimates and
 // throws aren't soaked.
 const H_FORM_ARMOR = { lss: 1, l3: 2, recharge: 2 };
-const COLTEN_ARMOR = { hits: 2, refill: 2 };   // COLTEN, TRANSFORMED: 2 hits of hyper armor - once both are used up, they come back 2s later
+const COLTEN_ARMOR = { hits: 2, refill: 2, maxPct: 100 };   // COLTEN, TRANSFORMED: 2 hits of hyper armor - once both are used up, they come back 2s later
 const hunterArmorMax = f => f.char === 'COLTEN' ? (f.transformed && !f.minion ? COLTEN_ARMOR.hits : 0) : f.hForm === 3 ? H_FORM_ARMOR.l3 : f.hForm === 2 ? H_FORM_ARMOR.lss : 0;
 const hunterFormArmor = t => !!(t && t.look && (t.look.rage || t.char === 'COLTEN') && !t.minion && hunterArmorMax(t) > 0 && (t.hArmor || 0) > 0);
 const HUNTER_FORMS = [
@@ -10165,7 +10165,7 @@ const CHARACTERS = {
   COLTEN: {
     moves: COLTEN_MOVES,
     // THE KNIGHT: slow on his feet, in plate armor - heavy, hard to launch, and every swing hits like a truck
-    stats: { runSpeed: 560, airSpeed: 470, jumpVel: 1140, doubleJumpVel: 1020, weight: 1.0 },   // (1.16 -> 1.0: easier to launch - he topped the round robin)
+    stats: { runSpeed: 560, airSpeed: 470, jumpVel: 1140, doubleJumpVel: 1020, weight: 1.1 },   // (KOs around 225% - his armor no longer saves him past 100%, see COLTEN_ARMOR)
     look: {
       body: '#9aa4ae',          // steel plate (his green is on the tabard and the plume)
       knight: { steel: '#b9c1ca', dark: '#6c7580', tabard: '#2f9a3a', trim: '#e8c64a' },   // KNIGHT ARMOR (neck down) - see drawKnightArmor
@@ -11201,6 +11201,13 @@ const SUN = { throwAt: 16.55, compress: 15.5, rise: 150, riseT: 12, rMax: 150, r
 // THE OPENING: before he rises, ONE big lunging cut with the greatsword. Anyone it hits is STOPPED dead - frozen right where
 // they are (nothing else can touch them) until the sun comes down: it's thrown straight AT them and can't miss. If the cut
 // misses, the ult goes on just the same and the sun hits the floor (the whole-floor explosion, as before).
+// THE THROW: the sun HOMES IN on the nearest of them - slow enough, and turning slowly enough, to be dodged (run, jump,
+// Z vanish through it). It explodes on whoever it hits, or when it hits the ground.
+const SUN_HOME = { speed: 760, turn: 2.4, life: 2.3 };
+const sunTarget = (f, S) => { let best = null, bd = 1e9;
+  for (const t of fighters) { if (t === f || allies(f, t) || t.respawnTimer > 0 || t.out || t.dead || t.poofT > 0) continue;
+    const d = Math.hypot(t.x - S.x, t.y - 45 - S.y); if (d < bd) { bd = d; best = t; } }
+  return best; };
 const SUN_STRIKE = { time: 0.42, cutAt: 0.12, hitTo: 0.32, lunge: 170, r: 64 };
 const SUN_STRIKE_POSE = {
   wind: pose({ lean: -0.3, bob: -10, legA: [0.9, 0.8], legB: [-0.7, 0.3], armA: [2.6, 0.4], armB: [2.4, 0.5], sw: 2.9 }),     // drawn back high
@@ -11278,20 +11285,40 @@ function stepCruelSun(f, a, dt) {
     if (T >= SUN.compress) shake = Math.max(shake, 10);
     return;
   }
-  if (ev('throw')) {                                             // THROWN - straight AT whoever the cut stopped... or at the ground under the nearest of them
-    const v = a.frozen[0], o = nearestFoe(f);
-    const tx = v ? v.x : o && o.respawnTimer <= 0 ? clamp(o.x, STAGE.x + 40, STAGE.x + STAGE.w - 40) : a.x0 + f.face * 200, ty = v ? Math.min(STAGE.y, v.y - 40) : STAGE.y;
-    const dx = tx - S.x, dy = ty - S.y, L = Math.hypot(dx, dy) || 1;
-    a.shot = { x: S.x, y: S.y, vx: dx / L * SUN.speed, vy: dy / L * SUN.speed, r: 30, t: 0 };
-    if (dx) f.face = dx > 0 ? 1 : -1;
+  if (ev('throw')) {                                             // THROWN - it HUNTS the nearest of them (or whoever the cut stopped)
+    const v = a.frozen[0], o = v || sunTarget(f, S);
+    const tx = o ? o.x : a.x0 + f.face * 200, ty = o ? o.y - 45 : STAGE.y;
+    a.shot = { x: S.x, y: S.y, ang: Math.atan2(ty - S.y, tx - S.x), sp: v ? SUN.speed : SUN_HOME.speed, r: 30, t: 0, target: o };
+    a.shot.vx = Math.cos(a.shot.ang) * a.shot.sp; a.shot.vy = Math.sin(a.shot.ang) * a.shot.sp;
+    if (tx !== S.x) f.face = tx > S.x ? 1 : -1;
     sfx.whoosh(true); sfx.blast();
   }
   const sh = a.shot;
   if (sh && !sh.done) {
-    sh.t += dt; sh.x += sh.vx * dt; sh.y += sh.vy * dt;
+    sh.t += dt;
+    const v = a.frozen[0];
+    let tg = v || sh.target;                                       // (keeps after its target - a new one if they're gone)
+    if (!v && (!tg || !fighters.includes(tg) || tg.respawnTimer > 0 || tg.out || tg.dead)) tg = sh.target = sunTarget(f, sh);
+    if (tg) {                                                      // TRACKING: it turns after them - but only so fast: you can outrun / outjump it
+      const want = Math.atan2(tg.y - 45 - sh.y, tg.x - sh.x);
+      let d = want - sh.ang; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+      const turn = v ? 20 : SUN_HOME.turn;
+      sh.ang += clamp(d, -turn * dt, turn * dt);
+    }
+    sh.vx = Math.cos(sh.ang) * sh.sp; sh.vy = Math.sin(sh.ang) * sh.sp;
+    sh.x += sh.vx * dt; sh.y += sh.vy * dt;
     if (Math.random() < dt * 60) burst(sh.x, sh.y, [SUN.mid, SUN.outer, '#ffffff'], 2, Math.atan2(-sh.vy, -sh.vx), 0.5, 300, { grav: 0 });
-    const v = a.frozen[0], reached = v && Math.hypot(sh.x - v.x, sh.y - (v.y - 40)) < 46;
-    if (reached || sh.y >= STAGE.y - 4 || sh.t > 1.2) { sh.done = true; sunExplode(f, sh.x, a.frozen); a.frozen = []; }
+    // WHOEVER IT HITS (a Z vanish slips through it) - or the ground - and it explodes
+    let hit = v && Math.hypot(sh.x - v.x, sh.y - (v.y - 40)) < 46 ? v : null;
+    if (!hit) for (const t of fighters) {
+      if (t === f || allies(f, t) || t.respawnTimer > 0 || t.out || t.dead || t.poofT > 0 || projPhase(t)) continue;
+      if (!circleHitsFighter(sh.x, sh.y, sh.r, t)) continue;
+      if (isIntangible(t) && !(t.action && t.action.type === 'sunFrozen')) { t.dodgedFlash = 0.35; continue; }
+      hit = t; break;
+    }
+    if (hit || sh.y >= STAGE.y - 4 || sh.t > SUN_HOME.life || T >= SUN.end - 0.05) {
+      sh.done = true; sunExplode(f, sh.x, [...a.frozen, ...(hit && !a.frozen.includes(hit) ? [hit] : [])], hit ? sh.y : null); a.frozen = [];
+    }
   }
   if (T >= SUN.end) {                                            // over: back down - and back to normal
     stopSunSong(f); f.action = { type: 'land', t: 0, dur: 0.3 }; f.y = a.y0;
@@ -11306,8 +11333,12 @@ function song_fade(f, T) {
   return true;
 }
 // THE WHOLE FLOOR EXPLODES: anyone on the ground (or low over it) anywhere on the stage is caught in it
-function sunExplode(f, x, sure = []) {
+function sunExplode(f, x, sure = [], airY = null) {
   const gy = STAGE.y;
+  if (airY !== null && airY < gy - 80) {                          // it hit someone UP in the air: it bursts right there too
+    for (let k = 0; k < 6; k++) burst(x, airY, [SUN.core, SUN.mid, SUN.outer, SUN.edge], 22, Math.random() * Math.PI * 2, 0.8, 900, { grav: -100 });
+    for (let k = 0; k < 3; k++) auraWaves.push({ x, y: airY, t: -k * 0.06, dur: 0.6, max: 260 + k * 90, color: k % 2 ? '#ffffff' : SUN.outer });
+  }
   impactFrame = Math.max(impactFrame, 0.22); impactAt = { x, y: gy - 60, ang: Math.PI / 2, all: true, focus: true, invert: true };
   shake = 50; camPunch = 1; hitstop = Math.max(hitstop, 0.25); sfx.huge(); sfx.slam(); sfx.blast();
   for (let k = 0; k <= 24; k++) {                                // a sea of fire across the whole floor
@@ -12970,7 +13001,8 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   }
   if (t.look && t.look.hype) t.hypeStreak = 0;                  // (Captain Heel got HIT: his hit streak's over)
 
-  const hArm = hunterFormArmor(t) && !h.ultFinal && !h.ultHit;   // HUNTER (Legendary / Legendary 3): an ARMOR charge soaks it
+  const hArm = hunterFormArmor(t) && !h.ultFinal && !h.ultHit &&   // HUNTER (Legendary / Legendary 3): an ARMOR charge soaks it
+               !(t.char === 'COLTEN' && t.damage >= COLTEN_ARMOR.maxPct);   // (COLTEN's armor gives out once he's at 100%+ - he can't tank KO hits forever)
   if (hArm) { t.hArmor--; t.hArmorT = 0; }
   knock(t, hArm ? { ...h, hArmorSoak: true } : h, dirSign, mult, hx, hy);
   godSpeedZap(src.fighter || src.by || (src.shot && src.shot.owner), t, h, hx, hy);   // Colby in GOD SPEED: + lightning damage
@@ -13285,6 +13317,7 @@ const THROWS = {
 const THROW_HITSTUN_BONUS = 0.15;   // thrown players stay stunned this much longer, so you can combo off throws
 
 function startGrab(f) {
+  f.dashChain = 0;
   f.grabBuf = 0; f.atkBuf = 0; f.spcBuf = 0; f.squat = 0;
   f.shielding = false;
   const G = { ...GRAB, ...(CHARACTERS[f.char].grab || {}) };              // (some characters grab faster / further)
@@ -13850,13 +13883,13 @@ function stepThrown(f, a, dt) {
 //  FLY DASH (Lance): double-tap a direction to rocket toward the opponent.
 //  Homes in if they're roughly that way. Contact = strong rush punch. Miss = he tumbles (punishable).
 // =====================================================================
-const FLY_DASH = { speed: 1500, dur: 0.288, recover: 0.5, cooldown: 0.4 };
+const FLY_DASH = { speed: 1500, dur: 0.288, recover: 0.5, cooldown: 0.4, chain: 2 };   // (chain: dashes in a row when NOT flying - any attack / grab resets it)
 // LANCE'S FLIGHT (double-tap neutral K): he FLIES - free movement in every direction, no gravity. Double-tap K again while
 // flying = his air dash straight at the opponent. 4 seconds are free; past that, every second costs a Z vanish dot - and
 // when he's TIRED (none left) he drops out of it and falls, back to normal. Landing ends it too.
-const LANCE_FLIGHT = { free: 4, speed: 660, accel: 4200, every: 1 };
+const LANCE_FLIGHT = { free: 4, speed: 660, accel: 4200, every: 1, dashes: 2 };   // (dashes: air dashes per flight - then he has to land / start a new flight to get them back)
 function startFlight(f) {
-  f.flight = { t: 0, drainT: LANCE_FLIGHT.every }; f.running = false;
+  f.flight = { t: 0, drainT: LANCE_FLIGHT.every, dashes: 0 }; f.running = false;
   f.ground = false; f.onPlatform = null; f.y -= 3; f.vy = Math.min(f.vy, -260);
   for (let k = 0; k < 2; k++) auraWaves.push({ x: f.x, y: f.y - 50, t: -k * 0.06, dur: 0.35, max: 110 + k * 30, color: kiColor(f) });
   burst(f.x, f.y - 40, [kiColor(f), '#ffffff'], 18, Math.PI / 2, 0.9, 420, { grav: 0 });
@@ -13893,6 +13926,8 @@ function startFlyDash(f, dir) {
   }
   f.face = dir;
   f.action = { type: 'flydash', t: 0, dur: FLY_DASH.dur, vx: vx * FLY_DASH.speed, vy: vy * FLY_DASH.speed, ghostT: 0 };
+  if (f.flight) f.flight.dashes = (f.flight.dashes || 0) + 1;      // (counts against this flight's two)
+  else f.dashChain = (f.dashChain || 0) + 1;                       // (not flying: two in a row, then another move resets it - see startAttack)
   if (!f.ground) f.flyUsed = true;
   f.flyCD = FLY_DASH.cooldown;
   f.ground = false; f.y -= 1;
@@ -18991,6 +19026,7 @@ function chooseMove(f, inp, btn) {
 }
 
 function startAttack(f, inp, btn) {
+  f.dashChain = 0;                                       // (Lance: any move resets his two-dashes-in-a-row)
   if (f.squat > 0) { f.squat = 0; f.ground = true; }    // attack out of the jump crouch = ground move
   // C-stick: use the flick's direction instead of the left stick's
   let fromC = false;
@@ -19860,7 +19896,8 @@ function freeControl(f, inp, dt) {
   //   on the ground -> RUN (Naruto run) that way. Lance: double-tap AGAIN while running = Fly Dash.
   //   in the air    -> Fly Dash (characters who can fly)
   if (inp.flyTap) {
-    const canFly = f.look && f.look.flyDash && (f.flyCD || 0) <= 0 && (f.ground || !f.flyUsed);
+    const canFly = f.look && f.look.flyDash && (f.flyCD || 0) <= 0 && (f.ground || !f.flyUsed) &&
+                   (f.flight ? (f.flight.dashes || 0) < LANCE_FLIGHT.dashes : (f.dashChain || 0) < FLY_DASH.chain);   // (2 per flight / 2 in a row on foot)
     if (f.ground && !(f.running && f.runDir === inp.flyTap && canFly)) {
       if (!f.running || f.runDir !== inp.flyTap) {
         f.running = true; f.runDir = inp.flyTap; f.face = inp.flyTap; f.runByStick = false;
@@ -20069,7 +20106,11 @@ function updateFighter(f, inp, dt) {
     const a = f.action, starting = !a || a.type === 'land' || (a.type === 'attack' && a.key === 'neutralRanged' && a.t < 0.4) || a.type === 'kiCharge';
     if (dbl && starting) {
       f.spcBuf = 0; if (typeof stopKameCharge === 'function') stopKameCharge(f);
-      if (f.flight) { const o = nearestFoe(f); f.action = null; f.flyUsed = false; f.flyCD = 0; startFlyDash(f, o ? (Math.sign(o.x - f.x) || f.face) : f.face); }   // flying: the AIR DASH at them
+      if (f.flight) {                                                // flying: the AIR DASH at them - TWO per flight
+        if ((f.flight.dashes || 0) >= LANCE_FLIGHT.dashes) {
+          if (!f.flight.noDashMsg) { f.flight.noDashMsg = true; painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'NO DASHES LEFT', big: false }); }
+        } else { const o = nearestFoe(f); f.action = null; f.flyUsed = false; f.flyCD = 0; startFlyDash(f, o ? (Math.sign(o.x - f.x) || f.face) : f.face); }
+      }
       else { f.action = null; startFlight(f); }
     }
   }
@@ -20669,6 +20710,80 @@ function aiTimeStop(f, ai, o, level) {
     ai.down = true; ai.up = false; ai.dir = 0; ai.tapSpc = true; ai.tapAtk = ai.tapGrab = false; ai.tsStep = 0;
   }
 }
+// ---- HAILIE's PORTALS (CPU). Down K always sends her to an end - the only one, or the NEWER of two - and leaves an end where
+// she's standing. So she reads where it'd take her before she presses it:
+//   ANCHOR   - on the stage with no portal out (and nobody on top of her): plant one, ideally near the middle - a way home
+//   RECOVERY - knocked off the stage with a safe end on it: portal straight back
+//   AMBUSH   - someone's standing right by the end it'd take her to, and she's far off: pop out next to them and hit them
+//   ESCAPE   - hurt, with someone on top of her: portal away to an end far from them
+const H_PORTAL_AI = { anchor: { EASY: 0.004, NORMAL: 0.012, HARD: 0.025, MASTER: 0.04, IMPOSSIBLE: 0.06, FERAL: 0.01 },
+                      use: { EASY: 0.3, NORMAL: 0.6, HARD: 0.85, MASTER: 0.95, IMPOSSIBLE: 1, FERAL: 0.5 } };
+const portalSafe = p => !!p && p.x > STAGE.x + 30 && p.x < STAGE.x + STAGE.w - 30 && p.y <= STAGE.y + 2 && p.y > BLAST.top + 200;
+function portalDest(f) { const P = f.hPortal; if (!P) return null; if (!P.b) return P.a; return (P.a.t || 0) > (P.b.t || 0) ? P.a : P.b; }
+function aiHailiePortals(f, ai, o, level) {
+  if (f.char !== 'HAILIE' || f.minion || f.respawnTimer > 0) return;
+  ai.hpCD = Math.max(0, (ai.hpCD || 0) - STEP);
+  const a = f.action;
+  if ((ai.ambushT = Math.max(0, (ai.ambushT || 0) - STEP)) > 0 && o && (!a || a.type === 'land')) {   // just popped out by them: HIT them
+    const dx = o.x - f.x;
+    if (Math.abs(dx) < 110 && Math.abs(o.y - f.y) < 90) { f.face = Math.sign(dx) || f.face; ai.dir = Math.sign(dx) || f.face; ai.up = ai.down = false; ai.tapAtk = true; ai.tapSpc = ai.tapGrab = false; ai.ambushT = 0; return; }
+  }
+  if (ai.hpCD > 0 || (a && a.type !== 'land') || (f.portalCD || 0) > 0) return;
+  const P = f.hPortal, D = portalDest(f), use = H_PORTAL_AI.use[level] ?? 0.6;
+  const press = () => { ai.down = true; ai.up = false; ai.dir = 0; ai.tapSpc = true; ai.tapAtk = ai.tapGrab = ai.tapBlock = false; ai.tapJump = false; ai.hpCD = 0.7; };
+  const offStage = !f.ground && (f.x < STAGE.x || f.x > STAGE.x + STAGE.w || f.y > STAGE.y + 5);
+  // RECOVERY: off the stage, and the portal would take her somewhere safe on it
+  if (offStage) {
+    if (D && portalSafe(D) && (f.y > STAGE.y - 40 || Math.abs(f.x - D.x) > 300) && Math.random() < use) press();
+    return;
+  }
+  const onMain = f.ground && portalSafe(f);
+  const od = o ? Math.hypot(o.x - f.x, o.y - f.y) : 999;
+  // ANCHOR: nothing out - plant one (near the middle of the stage, with nobody right on her)
+  if (!P && onMain && od > 220 && Math.abs(f.x - (STAGE.x + STAGE.w / 2)) < STAGE.w * 0.3 && Math.random() < (H_PORTAL_AI.anchor[level] ?? 0.012)) { press(); return; }
+  if (!D || !portalSafe(D) || !portalSafe(f) || !o || o.respawnTimer > 0) return;
+  // AMBUSH: they're right by the end she'd come out of - and she's well away from them
+  const oNear = Math.hypot(o.x - D.x, o.y - D.y);
+  if (oNear < 110 && od > 320 && !isIntangible(o) && Math.random() < use * 0.12) { press(); ai.ambushT = 0.6; return; }
+  // ESCAPE: hurt and they're on top of her - out through an end far from them
+  if (f.damage > 90 && od < 130 && Math.hypot(o.x - D.x, o.y - D.y) > 380 && Math.random() < use * 0.05) { press(); return; }
+}
+// ---- HAILIE's INCORPOREAL FORM (CPU) - double-tap block: 4s where nothing touches her; attacking pulls her back in. She
+// uses it to SET UP combos: an attack (or shot) about to land on her = phase out so it whiffs straight through her, slip
+// round BEHIND them while they're stuck in it... and the moment they're open (in their endlag, stunned, facing away) she
+// attacks - out of the form and into a combo. Now and then she phases just to walk in through their pressure.
+const H_PHASE_AI = { react: { EASY: 0.15, NORMAL: 0.4, HARD: 0.65, MASTER: 0.85, IMPOSSIBLE: 1, FERAL: 0.3 }, cd: 3.5 };
+function aiHailiePhase(f, ai, o, level) {
+  if (f.char !== 'HAILIE' || f.minion || f.respawnTimer > 0 || !o) return;
+  ai.phCD = Math.max(0, (ai.phCD || 0) - STEP);
+  if (ai.phTap2 > 0) { if (--ai.phTap2 === 0) { ai.tapBlock = true; ai.block = false; ai.dir = 0; ai.up = ai.down = false; ai.tapAtk = ai.tapSpc = false; } else { ai.tapBlock = false; } return; }   // (the second tap)
+  const a = f.action, free = !a || a.type === 'land' || a.type === 'spot';
+  const oa = o.action, dx = o.x - f.x, adx = Math.abs(dx), dy = o.y - f.y;
+  if (f.phaseT > 0) {                                              // PHASED: get behind them, then strike when they're open
+    ai.tapBlock = false; ai.block = false;                         // (a block tap would pull her back in early)
+    if (f.phaseT < 0.25) return;
+    const behindX = o.x - (o.face || 1) * 46, open = oa && ((oa.type === 'attack' && (oa.phase === 'end' || oa.phase === 'active')) || ['hitstun', 'dizzy', 'parried', 'land', 'grab'].includes(oa.type));
+    const facingAway = Math.sign(f.x - o.x) === -(o.face || 1);
+    if (adx < 95 && Math.abs(dy) < 80 && free && (open || (facingAway && adx < 70))) {
+      f.face = Math.sign(dx) || f.face; ai.dir = Math.sign(dx) || f.face; ai.up = ai.down = false; ai.tapAtk = true; ai.tapSpc = ai.tapGrab = false;   // STRIKE (out of the form)
+      return;
+    }
+    ai.tapAtk = ai.tapSpc = ai.tapGrab = false; ai.up = ai.down = false;
+    ai.dir = Math.abs(behindX - f.x) > 12 ? Math.sign(behindX - f.x) : 0;   // slip round behind them
+    if (dy < -70 && f.ground && Math.random() < 0.05) { ai.tapJump = true; ai.jumpHold = 0.25; }
+    return;
+  }
+  if (ai.phCD > 0 || !free) return;
+  // something's about to land on her: an attack starting up right next to her, or a shot arriving
+  const meleeSoon = oa && oa.type === 'attack' && oa.phase === 'startup' && adx < 150 && Math.abs(dy) < 120 && oa.move.hitboxes && oa.move.hitboxes.length &&
+                    (oa.move.startup * (oa.startupMul || 1) - oa.t) < 0.12;
+  const shotSoon = projectiles.some(q => q.owner !== f && !(q.owner && allies(q.owner, f)) && q.kind !== 'beam' && Math.hypot(q.x - f.x, q.y - (f.y - 50)) < 160 &&
+                    ((f.x - q.x) * (q.vx || 0) + (f.y - 50 - q.y) * (q.vy || 0)) > 0);
+  const walkIn = adx > 140 && adx < 320 && Math.abs(dy) < 60 && oa && oa.type === 'attack' && Math.random() < 0.004;
+  if ((meleeSoon || shotSoon) && (oa ? oa.phaseRoll !== f : true)) { if (oa) oa.phaseRoll = f; if (Math.random() >= (H_PHASE_AI.react[level] ?? 0.4)) return; }
+  else if (!walkIn) return;
+  ai.tapBlock = true; ai.block = false; ai.dir = 0; ai.up = ai.down = false; ai.tapAtk = ai.tapSpc = ai.tapGrab = false; ai.phTap2 = 3; ai.phCD = H_PHASE_AI.cd;   // double-tap block
+}
 function aidenLariatReflex(f, ai, level) {
   if (f.char !== 'AIDEN' || f.minion || (f.action && f.action.type !== 'land')) return;
   const M = AIDEN_MOVES.neutralRanged, inc = aidenIncoming(f, M.startup + 0.32);
@@ -20725,7 +20840,9 @@ function aiInput(f, level) {
   aiDodgeKame(f, ai, level);
   aidenLariatReflex(f, ai, level);
   aiFetchWeapon(f, ai);                                       // going to get the thrown weapon: walk / drop / climb to it
-  aiTimeStop(f, ai, o, level);                                // Colby: TIME STOP when it's full - then COMBO them while they're frozen                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
+  aiTimeStop(f, ai, o, level);                                // Colby: TIME STOP when it's full - then COMBO them while they're frozen
+  aiHailiePortals(f, ai, o, level);                           // Hailie: portals for RECOVERY, AMBUSHES and escapes
+  aiHailiePhase(f, ai, o, level);                             // Hailie: INCORPOREAL - let it whiff, slip behind them, strike                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
 
   // PARRY REFLEX (every frame, not just when it "thinks"): an attack is about to land on us - now and then snap the
   // shield up at just the right moment for a PERFECT BLOCK (better CPUs more often). Staggered from one of our own
