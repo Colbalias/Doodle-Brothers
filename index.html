@@ -20873,6 +20873,44 @@ function aiHailiePhase(f, ai, o, level) {
   else if (!walkIn) return;
   ai.tapBlock = true; ai.block = false; ai.dir = 0; ai.up = ai.down = false; ai.tapAtk = ai.tapSpc = ai.tapGrab = false; ai.phTap2 = 3; ai.phCD = H_PHASE_AI.cd;   // double-tap block
 }
+// ---- Z VANISHING THROUGH A TRANSFORMATION (CPU). Rooted in a transformation cutscene a Z vanish blinks them 260px (see
+// tfVanish). They use it two ways:
+//   PROTECT - an attack about to land, or a shot coming: blink away from it
+//   ATTACK  - their transformation is about to BLAST the area round them (Hunter's aura burst / Legendary 3 pillar and
+//             burst) and the enemy's just out of its reach: blink right next to them so it catches them
+const TFV_AI = { use: { EASY: 0.2, NORMAL: 0.5, HARD: 0.8, MASTER: 0.95, IMPOSSIBLE: 1, FERAL: 0.4 }, cd: 0.6 };
+function tfAoE(f) {                                               // the blast their transformation is about to set off round them (or null)
+  const a = f.action; if (!a || a.type !== 'hL3Cut') return null;
+  const T = a.songT || 0, k = hScale(f) / HS;
+  if (a.l2) return H_L2_CUT.len - T < 1.5 ? { r: H_L2_CUT.auraR * k * 0.8 } : null;
+  const C = H_L3_CUT;
+  if ((T > C.pillar[0] - 1 && T < C.pillar[1] - 0.4)) return { r: 150 * k * 0.8, column: true };   // (the pillar: a column, any height)
+  if (C.len - T < 1.5) return { r: 220 * k * 0.8 };
+  return null;
+}
+function aiTfVanish(f, ai, o, level) {
+  if (!rootedTf(f) || f.minion || !o || o.respawnTimer > 0) return;
+  ai.tfvCD = Math.max(0, (ai.tfvCD || 0) - STEP);
+  if (ai.tfvCD > 0 || !canAirDodge(f)) return;
+  const use = TFV_AI.use[level] ?? 0.5, oa = o.action, dx = o.x - f.x, dy = o.y - f.y, adx = Math.abs(dx);
+  const vanish = (dir, up, down) => { ai.tapBlock = true; ai.block = false; ai.dir = dir; ai.up = !!up; ai.down = !!down; ai.tapAtk = ai.tapSpc = ai.tapGrab = false; ai.tfvCD = TFV_AI.cd; };
+  // PROTECT: their attack's about to land / a shot's coming in
+  const melee = oa && oa.type === 'attack' && oa.phase !== 'end' && adx < 170 && Math.abs(dy) < 150 && oa.move && oa.move.hitboxes && oa.move.hitboxes.length;
+  const shot = aidenIncoming(f, 0.35);
+  if (melee || shot) {
+    const key = melee ? oa : shot.s;
+    if (key.tfvRoll !== f) { key.tfvRoll = f; if (Math.random() < use) {
+      if (melee) vanish(-(Math.sign(dx) || f.face), false, false);          // a swing: blink AWAY from them
+      else { const flat = Math.abs(shot.s.vy || 0) < Math.abs(shot.s.vx || 0); vanish(flat ? 0 : (Math.sign(f.x - shot.s.x) || f.face), flat, false); }   // a shot: up out of its line (or aside from a falling one)
+      return; } }
+  }
+  // ATTACK: their blast is coming - get them inside it
+  const aoe = tfAoE(f);
+  if (aoe && !(oa && ['hitstun', 'grabbed', 'thrown'].includes(oa.type))) {
+    const inside = aoe.column ? adx < aoe.r : Math.hypot(dx, dy) < aoe.r;
+    if (!inside && adx < TF_VANISH + aoe.r && Math.random() < use * 0.25) vanish(Math.sign(dx) || f.face, !aoe.column && dy < -120, !aoe.column && dy > 120);
+  }
+}
 function aidenLariatReflex(f, ai, level) {
   if (f.char !== 'AIDEN' || f.minion || (f.action && f.action.type !== 'land')) return;
   const M = AIDEN_MOVES.neutralRanged, inc = aidenIncoming(f, M.startup + 0.32);
@@ -20931,7 +20969,8 @@ function aiInput(f, level) {
   aiFetchWeapon(f, ai);                                       // going to get the thrown weapon: walk / drop / climb to it
   aiTimeStop(f, ai, o, level);                                // Colby: TIME STOP when it's full - then COMBO them while they're frozen
   aiHailiePortals(f, ai, o, level);                           // Hailie: portals for RECOVERY, AMBUSHES and escapes
-  aiHailiePhase(f, ai, o, level);                             // Hailie: INCORPOREAL - let it whiff, slip behind them, strike                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
+  aiHailiePhase(f, ai, o, level);                             // Hailie: INCORPOREAL - let it whiff, slip behind them, strike
+  aiTfVanish(f, ai, o, level);                                // in a TRANSFORMATION: Z vanish out of trouble - or right next to them for its blast                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
 
   // PARRY REFLEX (every frame, not just when it "thinks"): an attack is about to land on us - now and then snap the
   // shield up at just the right moment for a PERFECT BLOCK (better CPUs more often). Staggered from one of our own
