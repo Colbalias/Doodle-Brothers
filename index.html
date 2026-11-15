@@ -644,8 +644,8 @@ const PLATFORMS = [
 //   THE PIT  = a deep DUNGEON pit: solid stone walls on both sides (no ledges, nobody falls off). Launch someone into a
 //              wall and they WALL BOUNCE off it for big damage - the only way out is UP: knock them out the top.
 const STAGE_LIST = [
-  { name: 'RUINS', platforms: PLATFORMS.map(p => ({ ...p })) },
-  { name: 'HELLFIRE', platforms: [], hell: true },
+  { name: 'RUINS', platforms: PLATFORMS.map(p => ({ ...p })), scale: 1.125 },     // (scale: 12.5% wider than the base stage - the game's grown)
+  { name: 'HELLFIRE', platforms: [], hell: true, scale: 1.125 },
   { name: 'THE PIT', pit: true, platforms: [{ x: 50, y: 330, w: 170 }, { x: 1060, y: 330, w: 170 }, { x: 530, y: 175, w: 220 }] },
   // CHECKER HILLS: sunny rolling hills - and the ground just keeps going, FLAT, right out past the KO lines on both sides.
   // No ledges, no drops: walk (or get knocked) far enough left or right and you're out.
@@ -663,7 +663,16 @@ const STAGE_LIST = [
   // it: a raised, SOLID box (jump up onto the apron, walk off it to drop back to the floor - no dropping through the mat).
   // (Captain Heel's CAGE MATCH drags everyone here - see startCage.)
   { name: 'WRESTLING RING', ring: true, arena: true, platforms: [] },
+  // MARTIAL ARENA: a tournament ring - a big stone-tiled square, raised a step off a grass field, with the stands packed on
+  // both sides and the hall behind. RING OUT RULES: touch the grass outside the ring and you're OUT (it's a KO). No
+  // platforms, nowhere to hide - stay on the tiles.
+  { name: 'MARTIAL ARENA', tourney: true, platforms: [], scale: 0.92 },
 ];
+const TOURNEY = { step: 26 };   // (how high the ring stands off the grass; the grass is the ring-out line)
+const grassY = () => STAGE.y + TOURNEY.step;
+// out on the grass, off the ring = RING OUT
+const ringedOut = f => !!(stageDef && stageDef.tourney && f.respawnTimer <= 0 && !f.out && f.y >= grassY() - 1 &&
+  (f.x < STAGE.x - 2 || f.x > STAGE.x + STAGE.w + 2));
 const RING = { w: 760, cageH: 400, raise: 64 };                // raise: how far the mat sits up off the arena floor
 const ringL = () => 50 + (1180 - RING.w) / 2, ringR = () => ringL() + RING.w;   // (centred on the normal stage)
 const ringTop = () => STAGE.y - RING.raise;
@@ -712,10 +721,17 @@ const pitCracks = [];
 let stageDef = STAGE_LIST[0];
 function applyStage(i) {
   stageDef = STAGE_LIST[i] || STAGE_LIST[0];
+  BLAST.left = BLAST_HOME.left; BLAST.right = BLAST_HOME.right;
   if (wideFloor()) { STAGE.x = BLAST.left - 400; STAGE.w = BLAST.right + 400 - STAGE.x; }   // (the floor runs past both KO lines)
   else { STAGE.x = STAGE_HOME.x; STAGE.w = STAGE_HOME.w; }
+  const k = stageDef.scale || 1, cx = STAGE_HOME.x + STAGE_HOME.w / 2;
+  if (k !== 1) {                                                 // a BIGGER stage: wider (still centred), the KO lines out by the same
+    const grow = STAGE_HOME.w * (k - 1) / 2;
+    STAGE.x = STAGE_HOME.x - grow; STAGE.w = STAGE_HOME.w + grow * 2;
+    BLAST.left -= grow; BLAST.right += grow;
+  }
   PLATFORMS.length = 0;
-  for (const p of stageDef.platforms) PLATFORMS.push({ ...p });
+  for (const p of stageDef.platforms) PLATFORMS.push(k === 1 ? { ...p } : { ...p, x: cx + (p.x - cx) * k, w: p.w * k });   // (platforms spread out with it)
   if (stageDef.ring) PLATFORMS.push({ x: ringL(), y: ringTop(), w: RING.w, solid: true, ringBox: true });   // THE RING (raised, solid)
   BLAST.top = stageDef.tower ? TOWER.top : BLAST_TOP;            // (the skyscraper: the top KO line is way up over the roof)
 }
@@ -724,6 +740,7 @@ function applyStage(i) {
 // OUT OF VIEW below the stage - never while you're still on screen.
 // The TOP line is a bit higher too (was -380), so your own upward Z vanishes don't KO you so easily.
 const BLAST = { left: -720, right: W + 720, bottom: H + 900, top: -780 };
+const BLAST_HOME = { left: BLAST.left, right: BLAST.right };   // (bigger stages push the side lines out - see applyStage)
 const BLAST_TOP = BLAST.top;   // (pushed out ~35%: lots more room off screen before a KO - air play is big in every direction)
 const CAM_FLOOR = STAGE.y + STAGE.h + 300;      // the lowest point the camera follows anyone down to
 const CAM_CEIL = -230;                          // ...and the highest (where it was before the top line moved up)
@@ -20421,8 +20438,15 @@ function updateFighter(f, inp, dt) {
 
   if (rootedTf(f) && f.action.rootX !== undefined) { f.x = f.action.rootX; f.y = f.action.rootY; f.vx = f.vy = 0; }   // (transforming: nothing moves them)
   if (stageDef.pit) pitWalls(f, dt);                    // THE PIT: the walls (and wall bounces)
-  // Blast zones
-  if (f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
+  // Blast zones - and on the MARTIAL ARENA, touching the grass (RING OUT)
+  const ringOut = ringedOut(f);
+  if (ringOut && !f.minion && !f.ringOutShown) {
+    f.ringOutShown = true;
+    painTexts.push({ x: f.x, y: grassY() - 150, t: 1.2, max: 1.2, text: 'RING OUT!', big: true, ult: true });
+    dust(f.x, grassY(), 18, 2.4); shake = Math.max(shake, 12); sfx.slam();
+  }
+  if (!ringOut) f.ringOutShown = false;
+  if (ringOut || f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
     if (f.action && (['sunFrozen', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
     // COMEBACKS (Colby's Primary Lotus, Lance's Super Saiyan God): ONLY if you're knocked out WITH A FULL ULT METER - and only
@@ -20486,7 +20510,7 @@ function canGrabLedge(f, inp) {
   return false;
 }
 function tryLedgeGrab(f, inp) {
-  if (stageDef.pit) return;                                       // (THE PIT: no ledges - just walls)
+  if (stageDef.pit || stageDef.tourney) return;                   // (THE PIT: no ledges - just walls. THE MARTIAL ARENA: no hanging off the ring - hit the grass and you're out)
   if (f.ground || f.vy < -300 && !(f.action && f.action.key === 'upRanged')) return;
   if (!canGrabLedge(f, inp)) return;
   for (const side of [-1, 1]) {                                   // -1 = the left corner, +1 = the right corner
@@ -22225,7 +22249,55 @@ function drawRingBackground() {
   ctx.fillStyle = '#0d0c18'; ctx.fillRect(-OX, 470, SW, 60);       // the barricade
   ctx.fillStyle = '#2a2a44'; ctx.fillRect(-OX, 470, SW, 4);
 }
+// ---- MARTIAL ARENA: a bright day - blue sky, palms, the HALL behind (tiled roofs, red pillars, banners) and the STANDS
+//      packed with a cheering crowd on both sides ----
+const tourneyCrowd = Array.from({ length: 240 }, (_, i) => ({ s: rnd(), c: rnd(), k: (rnd() * 6) | 0 }));
+const CROWD_COLS = ['#e84a4a', '#f2c94c', '#4a90e2', '#ffffff', '#7bd389', '#f29bd0'];
+function drawTourneyBackground() {
+  const g = ctx.createLinearGradient(0, -OY, 0, 460);
+  g.addColorStop(0, '#3d8ff0'); g.addColorStop(1, '#bfe6ff');
+  ctx.fillStyle = g; ctx.fillRect(-OX, -OY, SW, SH);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';                                // clouds
+  for (const [x, y, r] of [[160, 90, 34], [210, 80, 44], [260, 95, 30], [900, 60, 38], [960, 50, 50], [1020, 68, 32]]) { ctx.beginPath(); ctx.arc(x - (cam.x - W / 2) * 0.05, y, r, 0, Math.PI * 2); ctx.fill(); }
+  const px = -(cam.x - W / 2) * 0.15;
+  ctx.fillStyle = '#5fb04f'; ctx.fillRect(-OX, 380, SW, 200);                // the far lawn
+  for (const x of [-40, 120, 1110, 1290]) {                                   // palms
+    const bx = x + px * 0.6; ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(bx, 390); ctx.quadraticCurveTo(bx + 10, 300, bx + 4, 250); ctx.stroke();
+    ctx.fillStyle = '#2f8a3a'; for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; ctx.beginPath(); ctx.ellipse(bx + 4 + Math.cos(a) * 26, 250 + Math.sin(a) * 10, 34, 9, a, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // THE HALL: a long low hall with a tiled roof, a tall gatehouse in the middle
+  const hx = W / 2 + px;
+  ctx.fillStyle = '#f1e6c8'; ctx.fillRect(hx - 380, 300, 760, 90);            // walls
+  ctx.fillStyle = '#c0392b'; for (let x = hx - 360; x < hx + 370; x += 60) ctx.fillRect(x, 312, 10, 78);   // red pillars
+  ctx.fillStyle = '#8a4b2a'; ctx.beginPath(); ctx.moveTo(hx - 420, 304); ctx.lineTo(hx - 340, 262); ctx.lineTo(hx + 340, 262); ctx.lineTo(hx + 420, 304); ctx.closePath(); ctx.fill();   // roof
+  ctx.strokeStyle = '#6e3a1f'; ctx.lineWidth = 2; for (let x = hx - 400; x < hx + 400; x += 14) { ctx.beginPath(); ctx.moveTo(x, 304); ctx.lineTo(x + (x - hx) * 0.18, 263); ctx.stroke(); }   // roof tiles
+  ctx.fillStyle = '#f1e6c8'; ctx.fillRect(hx - 90, 200, 180, 100);            // the gatehouse
+  ctx.fillStyle = '#8a4b2a'; ctx.beginPath(); ctx.moveTo(hx - 130, 206); ctx.lineTo(hx - 70, 160); ctx.lineTo(hx + 70, 160); ctx.lineTo(hx + 130, 206); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#e8d9a8'; ctx.beginPath(); ctx.moveTo(hx - 20, 160); ctx.lineTo(hx, 136); ctx.lineTo(hx + 20, 160); ctx.closePath(); ctx.fill();   // the roof ornament
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(hx - 76, 212, 152, 34);             // the banner over the gate
+  ctx.fillStyle = '#f7e9b0'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('MARTIAL ARENA', hx, 236);
+  ctx.fillStyle = '#5a2a14'; ctx.fillRect(hx - 30, 252, 60, 48);              // the doorway
+  ctx.fillStyle = '#d9c9a0'; ctx.fillRect(hx - 26, 300, 52, 90);              // the steps down to the ring
+  for (let y = 306; y < 390; y += 10) { ctx.fillStyle = y % 20 ? '#c9b98f' : '#e4d6b0'; ctx.fillRect(hx - 26, y, 52, 4); }
+  ctx.fillStyle = '#e74c3c'; for (const x of [hx - 260, hx + 260]) { ctx.fillRect(x - 3, 230, 6, 70); ctx.fillStyle = '#f39c12'; ctx.beginPath(); ctx.arc(x, 226, 10, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#e74c3c'; }   // lanterns
+  // THE STANDS, both sides: rising rows of a cheering crowd (bobbing, waving, the odd camera flash)
+  for (const side of [-1, 1]) {
+    const x0 = side < 0 ? -OX - 200 : W / 2 + 290 + px * 1.4, x1 = side < 0 ? W / 2 - 290 + px * 1.4 : W + OX + 200;   // (framing the ring from both sides)
+    for (let row = 0; row < 7; row++) {
+      const y = 330 + row * 22, w = x1 - x0;
+      ctx.fillStyle = row % 2 ? '#d6c7a3' : '#c7b38a'; ctx.fillRect(x0, y + 10, w, 14);   // the bench
+      for (let i = 0; i < 40; i++) {
+        const c = tourneyCrowd[(row * 40 + i) % tourneyCrowd.length], cx = x0 + (i + 0.5) / 40 * w, bob = Math.sin(time * (4 + c.s * 4) + c.c * 20) * (c.c < 0.3 ? 3 : 1);
+        ctx.fillStyle = CROWD_COLS[c.k]; ctx.fillRect(cx - 5, y + bob, 10, 12);
+        ctx.fillStyle = '#f0c9a0'; ctx.beginPath(); ctx.arc(cx, y - 3 + bob, 4, 0, Math.PI * 2); ctx.fill();
+        if (c.c < 0.12) { ctx.fillStyle = CROWD_COLS[c.k]; ctx.fillRect(cx - 8, y - 12 + bob, 3, 10); ctx.fillRect(cx + 5, y - 12 + bob, 3, 10); }   // (arms up)
+      }
+    }
+    ctx.fillStyle = '#b03a2e'; ctx.fillRect(x0, 482, x1 - x0, 12);             // the barrier in front of the stands
+  }
+}
 function drawBackground() {
+  if (stageDef.tourney) return drawTourneyBackground();
   if (stageDef.ring) return drawRingBackground();
   if (stageDef.tower) return drawTowerBackground();
   if (stageDef.walkoff) return drawHillsBackground();
@@ -22634,7 +22706,26 @@ function drawRingStage() {
   for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
   ctx.globalAlpha = 1;
 }
+// the RING: a raised square of pale stone tiles with a dark blue rim, on the GRASS (the ring-out zone - it runs out past the
+// KO lines both ways)
+function drawTourneyStage() {
+  const s = STAGE, gy = grassY();
+  const grass = ctx.createLinearGradient(0, gy, 0, gy + 500);
+  grass.addColorStop(0, '#4fae45'); grass.addColorStop(1, '#2f7d2c');
+  ctx.fillStyle = grass; ctx.fillRect(BLAST.left - 600, gy, BLAST.right - BLAST.left + 1200, 900);
+  ctx.fillStyle = 'rgba(255,255,255,0.06)'; for (let x = Math.floor((BLAST.left - 600) / 80) * 80; x < BLAST.right + 600; x += 160) ctx.fillRect(x, gy, 80, 900);   // mowing stripes
+  ctx.fillStyle = '#2a4fa0'; ctx.fillRect(s.x - 6, s.y + 8, s.w + 12, TOURNEY.step - 8 + 4);   // the rim (front face)
+  ctx.fillStyle = '#d7dde3'; ctx.fillRect(s.x, s.y, s.w, 10);                        // the tile surface
+  ctx.fillStyle = '#c3ccd5'; ctx.fillRect(s.x, s.y + 10, s.w, TOURNEY.step - 12);
+  ctx.strokeStyle = 'rgba(80,95,115,0.55)'; ctx.lineWidth = 1.5;                       // the tile grid
+  for (let x = s.x; x <= s.x + s.w + 1; x += s.w / 16) { ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x, s.y + TOURNEY.step - 2); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(s.x, s.y + 10); ctx.lineTo(s.x + s.w, s.y + 10); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(s.x, s.y, s.w, 2);            // (the lit edge)
+  for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
+  ctx.globalAlpha = 1;
+}
 function drawStage() {
+  if (stageDef.tourney) return drawTourneyStage();
   if (stageDef.ring) return drawRingStage();
   if (stageDef.tower) return drawTowerStage();
   if (stageDef.walkoff) return drawHillsStage();
@@ -25869,6 +25960,7 @@ function drawStageThumb(k, r) {
   else if (st.pit) { sky.addColorStop(0, '#0d0d10'); sky.addColorStop(1, '#2a2a30'); }
   else if (st.tower) { sky.addColorStop(0, '#0b1030'); sky.addColorStop(0.6, '#2a2a5e'); sky.addColorStop(1, '#f39a5a'); }
   else if (st.ring) { sky.addColorStop(0, '#07070d'); sky.addColorStop(1, '#1d1a2e'); }
+  else if (st.tourney) { sky.addColorStop(0, '#3d8ff0'); sky.addColorStop(1, '#bfe6ff'); }
   else { sky.addColorStop(0, '#1a1716'); sky.addColorStop(1, '#56493f'); }
   c.fillStyle = sky; c.fillRect(r.x, r.y, r.w, r.h);
   if (st.walkoff) {                                                 // hills + the endless checkered ground
@@ -25877,6 +25969,10 @@ function drawStageThumb(k, r) {
     for (let x = 0; x < r.w; x += 16) for (let y = 0; y < r.h; y += 16) { c.fillStyle = ((x + y) / 16) % 2 ? '#c17a2e' : '#8f5420'; c.fillRect(r.x + x, gy + 6 + y, 16, 16); }
     c.fillStyle = '#3cc23f'; c.fillRect(r.x, gy, r.w, 7);
     c.fillStyle = 'rgba(255,255,255,0.9)'; c.beginPath(); c.arc(r.x + r.w * 0.3, r.y + 30, 16, 0, 7); c.arc(r.x + r.w * 0.3 + 18, r.y + 26, 20, 0, 7); c.fill();
+  } else if (st.tourney) {                                          // the grass, the tiled ring, the hall behind
+    c.fillStyle = '#4fae45'; c.fillRect(r.x, gy - 8, r.w, r.y + r.h - gy + 8);
+    c.fillStyle = '#8a4b2a'; c.fillRect(r.x + r.w * 0.3, gy - 40, r.w * 0.4, 10); c.fillStyle = '#f1e6c8'; c.fillRect(r.x + r.w * 0.32, gy - 30, r.w * 0.36, 18);
+    c.fillStyle = '#2a4fa0'; c.fillRect(r.x + r.w * 0.12, gy, r.w * 0.76, 10); c.fillStyle = '#d7dde3'; c.fillRect(r.x + r.w * 0.12, gy, r.w * 0.76, 5);
   } else if (st.ring) {                                             // the arena floor and the ring (ropes, posts)
     c.fillStyle = '#16161f'; c.fillRect(r.x + r.w * 0.06, gy, r.w * 0.88, r.y + r.h - gy);
     const L = r.x + r.w * 0.22, R = r.x + r.w * 0.78;
