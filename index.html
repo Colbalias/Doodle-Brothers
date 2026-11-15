@@ -11157,6 +11157,14 @@ CHARACTERS.COLBALIAS.altUlt = {
 const SUN = { throwAt: 16.55, compress: 15.5, rise: 150, riseT: 12, rMax: 150, rMin: 8, fall: 0.55, speed: 1500, end: 19.0, fadeOut: 2.4, vol: 1.0,   // (throwAt: ON the hit right after the music cuts out, 3:43.5)
               hit: { dmg: 26, base: 640, growth: 7.5, angle: 72 }, airSafe: 280,
               core: '#fffbe0', mid: '#ffd23f', outer: '#ff8a1a', edge: '#ff3a0a' };
+// THE OPENING: before he rises, ONE big lunging cut with the greatsword. Anyone it hits is STOPPED dead - frozen right where
+// they are (nothing else can touch them) until the sun comes down: it's thrown straight AT them and can't miss. If the cut
+// misses, the ult goes on just the same and the sun hits the floor (the whole-floor explosion, as before).
+const SUN_STRIKE = { time: 0.42, cutAt: 0.12, hitTo: 0.32, lunge: 170, r: 64 };
+const SUN_STRIKE_POSE = {
+  wind: pose({ lean: -0.3, bob: -10, legA: [0.9, 0.8], legB: [-0.7, 0.3], armA: [2.6, 0.4], armB: [2.4, 0.5], sw: 2.9 }),     // drawn back high
+  cut: pose({ lean: 0.55, bob: -14, legA: [1.2, 0.7], legB: [-1.0, 0.1], armA: [1.35, 0.05], armB: [1.2, 0.1], sw: 1.25 }),   // swept through
+};
 const SUN_POSE = {
   raise: pose({ lean: -0.15, bob: -2, legA: [0.35, 0.5], legB: [-0.3, 0.7], armA: [3.05, 0.05], armB: [-0.6, -0.5] }),        // hand up to the sun
   strain: pose({ lean: -0.25, bob: -4, legA: [0.5, 0.8], legB: [-0.4, 0.9], armA: [3.0, 0.15], armB: [2.7, 0.25] }),         // both hands - compressing it
@@ -11185,6 +11193,34 @@ function stepCruelSun(f, a, dt) {
   a.songT += dt / uiRealRate();
   if (f.sunSong && f.sunSong.el && !f.sunSong.el.paused && !netActive()) { const ct = f.sunSong.el.currentTime; if (ct > 0.05 && Math.abs(ct - a.songT) < 0.6) a.songT = ct; }   // (offline: locked to the song)
   const T = a.songT, ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
+  a.frozen = a.frozen || [];
+  if (T < SUN_STRIKE.time) {                                      // THE OPENING CUT: a lunge, the greatsword swept through
+    const K = SUN_STRIKE;
+    if (a.sx === undefined) a.sx = a.x0;
+    a.pose = T < K.cutAt ? SUN_STRIKE_POSE.wind : SUN_STRIKE_POSE.cut;
+    const nx = a.stopX !== undefined ? a.stopX : a.sx + f.face * K.lunge * easeOut(clamp(T / K.hitTo, 0, 1));   // (the lunge stops dead when the cut lands)
+    a.x0 = stageDef.ring || wideFloor() ? nx : clamp(nx, STAGE.x + 20, STAGE.x + STAGE.w - 20);
+    f.x = a.x0; f.y = a.y0; f.vx = f.vy = 0;
+    if (T >= K.cutAt && ev('cut')) { slashLine(f.x + f.face * 70, f.y - 70, f.face > 0 ? 0.35 : Math.PI - 0.35, 260, 0.22); sfx.slash(1.3); sfx.whoosh(true); }
+    if (T >= K.cutAt && T <= K.hitTo) {
+      const B = bladeSeg(f), hx = f.x + f.face * 90, hy = f.y - 60;
+      for (const t of fighters) {
+        if (t === f || allies(f, t) || a.frozen.includes(t) || t.respawnTimer > 0 || t.out || t.dead || t.poofT > 0 || isIntangible(t)) continue;
+        if (!circleHitsFighter(hx, hy, K.r, t) && !(B && bladeTouch(B, t))) continue;
+        if (t.shielding && t.shieldAge <= PARRY_WINDOW && parryRoll(t)) { perfectBlock(t, {}, t.x, t.y - 55); continue; }   // (a PERFECT block still turns it away)
+        t.damage += 6 * powerOf(f); t.hitFlash = 0.12; t.shielding = false;
+        t.action = { type: 'sunFrozen', t: 0, by: f, x: t.x, y: t.y };  // STOPPED
+        t.vx = t.vy = 0; a.frozen.push(t);
+        if (a.stopX === undefined) a.stopX = f.face > 0 ? Math.min(f.x, t.x - 80) : Math.max(f.x, t.x + 80);   // (he stays in front of them)
+        hitstop = Math.max(hitstop, 0.18); shake = Math.max(shake, 16); impactFrame = Math.max(impactFrame, 0.08);
+        impactAt = { x: t.x, y: t.y - 55, ang: 0, all: false, focus: true };
+        burst(t.x, t.y - 55, [SUN.core, SUN.mid, '#ffffff'], 30, 0, Math.PI, 700, { grav: 0 }); ring(t.x, t.y - 55); sfx.clash(true);
+        painTexts.push({ x: t.x, y: t.y - 150, t: 1.0, max: 1.0, text: 'STOPPED!', big: true });
+      }
+    }
+    return;
+  }
+  a.frozen = a.frozen.filter(t => fighters.includes(t) && t.respawnTimer <= 0 && t.action && t.action.type === 'sunFrozen');
   // he rises slowly... and after the throw drifts back down
   const up = T < SUN.throwAt ? SUN.rise * easeInOut(clamp(T / SUN.riseT, 0, 1)) : SUN.rise * (1 - easeInOut(clamp((T - SUN.throwAt - 0.6) / 1.6, 0, 1)));
   f.x = a.x0; f.y = a.y0 - up; f.vx = f.vy = 0; f.ground = up < 1; f.onPlatform = null;
@@ -11201,8 +11237,9 @@ function stepCruelSun(f, a, dt) {
     if (T >= SUN.compress) shake = Math.max(shake, 10);
     return;
   }
-  if (ev('throw')) {                                             // THROWN - at the ground under the nearest of them (or straight down)
-    const o = nearestFoe(f), tx = o && o.respawnTimer <= 0 ? clamp(o.x, STAGE.x + 40, STAGE.x + STAGE.w - 40) : a.x0 + f.face * 200, ty = STAGE.y;
+  if (ev('throw')) {                                             // THROWN - straight AT whoever the cut stopped... or at the ground under the nearest of them
+    const v = a.frozen[0], o = nearestFoe(f);
+    const tx = v ? v.x : o && o.respawnTimer <= 0 ? clamp(o.x, STAGE.x + 40, STAGE.x + STAGE.w - 40) : a.x0 + f.face * 200, ty = v ? Math.min(STAGE.y, v.y - 40) : STAGE.y;
     const dx = tx - S.x, dy = ty - S.y, L = Math.hypot(dx, dy) || 1;
     a.shot = { x: S.x, y: S.y, vx: dx / L * SUN.speed, vy: dy / L * SUN.speed, r: 30, t: 0 };
     if (dx) f.face = dx > 0 ? 1 : -1;
@@ -11212,7 +11249,8 @@ function stepCruelSun(f, a, dt) {
   if (sh && !sh.done) {
     sh.t += dt; sh.x += sh.vx * dt; sh.y += sh.vy * dt;
     if (Math.random() < dt * 60) burst(sh.x, sh.y, [SUN.mid, SUN.outer, '#ffffff'], 2, Math.atan2(-sh.vy, -sh.vx), 0.5, 300, { grav: 0 });
-    if (sh.y >= STAGE.y - 4 || sh.t > 1.2) { sh.done = true; sunExplode(f, sh.x); }
+    const v = a.frozen[0], reached = v && Math.hypot(sh.x - v.x, sh.y - (v.y - 40)) < 46;
+    if (reached || sh.y >= STAGE.y - 4 || sh.t > 1.2) { sh.done = true; sunExplode(f, sh.x, a.frozen); a.frozen = []; }
   }
   if (T >= SUN.end) {                                            // over: back down - and back to normal
     stopSunSong(f); f.action = { type: 'land', t: 0, dur: 0.3 }; f.y = a.y0;
@@ -11227,7 +11265,7 @@ function song_fade(f, T) {
   return true;
 }
 // THE WHOLE FLOOR EXPLODES: anyone on the ground (or low over it) anywhere on the stage is caught in it
-function sunExplode(f, x) {
+function sunExplode(f, x, sure = []) {
   const gy = STAGE.y;
   impactFrame = Math.max(impactFrame, 0.22); impactAt = { x, y: gy - 60, ang: Math.PI / 2, all: true, focus: true, invert: true };
   shake = 50; camPunch = 1; hitstop = Math.max(hitstop, 0.25); sfx.huge(); sfx.slam(); sfx.blast();
@@ -11238,10 +11276,13 @@ function sunExplode(f, x) {
   }
   for (let k = 0; k < 4; k++) auraWaves.push({ x, y: gy - 40, t: -k * 0.08, dur: 0.7, max: 500 + k * 140, color: k % 2 ? '#ffffff' : SUN.outer });
   ring(x, gy - 40); dust(x, gy, 60, 5);
+  for (const t of sure) if (fighters.includes(t) && t.action && t.action.type === 'sunFrozen') {   // the ones the cut STOPPED: let go - into it
+    t.action = null; burst(t.x, t.y - 50, [SUN.core, SUN.mid, SUN.outer], 40, 0, Math.PI, 900, { grav: -100 });
+  }
   for (const t of fighters) {
     if (t === f || allies(f, t) || t.respawnTimer > 0 || t.out) continue;
     const onFloor = t.x > STAGE.x - 80 && t.x < STAGE.x + STAGE.w + 80 && t.y >= gy - SUN.airSafe && t.y <= gy + 120;
-    if (!onFloor) continue;
+    if (!onFloor && !sure.includes(t)) continue;                  // (stopped by the cut: it can't miss them, wherever they are)
     applyHit(t, { ...SUN.hit, ultFinal: true, xray: 'RIBS' }, Math.sign(t.x - x) || f.face, (f.ultPower || 1) * powerOf(f), t.x, t.y - 50, { fighter: f });
   }
 }
@@ -12806,7 +12847,7 @@ function isIntangible(f) {
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return true;   // (vanished: nothing can touch him)
   if (a && a.type === 'attack' && a.move && a.move.dragonFist && a.ph && a.ph !== 'wind' && a.ph !== 'dash') return true;   // (Hunter mid-Dragon Fist)
   if (a && a.type === 'attack' && a.move && a.move.finalExp) return true;   // (Lance's Final Explosion: NOTHING interrupts it - no hit, grab or throw)
-  if (a && ['thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
+  if (a && ['sunFrozen', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
   return !!a && (a.type === 'spot' || a.type === 'roll' || a.type === 'air') && a.t >= a.iStart && a.t <= a.iEnd;
 }
 // CROUCHING: hold down on the ground to duck. Your hurtbox shrinks to ~60% height, so HIGH attacks
@@ -19455,6 +19496,13 @@ function stepAction(f, inp, dt) {
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
   if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
+  if (a.type === 'sunFrozen') {                                    // STOPPED by Colten's cut: held right there till the sun comes down
+    const o = a.by;
+    if (!o || !fighters.includes(o) || o.respawnTimer > 0 || !o.action || o.action.type !== 'cruelSun') { f.action = { type: 'hitstun', t: 0, dur: 0.4 }; return; }
+    f.x = a.x; f.y = a.y; f.vx = f.vy = 0;
+    if (realRandom() < dt * 14) burst(f.x + (realRandom() - 0.5) * 30, f.y - realRandom() * 90, [SUN.mid, '#ffffff'], 1, 0, Math.PI, 60, { grav: 0 });
+    return;
+  }
   if (a.type === 'fxFrozen') { if (!a.by.action || a.by.action.type !== 'fxSac') { f.action = { type: 'hitstun', t: 0, dur: 0.5 }; } f.vx = f.vy = 0; return; }
   if (a.type === 'sgVictim') { if (!a.by.action || a.by.action.type !== 'sgCut') f.action = null; return; }
   if (a.type === 'tsukuVictim') { if (!a.by.action || a.by.action.type !== 'tsukuyomi') f.action = null; return; }        // Lance: the Super Saiyan moment
@@ -20087,7 +20135,7 @@ function updateFighter(f, inp, dt) {
 
   // Gravity
   const a = f.action;
-  const floating = (f.flight && !(a && a.type === 'hitstun')) || (a && a.type === 'cruelSun') || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
+  const floating = (f.flight && !(a && a.type === 'hitstun')) || (a && (a.type === 'cruelSun' || a.type === 'sunFrozen')) || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
     (a.type === 'attack' && a.move.floatWhile && a.move.floatWhile(f, a)) ||
     a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
     (a.type === 'hitstun' && (a.impaled || (a.flat && a.t < a.flat))) ||
@@ -20203,7 +20251,7 @@ function updateFighter(f, inp, dt) {
   // Blast zones
   if (f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
-    if (f.action && (['sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
+    if (f.action && (['sunFrozen', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
     // COMEBACKS (Colby's Primary Lotus, Lance's Super Saiyan God): ONLY if you're knocked out WITH A FULL ULT METER - and only
     // once a match. Any stock, however you went out. It spends the meter.
     const cbReady = (f.ult || 0) >= ULT_MAX && !f.out;
@@ -21173,6 +21221,7 @@ function beingUlted(f) {
   if (a && (a.type === 'ultVictim' || a.type === 'thrown' && a.holder && a.holder.action && a.holder.action.type === 'shipUlt')) return true;
   if (projectiles.some(s => s.kind === 'dragon' && s.victim === f)) return true;
   if (projectiles.some(s => s.kind === 'tiger' && s.caught && s.caught.includes(f))) return true;
+  if (a && a.type === 'sunFrozen') return true;                   // (stopped by Colten's cut, waiting for the sun)
   if (fighters.some(o => o !== f && o.action && o.action.type === 'attack' && o.action.move && o.action.move.hunterUlt && o.action.whipVictim === f)) return true;   // (Hunter's Glacier Grind)
   return fighters.some(o => o !== f && o.action && ((o.action.type === 'uiTransform' || o.action.type === 'ssj2Cut') && o.action.victim === f ||
                                                     o.action.type === 'kiBarrage' && o.action.target === f));   // (It's My Turn's ki barrage)
@@ -23830,7 +23879,7 @@ function drawFighter(p) {
     if (a.bones) { drawBonePile(p, a); return; }
   }
   const tired = a && a.level > 0;
-  const intangible = isIntangible(p) && p.invuln <= 0 && !(a && ['clash', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(a.type)) && !(a && a.move && (a.move.dragonFist || a.move.finalExp));   // not dodging
+  const intangible = isIntangible(p) && p.invuln <= 0 && !(a && ['sunFrozen', 'clash', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(a.type)) && !(a && a.move && (a.move.dragonFist || a.move.finalExp));   // not dodging
   const blink = p.invuln > 0 && Math.floor(p.invuln * 12) % 2 === 0;
   const charging = a && a.type === 'attack' && a.phase === 'charge';
   const chargeFlash = charging && Math.floor(p.anim * 16) % 2 === 0;
