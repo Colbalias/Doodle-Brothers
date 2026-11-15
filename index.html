@@ -8689,6 +8689,46 @@ function drawHellcatHead(head, f, opts, look = {}) {
   }
   ctx.restore();
 }
+// JAJANKEN's NEN (in front of everyone): the golden glow round him in the stance (his fist's orb growing with the charge),
+// the spiky orange NEN ORB round his fist on ROCK, and the long glowing NEN BLADE off his fingers on SCISSORS
+function nenOrb(x, y, r, now) {
+  ctx.save();
+  if (!sketch) { const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.9); g.addColorStop(0, 'rgba(255,220,120,0.55)'); g.addColorStop(1, 'rgba(255,120,20,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 1.9, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = sketch ? '#333333' : '#ff4a12';                 // the spikes
+  for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2 + now * 2, l = r * (1.45 + 0.25 * Math.sin(now * 11 + k * 1.7));
+    ctx.beginPath(); ctx.moveTo(x + Math.cos(a - 0.17) * r * 0.9, y + Math.sin(a - 0.17) * r * 0.9); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.lineTo(x + Math.cos(a + 0.17) * r * 0.9, y + Math.sin(a + 0.17) * r * 0.9); ctx.fill(); }
+  if (!sketch) { const b = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); b.addColorStop(0, '#fff6c8'); b.addColorStop(0.5, '#ffb030'); b.addColorStop(1, '#ff6a10'); ctx.fillStyle = b; }
+  else ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  if (sketch) { ctx.strokeStyle = '#333333'; ctx.lineWidth = 2; ctx.stroke(); }
+  ctx.restore();
+}
+function drawJajanFx() {
+  const now = time;
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'attack' || f.respawnTimer > 0) continue;
+    if (a.key === 'jajanken' && a.phase !== 'end') {               // THE STANCE: a pulsing golden glow round all of him, the orb in his fist
+      const k = (a.ct || 0) / JAJAN.maxCharge, pulse = 0.75 + 0.25 * Math.sin(now * 9);
+      if (!sketch) { ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(f.x, f.y - 50, 10, f.x, f.y - 50, 78 + 18 * k); g.addColorStop(0, `rgba(255,200,80,${0.22 * pulse})`); g.addColorStop(0.7, `rgba(255,150,40,${0.14 * pulse})`); g.addColorStop(1, 'rgba(255,120,20,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(f.x, f.y - 50, 60 + 14 * k, 86 + 16 * k, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      const h = jjHand(f); nenOrb(h.x, h.y, 6 + 10 * k, now);
+    } else if (a.key === 'jjRock' && a.phase !== 'end') {          // ROCK: the orb round his fist, out in front
+      const m = ((a.mult || 1) - 1) / JAJAN.chargeBonus, x = a.phase === 'startup' ? jjHand(f).x : f.x + f.face * 66, y = a.phase === 'startup' ? jjHand(f).y : f.y - 58;
+      nenOrb(x, y, 16 + 12 * m, now);
+    } else if (a.key === 'jjScissors' && a.phase === 'active') {   // SCISSORS: the NEN BLADE off his fingers, sweeping up
+      const k = clamp(a.t / a.move.active, 0, 1), th = lerp(0.85, -1.35, easeOut(k));
+      const bx = f.x + f.face * (14 + Math.cos(th) * 30), by = f.y - 72 + Math.sin(th) * 30, ux = Math.cos(th) * f.face, uy = Math.sin(th), L = 120;
+      ctx.save();
+      if (!sketch) { ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 16; }
+      ctx.fillStyle = sketch ? '#ffffff' : 'rgba(255,240,170,0.92)';
+      ctx.beginPath(); ctx.moveTo(bx - uy * 5, by + ux * 5); ctx.lineTo(bx + ux * L, by + uy * L); ctx.lineTo(bx + uy * 5, by - ux * 5); ctx.closePath(); ctx.fill();
+      if (sketch) { ctx.strokeStyle = '#333333'; ctx.lineWidth = 1.5; ctx.stroke(); }
+      else { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + ux * (L - 8), by + uy * (L - 8)); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+}
 // (in front of everyone) the RASENGAN spinning in Hailie's hand while she has one
 function drawHailieFx() {
   for (const f of fighters) {
@@ -10615,8 +10655,9 @@ CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active:
     if (a.t > JAJAN.timeout) { a.phase = 'end'; a.t = 0; }
     return true;
   } };
-CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, active: 0.1, endlag: 0.32, landLag: 0.14, lunge: 520, lungeFriction: 0.45, impactOnHit: true, noClash: true,
-  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 13, base: 520, growth: 6.2, angle: 38 }],
+CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, active: 0.14, endlag: 0.32, landLag: 0.14, lunge: 980, lungeFriction: 0.3, impactOnHit: true, noClash: true,
+  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 13, base: 520, growth: 6.2, angle: 38, group: 0 },
+             { x: 78, y: -58, r: 46, dmg: 13, base: 520, growth: 6.2, angle: 38, group: 0 }],   // (the NEN ORB round his fist: hits too, further out)
   wind: JJ_POSE.stance, strike: JJ_POSE.rock,
   fire(f) { const x = f.x + f.face * 56, y = f.y - 58; burst(x, y, [JAJAN.gold, JAJAN.orange, '#ffffff'], 30, f.face > 0 ? 0 : Math.PI, 0.7, 700, { grav: 0 }); ring(x, y); shake = Math.max(shake, 10); sfx.huge ? sfx.huge() : sfx.slam(); } };
 CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, active: 0.06, endlag: 0.26, landLag: 0.12, noClash: true, hitboxes: [],
@@ -10630,7 +10671,10 @@ CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, ac
 CHARACTERS.COLBY.bareMoves.jjScissors = { name: 'Jajanken: Scissors', startup: 0.05, active: 0.2, endlag: 0.3, landLag: 0.14, noClash: true,
   hitboxes: [{ x: 66, y: -14, r: 34, dmg: 11, base: 470, growth: 6, angle: 80, from: 0, to: 0.07, group: 0 },
              { x: 78, y: -66, r: 38, dmg: 11, base: 470, growth: 6, angle: 80, from: 0.05, to: 0.13, group: 0 },
-             { x: 52, y: -124, r: 40, dmg: 11, base: 470, growth: 6, angle: 84, from: 0.11, to: 0.2, group: 0 }],
+             { x: 52, y: -124, r: 40, dmg: 11, base: 470, growth: 6, angle: 84, from: 0.11, to: 0.2, group: 0 },
+             { x: 112, y: 4, r: 30, dmg: 11, base: 470, growth: 6, angle: 80, from: 0, to: 0.07, group: 0 },        // (the NEN BLADE: the long reach)
+             { x: 128, y: -88, r: 32, dmg: 11, base: 470, growth: 6, angle: 80, from: 0.05, to: 0.13, group: 0 },
+             { x: 60, y: -178, r: 32, dmg: 11, base: 470, growth: 6, angle: 84, from: 0.11, to: 0.2, group: 0 }],
   wind: JJ_POSE.scWind, strike: JJ_POSE.scissors,
   fire(f) { slashLine(f.x + f.face * 70, f.y - 70, f.face > 0 ? -1.2 : -1.94, 260, 0.2); slashLine(f.x + f.face * 60, f.y - 60, f.face > 0 ? -1.3 : -1.84, 200, 0.16); sfx.cut ? sfx.cut(1) : sfx.whoosh(true); },
   step(f, a, dt) {                                             // ...and it CUTS anything thrown at him out of the air
@@ -24664,6 +24708,7 @@ function render() {
       if (ult && ult.def && ult.def.legion) drawLegionFront(ult);   // the clone rush: their eyes lighting up
       if (ult && ult.def && ult.def.raijin) drawRaijin(ult);        // Hailie's Flying Raijin: the kunai ring
       drawHailieFx();                                               // Hailie: the Rasengan in her hand
+      drawJajanFx();                                                // Colby: Jajanken's Nen (stance glow, Rock's orb, Scissors' blade)
       drawCruelSun();                                               // Colten: THE SUN
     }
     drawProjectiles();
