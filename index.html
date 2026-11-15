@@ -8288,6 +8288,10 @@ function drawBatarang(s) {
 
 // SAMURAI FLOW: his sword moves (and his K forms) can cancel into each other once they land - see the flow check in stepAction
 for (const k of ['jab', 'jab2', 'jab3', 'sideGround', 'upGround', 'downGround', 'dashAttack', 'nair', 'fair', 'bair', 'uair', 'dair', 'sideRanged', 'upRanged']) SEVON_MOVES[k].flow = true;
+// AIR SIDE J = FLAME DRAW too: charge it IN THE AIR (he hangs there, hand on the hilt) and let go to blast straight across,
+// keeping his height
+SEVON_MOVES.fair = { ...SEVON_MOVES.sideGround, name: 'Flame Draw (Air)', landLag: 0.16,
+  floatWhile: (f, a) => a.phase === 'startup' || a.phase === 'charge' || (a.phase === 'active' && !a.struck) };
 
 // ---------------- TOTAL CONCENTRATION (Sevon, down K) ----------------
 // Down K (ground or air) switches it on / off - instant, like Lance's Kaioken. While it's on:
@@ -10291,7 +10295,7 @@ const CHARACTERS = {
   AIDEN: {
     moves: AIDEN_MOVES,
     // The heavyweight: slowest on the ground and in the air, lowest jumps, but very hard to launch
-    stats: { runSpeed: 600, airSpeed: 480, jumpVel: 1150, doubleJumpVel: 1020, weight: 1.18 },   // (1.22 -> 1.18: a bit easier to knock out)
+    stats: { runSpeed: 600, airSpeed: 480, jumpVel: 1150, doubleJumpVel: 1020, weight: 1.09 },   // (1.22 -> 1.18 -> 1.12 -> 1.09: a bit easier to knock out - HYPE still builds his resistance back up)
     look: {
       body: '#e8e2cf',        // bone white: he's a SKELETON now (a pirate skeleton, same build)
       detail: '#8f8670',
@@ -13044,6 +13048,8 @@ const parryRoll = t => t.controller !== 'dummy' ||
 // src = { fighter } for melee hits, { shot } for projectiles (used for perfect-block counters/reflects).
 function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (t.respawnTimer > 0) return false;
+  { const by = src.fighter || src.by || (src.shot && src.shot.owner), k = by && CHAR_DMG[by.char];   // (per-fighter DAMAGE trims - knockback untouched)
+    if (k && h.dmg) h = { ...h, dmg: h.dmg * k }; }
   if (t.action && (t.action.type === 'cruelSun' || (t.action.type === 'attack' && t.action.move && t.action.move.finalExp))) {   // Lance's FINAL EXPLOSION / Colten's SUN: HYPER ARMOR - he takes the damage, nothing else
     t.damage += h.dmg * mult; t.hitFlash = 0.08; shake = Math.max(shake, 4);
     burst(hx, hy, ['#ffffff', '#ffe066'], 6, 0, Math.PI, 300, { grav: 0 }); sfx.block();
@@ -15879,7 +15885,9 @@ const TRANSFORM = { power: 1.2, speed: 1.1, drain: ULT_MAX / 14 };   // drain: f
 // Some characters' transformations are tuned differently (Lance's Super Saiyan: less power, more speed)
 const tfStats = f => (f.lanceForm && LANCE_FORMS[f.lanceForm]) || (f.ui ? UI_STATS : null) || (f.char && CHARACTERS[f.char] && CHARACTERS[f.char].transformStats) || TRANSFORM;
 // BALANCE: per-fighter damage (round robin, Nov 2026: Colten 85% and Sevon 60% wins - both are meant to sit UNDER Colbalias)
-const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95, COLBY: 0.9, HAILIE: 1.18 };   // (Hailie: she hits HARD - she's made of glass)   // (Colby: -10%)
+const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95, COLBY: 0.9, HAILIE: 1.18, AIDEN: 0.92 };   // (Aiden: -8% - he topped the round robin twice; HYPE still builds him back up)
+// DAMAGE ONLY (not knockback) per fighter - see applyHit
+const CHAR_DMG = { COLBY: 0.9 };   // (Colby: -10% damage - he topped the round robin; his knockback's untouched)   // (Hailie: she hits HARD - she's made of glass)   // (Colby: -10%)
 function powerOf(f) {
   if (!f) return 1;
   if (f.strikeClone) return powerOf(f.owner);                    // his J-string clones hit with HIS power (it's his combo)
