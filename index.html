@@ -24704,7 +24704,7 @@ function menuDevices(dt = 0) {
   const kx = (held(...K.right, 'ArrowRight') ? 1 : 0) - (held(...K.left, 'ArrowLeft') ? 1 : 0);
   const ky = (held(...K.down, 'ArrowDown') ? 1 : 0) - (held(...K.up, 'ArrowUp') ? 1 : 0);
   if (Object.keys(pressed).length) kbUsed = true;
-  if (!IS_ANDROID) out.push({ dev: 'keyboard', nav: { x: kx, y: ky }, okHeld: held(...K.attack, 'Enter'), tap: {
+  if (!IS_ANDROID) out.push({ dev: 'keyboard', nav: { x: kx, y: ky }, okHeld: held(...K.attack, 'Enter'), backHeld: held(...K.special, 'Backspace'), tap: {
     up: tapped(...K.up, 'ArrowUp'), down: tapped(...K.down, 'ArrowDown'), left: tapped(...K.left, 'ArrowLeft'), right: tapped(...K.right, 'ArrowRight'),
     ok: tapped(...K.attack, 'Enter'), back: tapped(...K.special, 'Backspace'), start: tapped('Enter'), alt: tapped('Tab'),
     esc: tapped('Escape'), leave: tapped('Delete'), pause: tapped('Escape') } });
@@ -24721,7 +24721,7 @@ function menuDevices(dt = 0) {
     if (window.sbPadCapture) { menuPadPrev[i] = { B, sx: ax > 0.6 ? 1 : ax < -0.6 ? -1 : 0, sy: ay > 0.6 ? 1 : ay < -0.6 ? -1 : 0 }; continue; }   // (the ONLINE screens have the controllers right now)
     const nx = (B[15] ? 1 : 0) - (B[14] ? 1 : 0) || ax, ny = (B[13] ? 1 : 0) - (B[12] ? 1 : 0) || ay;
     const sx = ax > 0.6 ? 1 : ax < -0.6 ? -1 : 0, sy = ay > 0.6 ? 1 : ay < -0.6 ? -1 : 0;
-    out.push({ dev: 'pad' + i, nav: { x: nx, y: ny }, okHeld: !!B[0], tap: {
+    out.push({ dev: 'pad' + i, nav: { x: nx, y: ny }, okHeld: !!B[0], backHeld: !!B[1], tap: {
       up: t(12) || (sy === -1 && prev.sy !== -1), down: t(13) || (sy === 1 && prev.sy !== 1),
       left: t(14) || (sx === -1 && prev.sx !== -1), right: t(15) || (sx === 1 && prev.sx !== 1),
       ok: t(0), back: t(1), start: t(9), alt: t(3), turbo: t(2), esc: false, leave: t(8), pause: t(9), update: t(7) } });   // (R2 / ZR = UPDATE in menus)
@@ -25164,8 +25164,9 @@ function selectClick(p) {
     return;
   }
 }
+const selBackHold = {};                                           // (how long each device has been holding BACK on the select screen)
 function selectBack(p) {
-  if (p.host) { if (p.carry >= 0) { p.carry = -1; menuSfx('back'); } return; }
+  if (p.host) { if (p.carry >= 0) { p.carry = -1; menuSfx('back'); } else if (!netRoom()) goHome(); return; }   // (WATCH MODE: nothing held = back to the home screen)
   const me = players.indexOf(p);
   if (p.carry !== me) { p.carry = me; menuSfx('back'); return; }     // put the CPU token down
   if (p.char) { p.char = null; menuSfx('back'); return; }
@@ -25176,6 +25177,9 @@ function selectUpdate(dt) {
   const devs = menuDevices(dt);
   if (tapped('KeyT')) { if (!netRoom()) setTurbo(!turbo); else toggleNetTurbo(); }
   for (const d of devs) {
+    // HOLD BACK (B / circle - or Backspace) for a moment: straight back to the home screen, whatever's picked
+    if (d.backHeld) { selBackHold[d.dev] = (selBackHold[d.dev] || 0) + dt; if (selBackHold[d.dev] >= 0.55 && !netRoom()) { selBackHold[d.dev] = -99; menuSfx('back'); goHome(); return; } }
+    else selBackHold[d.dev] = 0;
     if (d.tap.alt) return openControls('select');
     if (d.tap.turbo) { if (!netRoom()) setTurbo(!turbo); else toggleNetTurbo(); }
     if (d.tap.start && allReady()) return tryStart();
@@ -25189,7 +25193,11 @@ function selectUpdate(dt) {
       continue;
     }
     let p = players.find(q => !q.cpu && q.dev === d.dev);
-    if (!p) { if (d.tap.ok || d.tap.start) joinDevice(d.dev); continue; }
+    if (!p) {
+      if (d.tap.ok || d.tap.start) joinDevice(d.dev);
+      else if ((d.tap.back || d.tap.esc) && !netRoom()) { menuSfx('back'); goHome(); return; }   // (a controller that isn't playing - e.g. all CPUs: back = home)
+      continue;
+    }
     // move this player's cursor (stick / D-pad / WASD)
     p.cur.x = clamp(p.cur.x + d.nav.x * 900 * dt, 8, W - 8);
     p.cur.y = clamp(p.cur.y + d.nav.y * 900 * dt, 8, H - 8);
@@ -27374,12 +27382,18 @@ function drawResults() {
 }
 
 // ---------------- PAUSE (ESC / MENU button during a fight) ----------------
-const PAUSE_ITEMS = ['RESUME', 'CHARACTER SELECT', 'CONTROLS', 'CLEAN MODE', 'TURBO'];
+const PAUSE_ITEMS = ['RESUME', 'CHARACTER SELECT', 'MAIN MENU', 'CONTROLS', 'CLEAN MODE', 'TURBO'];
+const pauseBackHold = {};
 function pauseUpdate(devs) {
   for (const d of devs) {
+    // HOLD BACK on the pause menu: straight to the home screen
+    // BACK acts when it's LET GO: a quick press = resume, HOLD it = straight to the home screen (the press that opened the
+    // menu doesn't count - see the pause toggle)
+    const hb = pauseBackHold[d.dev] || 0;
+    if (d.backHeld) { if (hb >= 0) { pauseBackHold[d.dev] = hb + 1 / 60; if (hb + 1 / 60 >= 0.55) { pauseBackHold[d.dev] = -1; pauseSel = PAUSE_ITEMS.indexOf('MAIN MENU'); pauseChoose(); return; } } }
+    else { pauseBackHold[d.dev] = 0; if (hb > 0) { paused = false; return; } }
     if (d.tap.up) { pauseSel = (pauseSel + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length; menuSfx('move'); }
     if (d.tap.down) { pauseSel = (pauseSel + 1) % PAUSE_ITEMS.length; menuSfx('move'); }
-    if (d.tap.back) { paused = false; return; }
     if (d.tap.ok || d.tap.start) { pauseChoose(); return; }
   }
   for (let k = 0; k < PAUSE_ITEMS.length; k++) {
@@ -27393,6 +27407,7 @@ function pauseChoose() {
   const item = PAUSE_ITEMS[pauseSel];
   if (item === 'RESUME') paused = false;
   else if (item === 'CHARACTER SELECT') backToSelect();
+  else if (item === 'MAIN MENU') { const arc = arcade && arcade.active; backToSelect(); if (!arc) goHome(); }   // (straight back to the home screen)
   else if (item === 'TURBO') { setTurbo(!turbo); return; }
   else if (item === 'CLEAN MODE') { setCleanMode(!gameOptions.cleanHud); menuSfx('pick'); return; }
   else { paused = false; openControls('pause'); }
@@ -27451,14 +27466,15 @@ function frame(now) {
   const md = menuDevices(elapsed);
   // A controller that isn't driving anyone presses a button -> it takes over a fighter
   for (const d of md) {
-    if (netActive()) break;                          // online: nobody takes over a fighter
+    if (netActive() || watchMode) break;             // online / WATCHING CPUs: nobody takes over a fighter (START / BACK just pause it)
     if (d.dev.startsWith('pad') && (d.tap.ok || d.tap.back || d.tap.alt || d.tap.start) &&
         !fighters.some(f => f.controller === d.dev)) { claimFighter(d.dev); d.tap.pause = false; }
   }
   if (netActive()) {                                 // online: no pausing (ESC twice = leave the match)
     if (md.some(d => d.tap.pause)) netEscape();
-  } else if (md.some(d => d.tap.pause)) {
+  } else if (md.some(d => d.tap.pause || (watchMode && !paused && d.tap.back))) {   // (watching CPUs: BACK pauses too)
     paused = !paused; pauseSel = 0;
+    for (const d of md) if (d.backHeld) pauseBackHold[d.dev] = -1;   // (the press that opened it: ignored till it's let go)
     for (const f of fighters) { stopKameCharge(f); stopShotCharge(f); }
     for (const k in pressed) delete pressed[k];
     mouse.click = mouse.moved = mouse.right = false;
