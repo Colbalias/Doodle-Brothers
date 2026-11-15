@@ -7198,31 +7198,36 @@ function getCloneMoves() {
   return cloneMoves;
 }
 const AI_FERAL = { think: 0.26, defend: 0, aggro: 1, combo: 0.5, mash: 5 };  // average-or-slower reactions, pure aggression
+// DOWN K: TWO clones at once now (one press instead of two) - each one costs a Z vanish dot, and he still can't go past his
+// limit (2 in a 1v1 - more transformed / in bigger lobbies; a FULL D-E-M-O-N meter lets ONE more out past it). Room (or dots)
+// for only one: just the one.
 function summonShadowClone(f) {
-  // a FULL D-E-M-O-N meter lets him go ONE past his limit - the meter's only spent when he actually does
-  const extra = cloneCount(f) >= cloneMax(f) && (f.demon || 0) >= 100 && !f.minion;
-  if ((f.cloneCD || 0) > 0 || (cloneCount(f) >= cloneMax(f) && !extra) || !canAirDodge(f)) {   // too soon / too many / no dodge dots left: just a puff of smoke
-    burst(f.x, f.y - 50, ['#3a0000', '#6e6e78'], 8, 0, Math.PI, 200, { grav: 0 });
-    return;
+  if ((f.cloneCD || 0) > 0) { burst(f.x, f.y - 50, ['#3a0000', '#6e6e78'], 8, 0, Math.PI, 200, { grav: 0 }); return; }   // too soon: a puff of smoke
+  let made = 0;
+  for (let k = 0; k < 2; k++) {
+    const extra = cloneCount(f) >= cloneMax(f) && (f.demon || 0) >= 100 && !f.minion;   // (the meter's only spent when he actually goes past)
+    if ((cloneCount(f) >= cloneMax(f) && !extra) || !canAirDodge(f)) break;           // too many / no dots left
+    if (extra) {                                              // DEMON CLONE: the extra one - the meter empties
+      f.demon = 0;
+      painTexts.push({ x: f.x, y: f.y - 140, t: 0.8, max: 0.8, text: 'DEMON CLONE!', big: true });
+      hellBurst(f.x, f.y - 50, 24, 500); ring(f.x, f.y - 50); sfx.parry();
+    }
+    f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;   // (each one uses up a Z-vanish dot)
+    const c = makeFighter({ name: 'CLONE', color: '#5a0a0a', energy: '#ff1a1a', x: f.x, controller: 'minion', char: 'COLBALIAS' });
+    c.minion = true; c.owner = f;
+    c.moveset = getCloneMoves();
+    c.stats = cloneStats();
+    c.look = { ...f.look, bossAura: null, smoke: false, demonMeter: false };
+    c.x = f.x - f.face * (k ? 30 : 8); c.y = f.y; c.vx = f.face * (k ? 160 : 300); c.vy = f.ground ? (k ? -380 : 0) : Math.min(f.vy, 0);   // (the second one pops out behind him with a hop)
+    c.face = f.face; c.ground = f.ground && !k; c.halo = 0; c.invuln = 0.25;
+    c.stocks = Infinity; c.ult = 0; c.life = CLONE.life; c.cpuLevel = null;
+    fighters.push(c);
+    burst(c.x, c.y - 50, ['#1a0000', '#3a0000', '#ff1a1a'], 18, 0, Math.PI, 350, { grav: 0 });
+    made++;
   }
+  if (!made) { burst(f.x, f.y - 50, ['#3a0000', '#6e6e78'], 8, 0, Math.PI, 200, { grav: 0 }); return; }
   f.cloneCD = CLONE.cd;
-  if (extra) {                                                // DEMON CLONE: the extra one - the meter empties
-    f.demon = 0;
-    painTexts.push({ x: f.x, y: f.y - 140, t: 0.8, max: 0.8, text: 'DEMON CLONE!', big: true });
-    hellBurst(f.x, f.y - 50, 24, 500); ring(f.x, f.y - 50); sfx.parry();
-  }
-  f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;   // (uses up a Z-vanish dot)
-  const c = makeFighter({ name: 'CLONE', color: '#5a0a0a', energy: '#ff1a1a', x: f.x, controller: 'minion', char: 'COLBALIAS' });
-  c.minion = true; c.owner = f;
-  c.moveset = getCloneMoves();
-  c.stats = cloneStats();
-  c.look = { ...f.look, bossAura: null, smoke: false, demonMeter: false };
-  c.x = f.x - f.face * 8; c.y = f.y; c.vx = f.face * 300; c.vy = f.ground ? 0 : Math.min(f.vy, 0);
-  c.face = f.face; c.ground = f.ground; c.halo = 0; c.invuln = 0.25;
-  c.stocks = Infinity; c.ult = 0; c.life = CLONE.life; c.cpuLevel = null;
-  fighters.push(c);
-  burst(c.x, c.y - 50, ['#1a0000', '#3a0000', '#ff1a1a'], 18, 0, Math.PI, 350, { grav: 0 });
-  painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: 'CLONE!', big: false });
+  painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: made > 1 ? 'CLONES!' : 'CLONE!', big: false });
   if (!playClonePoof()) sfx.whoosh(true);                 // shadow clone jutsu POOF (falls back to a whoosh)
 }
 // The clones' brain: the normal AI at the FERAL setting, but it only moves, jumps and uses physical attacks
@@ -26264,7 +26269,7 @@ const MOVESETS = {
       ['K (HOLD)', 'Hellfire Shot', 'A charge shot - hold to power it up.'],
       ['SIDE K', 'Hell Missile', 'A slow bolt of hellfire that crosses the whole stage - a hit STUNS them for a moment.'],
       ['UP K', "Demon's Gaze", 'His recovery: he LOOKS at someone and marks them (a clone first, if one is out). Up K again = SWAP PLACES with them: afterimages of them both flicker up where they are about to land, then they cross over. In the air it gives him a lift. Whoever he swaps into the air gets +3 Z vanishes until they land or are knocked out.'],
-      ['DOWN K', 'Shadow Clone', 'Summons a clone that fights on its own (costs one blue dodge dot). Up to 2 at once (3 in Sage Mode).'],
+      ['DOWN K', 'Shadow Clones', 'Summons TWO clones at once that fight on their own (one blue dodge dot each - room or dots for just one: just the one). Up to 2 out at once in a 1v1 (3 in Sage Mode, +1 with a full DEMON meter).'],
       ['DOWN K (FULL D-E-M-O-N)', 'Demon Clone', 'With a full D-E-M-O-N meter he can summon ONE clone past his limit. The meter is only spent when he does - and he has to fill it again for the next one.'] ] },
     { title: 'GRAB (U) + DIRECTION', rows: [
       ['FWD / BACK', 'Volleyball Spike', 'A one-handed shoulder throw half the stage away - a clone SETS them, and he leaps up and SPIKES them.'],
