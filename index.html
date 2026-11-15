@@ -10846,7 +10846,41 @@ CHARACTERS.COLBY.bareMoves.jjScissors = { name: 'Jajanken: Scissors', startup: 0
     }
     return false;
   } };
-CHARACTERS.COLTEN.bareMoves = COLBY_PUNCHES; // Colten empty-handed (his Dragonslayer thrown and not picked back up)
+// COLTEN EMPTY-HANDED (his Dragonslayer thrown and not picked back up): Colby's fists and feet - but a KNIGHT's. Every
+// one is MUCH slower to come out and to recover from than Colby's (you'll always see it coming), and hits MUCH harder,
+// with a lot more knockback.
+const COLTEN_FISTS = { startup: 2.4, endlag: 1.9, dmg: 2.3, base: 1.65, growth: 1.7, minStartup: 0.16, minEndlag: 0.24 };   // (min: never anywhere near Colby's quickest)
+function heavyFists(src) {
+  const K = COLTEN_FISTS, out = {};
+  const hb = hs => hs.map(h => ({ ...h, dmg: Math.round(h.dmg * K.dmg * 10) / 10, base: h.base * K.base, growth: (h.growth || 0) * K.growth }));
+  for (const [k, m] of Object.entries(src)) {
+    if (!m || typeof m !== 'object') { out[k] = m; continue; }
+    const e = { ...m, startup: Math.max(K.minStartup, (m.startup || 0) * K.startup), endlag: Math.max(K.minEndlag, (m.endlag || 0) * K.endlag), heavyFist: true, windUp: true };
+    if (m.hitboxes) e.hitboxes = hb(m.hitboxes);
+    if (m.chargedHit && m.chargedHit.hitboxes) e.chargedHit = { ...m.chargedHit, hitboxes: hb(m.chargedHit.hitboxes) };
+    out[k] = e;
+  }
+  return out;
+}
+CHARACTERS.COLTEN.bareMoves = heavyFists(COLBY_PUNCHES);
+// ...and his UP J empty-handed: TITAN SWEEP - he drops low and whips one leg all the way round him, a full 360, sweeping
+// the floor in front AND behind - whoever it catches is launched way up. Slow to come out, enormous when it lands.
+CHARACTERS.COLTEN.bareMoves.upGround = { name: 'Titan Sweep', startup: 0.3, active: 0.34, endlag: 0.5, landLag: 0.2, heavyFist: true, windUp: true,
+  hitboxes: [{ x: 74, y: -16, r: 46, dmg: 21, base: 640, growth: 8, angle: 82, from: 0, to: 0.09, group: 0 },
+             { x: 30, y: -16, r: 40, dmg: 21, base: 640, growth: 8, angle: 82, from: 0, to: 0.09, group: 0 },
+             { x: -74, y: -16, r: 46, dmg: 21, base: 640, growth: 8, angle: 98, from: 0.08, to: 0.26, group: 0 },
+             { x: -30, y: -16, r: 40, dmg: 21, base: 640, growth: 8, angle: 98, from: 0.08, to: 0.26, group: 0 },
+             { x: 74, y: -16, r: 46, dmg: 21, base: 640, growth: 8, angle: 82, from: 0.25, to: 0.34, group: 0 }],
+  wind: pose({ lean: 0.3, bob: -26, legA: [0.9, 1.6], legB: [-0.6, 1.4], armA: [-0.6, -0.4], armB: [-0.8, -0.3] }),          // dropped low, coiled
+  strike: pose({ lean: 0.15, bob: -24, legA: [1.5, 0.05], legB: [-0.3, 1.6], armA: [-1.2, -0.2], armB: [1.3, -0.2] }),      // one leg straight out along the floor
+  fire(f) { sfx.whoosh(true); sfx.whoosh(false); dust(f.x, f.y, 16, 2.2); shake = Math.max(shake, 6); },
+  step(f, a, dt) {
+    if (a.phase !== 'active') { a.poseOverride = null; return false; }
+    const k = clamp(a.t / a.move.active, 0, 1);
+    a.poseOverride = { ...a.move.strike, turnX: Math.cos(k * Math.PI * 2) };   // the leg goes all the way ROUND him
+    if (realRandom() < dt * 60) { const ang = k * Math.PI * 2, lx = Math.cos(ang) * 80 * f.face; dust(f.x + lx, f.y, 2, 1.2); }
+    return false;
+  } };
 // AIDEN'S TAUNTS - three little skits (see HEEL_TAUNT / heelTauntStep / drawHeelTauntProps):
 //   UP   : RUM BARREL - hops up onto a barrel of rum, lights a cigar... puffs - and the smoke pours straight out of his
 //          ribcage (he's a SKELETON). Realises, hops down, flicks the cigar at the barrel: KA-BOOM.
@@ -19031,7 +19065,7 @@ function startAttack(f, inp, btn) {
                startupMul: (fromC ? C_STICK.speed : 1) * (f.tc ? TC.startup : 1) * (f.opening > 0 ? PARRY.openStartup : 1) };   // (Total Concentration: quicker too)              // C-stick moves come out faster
   if (f.opening > 0) { f.opening = 0; f.action.punish = true; }   // (the punish after a perfect block: used up)
   if (btn === 'atk' && f.look && f.look.trackDash) startTrackDash(f, f.action);
-  if (f.noScythe && /^(p[1-5]|k1)$/.test(key) && f.action.move.chain) colbyBlink(f, f.action);   // bare Colby's K string: BLINK round them
+  if (f.noScythe && f.char === 'COLBY' && /^(p[1-5]|k1)$/.test(key) && f.action.move.chain) colbyBlink(f, f.action);   // bare Colby's K string: BLINK round them
   // CAPTAIN HEEL'S VOICE: specials and smash attacks get a yell, normal attacks a grunt now and then
   if (f.char === 'AIDEN') heelSay(f, /Ranged$/.test(key) ? 'effort' : move.charge ? 'effort' : 'grunt', /Ranged$/.test(key) ? 1 : move.charge ? 0.75 : 0.35);
 }
