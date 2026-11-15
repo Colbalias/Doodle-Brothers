@@ -12914,7 +12914,16 @@ function powerUpLocked(f) {
   const a = f && f.action;
   return !!a && (['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform', 'sgCut', 'sgWait'].includes(a.type) || (a.type === 'leeUlt' && a.comeback));
 }
+// LANCE / HUNTER TRANSFORMING: untouchable - EXCEPT by an ULTIMATE or a COMEBACK. ultHitCtx is on while one of those is
+// doing its hitting (set around each fighter's update / their hitboxes / each projectile / the ultimate sequence).
+let ultHitCtx = false;
+const ULT_SRC_TYPES = ['cruelSun', 'ultStart', 'ultSeq', 'ultBeam', 'flameDragon', 'tsukuyomi', 'sgCut', 'fxSac', 'leeUlt', 'hGrindCut', 'shipUlt', 'kiBarrage', 'uiTransform'];
+const isUltSource = f => !!(f && f.action && (ULT_SRC_TYPES.includes(f.action.type) ||
+  (f.action.type === 'attack' && (f.action.key === 'ult' || (f.action.move && (f.action.move.hunterUlt || f.action.move.tigerUlt || f.action.move.finalExp))))));
+const ultProjectile = s => !!(s && (s.ult || s.ultHit || s.kind === 'dragon' || s.kind === 'tiger' || s.eraser || s.bigKi || (s.owner && isUltSource(s.owner))));
+const TF_HITTABLE = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform'];
 function isIntangible(f) {
+  if (ultHitCtx && f.action && TF_HITTABLE.includes(f.action.type) && (f.char === 'LANCE' || f.char === 'HUNTER') && !(f.invuln > 0)) return false;   // (an ultimate / comeback gets through)
   if (f.invuln > 0) return true;
   if (f.phaseT > 0) return true;                                  // (Hailie, incorporeal: nothing touches her)
   const a = f.action;
@@ -18738,6 +18747,7 @@ function updateProjectiles(dt, only = null) {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const s = projectiles[i];
     if (only && s.kind !== only) continue;
+    ultHitCtx = ultProjectile(s);                                  // (ultimate shots get through a transformation)
     if (s.clash) { if (beamClashLive(s.clash)) continue; s.clash = null; }   // (locked in a beam clash: the struggle moves it)
     if (s.kind === 'beam') { if (updateBeam(s, dt)) projectiles.splice(i, 1); continue; }
     if (s.kind === 'disc') { if (updateDisc(s, dt)) projectiles.splice(i, 1); continue; }   // Lance's Destructo Disc
@@ -21606,7 +21616,7 @@ function updateSim(dt) {
   // While an ultimate is playing, it runs the show: everything else is paused
   if (ult) {
     const liveU = ult.live;
-    updateUlt(dt);
+    ultHitCtx = true; updateUlt(dt); ultHitCtx = false;
     if (!liveU) {
       // (anyone else in the middle of a TRANSFORMATION / comeback / song-timed move keeps going through it - it stays on its music)
       for (const f of fighters.slice()) if (ult && f !== ult.user && f !== ult.target && f.respawnTimer <= 0 && f.action && typeof f.action.songT === 'number' && !(ult.extras || []).some(e => e.t === f)) updateFighter(f, emptyInput(), dt);
@@ -21662,7 +21672,9 @@ function updateSim(dt) {
     if (f.uiFrozen) continue;
     if (ult && ult.locked && ult.locked.has(f)) { tickPose(f, dt); continue; }   // (a LIVE ultimate is moving these two itself)
     const inp = readyT > 0 && !demo ? emptyInput() : demo && !f.minion ? demoInput(f) : inputFor(f);   // (frozen till the countdown's done)
+    ultHitCtx = isUltSource(f);
     updateFighter(f, inp, dt);
+    ultHitCtx = false;
     tickPose(f, dt);
     updateSmear(f, dt);                                    // white attack smears
   }
@@ -21687,6 +21699,7 @@ function updateSim(dt) {
   // Melee hitboxes
   for (const f of fighters) {
     const a = f.action;
+    ultHitCtx = isUltSource(f);                                    // (an ultimate's hits get through a transformation)
     if (!a || a.type !== 'attack' || a.phase !== 'active' || !a.move.hitboxes || f.respawnTimer > 0 || f.uiFrozen) continue;
     const boxes = a.powered && a.move.chargedHit ? a.move.chargedHit.hitboxes : a.move.hitboxes;   // power jab = its own big hitbox
     // THE GREATSWORD HITS WHERE IT'S DRAWN: anyone the blade itself touches is hit too (by the live hitbox nearest the
@@ -21842,9 +21855,11 @@ function updateSim(dt) {
     }
   }
 
+  ultHitCtx = false;                                         // (the melee hitboxes are done)
   const cutNow = uiCut && uiCut.action ? uiCut.action.type : null;   // (the cutscene can END partway through this frame - KO'd, landed...)
   if (!cutNow) updateProjectiles(dt);                      // (frozen while Lance's Ultra Instinct plays)
   else if (cutNow === 'flameDragon') updateProjectiles(dt, 'dragon');   // (Sevon's cutscene: only his dragon moves)
+  ultHitCtx = false;
   updateScythes(dt);
   updatePortals(dt);                                       // Hailie's portals
   weaponWatchdog(dt);
