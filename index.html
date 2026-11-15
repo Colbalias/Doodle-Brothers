@@ -9614,7 +9614,7 @@ function hunterMouth(f) { const S = hScale(f); return { x: f.x + f.face * 9 * S,
 const HL = { red: '#d4202a', black: '#141414', gold: '#e8b23a', orange: '#ff7a1a', visor: '#7fd8ff' };
 const H_KUNAI = { speed: 1650, life: 0.6, r: 9, stick: 6, upSpeed: 1750, upLife: 0.3 };
 const H_RASEN = { full: 1.1, rush: 980, rushT: 0.36, blue: ['#7fd8ff', '#ffffff', '#3aa0ff'] };
-const H_PORTAL = { r: 38, life: 15, cd: 0.5 };
+const H_PORTAL = { r: 38, life: 15, cd: 1.0 };   // (cd: through a portal = 1s before you can take one again - no portal-looping yourself off the stage)
 const H_PHASE = { dur: 4, dbl: 0.3 };
 const hPortalColor = f => (f && f.look && (f.look.portal || f.look.body)) || '#ff3a1a';
 const H_POSE = {
@@ -9630,6 +9630,21 @@ const H_POSE = {
 function hHit(f, t, h, hx, hy) { return applyHit(t, h, Math.sign(t.x - f.x) || f.face, powerOf(f), hx ?? t.x, hy ?? t.y - 55, { fighter: f }); }
 // ---- the KUNAI: thrown (side K), it STICKS in whoever it hits; side K again = teleport to it (or to them, with a stab -
 //      then a grab that throws them at her nearest portal). Up K: thrown straight up, and she teleports to it.
+// a kunai: a leaf-shaped steel blade, a cord-wrapped grip and the ring on the end (x, y = the grip's middle; ang = where the tip points)
+function drawKunaiShape(x, y, ang, sc = 1, tint) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(sc, sc);
+  ctx.fillStyle = tint || (sketch ? '#ffffff' : '#c8ccd6');                                   // the blade
+  ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(10, -4.2, 21, 0); ctx.quadraticCurveTo(10, 4.2, 4, 0); ctx.fill();
+  if (!tint) { ctx.strokeStyle = sketch ? '#333333' : '#6c7280'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(20, 0); ctx.stroke(); ctx.stroke(); }
+  ctx.fillStyle = tint || (sketch ? '#333333' : HL.black); ctx.fillRect(-7, -1.6, 11, 3.2);   // the wrapped grip
+  ctx.strokeStyle = tint || (sketch ? '#333333' : '#9aa0ab'); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(-9.5, 0, 2.5, 0, Math.PI * 2); ctx.stroke();   // the ring
+  ctx.restore();
+}
+function drawKunaiShot(s) {
+  const ang = s.stuck ? ((s.side || 1) > 0 ? 0.25 : Math.PI - 0.25) : Math.atan2(s.vy, s.vx);
+  if (!s.stuck && !sketch) { ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - Math.cos(ang) * 40, s.y - Math.sin(ang) * 40); ctx.stroke(); ctx.restore(); }   // (a streak behind it)
+  drawKunaiShape(s.x - Math.cos(ang) * 8, s.y - Math.sin(ang) * 8, ang, 1.3);
+}
 function hailieKunai(f) { return projectiles.find(q => q.kunai && q.owner === f && !q.up); }
 function hailieThrowKunai(f, up) {
   const k = { owner: f, kunai: true, up, x: f.x + f.face * (up ? 8 : 30), y: f.y - (up ? 96 : 62), vx: up ? 0 : f.face * H_KUNAI.speed, vy: up ? -H_KUNAI.upSpeed : 0,
@@ -9708,7 +9723,7 @@ function hailiePortal(f) {
     painTexts.push({ x: f.x, y: f.y - 140, t: 0.5, max: 0.5, text: 'PORTAL', big: false });
   } else {
     P.b = { x: f.x, y: f.y }; P.life = H_PORTAL.life;
-    f.portalCD = H_PORTAL.cd; hTeleport(f, P.a.x, P.a.y);
+    f.portalCD = H_PORTAL.cd; f.portalHold = true; hTeleport(f, P.a.x, P.a.y);
   }
 }
 function updatePortals(dt) {
@@ -9721,9 +9736,12 @@ function updatePortals(dt) {
     if (!P.b) continue;
     const ends = [[P.a, P.b], [P.b, P.a]];
     for (const g of fighters) {                                  // anyone who touches an end comes out the other
-      if (g.respawnTimer > 0 || g.portalCD > 0 || (g.action && ['grabbed', 'holding', 'ultSeq', 'ultVictim', 'thrown', 'whipped'].includes(g.action.type))) continue;
+      const inside = ends.some(([A]) => Math.hypot(g.x - A.x, (g.y - 45) - (A.y - 50)) <= H_PORTAL.r + 8);
+      if (!inside) g.portalHold = false;                         // (you have to step OUT of a portal before it takes you again)
+      if (g.respawnTimer > 0 || g.portalCD > 0 || g.portalHold || (g.action && ['grabbed', 'holding', 'ultSeq', 'ultVictim', 'thrown', 'whipped'].includes(g.action.type))) continue;
       for (const [A, B] of ends) {
         if (Math.hypot(g.x - A.x, (g.y - 45) - (A.y - 50)) > H_PORTAL.r + 8) continue;
+        g.portalHold = true;
         burst(A.x, A.y - 50, [hPortalColor(o), '#ffffff'], 10, 0, Math.PI, 320, { grav: 0 });
         g.x += B.x - A.x; g.y += B.y - A.y; g.onPlatform = null; g.ground = false; g.portalCD = H_PORTAL.cd;
         burst(B.x, B.y - 50, [hPortalColor(o), '#ffffff'], 10, 0, Math.PI, 320, { grav: 0 }); sfx.vanish(0.5);
@@ -12478,6 +12496,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
 
 // Damage + launch. Used by attacks and by throws (throws skip shields, dodges and perfect blocks).
 function knock(t, h, dirSign, mult, hx, hy) {
+  if (t.phaseT > 0) return;                                       // (Hailie incorporeal: nothing lands)
   if (typeof ult !== 'undefined' && ult && ult.user && ult.user !== t) t.lastHitBy = ult.user;   // (an ultimate's launch: its user knocked them out)
   const dmg = h.dmg * mult * (t.kaioken ? KAIOKEN.taken : 1) * (t.arcadeBoss ? ARCADE_BOSS.taken : 1);    // Kaioken: takes 7% more per hit (the ARCADE BOSS: less)
   // Colbalias hit WHILE charging his Hellfire Shot: the charge is lost
@@ -19529,9 +19548,13 @@ function updateFighter(f, inp, dt) {
   f.dodgeBuf = inp.blockTap ? BUFFER : Math.max(0, f.dodgeBuf - dt);
   if (inp.blockTap) { f.blockGap = time - (f.lastBlockTap ?? -99); f.lastBlockTap = time; }   // (how long since the last press - mashing can't perfect block)
   if (f.char === 'HAILIE' && !f.minion) {                          // HAILIE: double-tap BLOCK = INCORPOREAL (4s); block again = back in
-    if (f.phaseT > 0) { f.phaseT -= dt; if (inp.blockTap && f.phaseT < H_PHASE.dur - 0.12) { f.phaseT = 0; f.dodgeBuf = 0; sfx.vanish(0.5); } }
+    if (f.phaseT > 0) {
+      if (f.damage > (f.phaseDmg ?? f.damage)) f.damage = f.phaseDmg;   // (no damage gets through while she's phased - from ANYTHING)
+      if (f.action && ['hitstun', 'grabbed', 'thrown', 'whipped', 'timeStop', 'ultVictim'].includes(f.action.type)) f.action = null;
+      f.phaseT -= dt; if (inp.blockTap && f.phaseT < H_PHASE.dur - 0.12) { f.phaseT = 0; f.dodgeBuf = 0; sfx.vanish(0.5); }
+    }
     else if (inp.blockTap && f.blockGap < H_PHASE.dbl && !(f.action && ['hitstun', 'grabbed', 'thrown', 'ultVictim', 'timeStop'].includes(f.action.type))) {
-      f.phaseT = H_PHASE.dur; f.shielding = false; f.dodgeBuf = 0; if (f.action && ['spot', 'roll'].includes(f.action.type)) f.action = null;
+      f.phaseT = H_PHASE.dur; f.phaseDmg = f.damage; f.shielding = false; f.dodgeBuf = 0; if (f.action && ['spot', 'roll'].includes(f.action.type)) f.action = null;
       ghosts.push({ fig: figureOf(f), life: 0.4, max: 0.4, color: '#b06aff' }); sfx.vanish(1); painTexts.push({ x: f.x, y: f.y - 140, t: 0.5, max: 0.5, text: 'INCORPOREAL', big: false });
     }
   }
@@ -22946,6 +22969,7 @@ function drawFigure(fig, opts = {}) {
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armA, f, main, EDGE); drawHunterBracer(shoulder, pz.armA, f, opts); }   // (the near arm's delt + bracer, on top of it)
+  if (look.hellcat && !grip) { const H = swordHold(shoulder, pz, f), a = Math.atan2(H.uy, H.ux); drawKunaiShape(H.hand.x + H.ux * 3, H.hand.y + H.uy * 3, a, 1, opts.tint); }   // HAILIE: her kunai, always in her front hand
   if (look.greatsword && !grip && !fig.noScythe) (look.katana ? drawKatana : drawGreatsword)(shoulder, pz, f, opts);   // the greatsword (Sevon: katana), in his front hand
   if (look.sledge && !grip) drawSledge(shoulder, pz, f, opts, look);      // HUNTER: the sledgehammer
   if (look.auraArmor && fig.transformed && !opts.tint && !sketch) drawAuraArmor(hip, shoulder, head, f);
@@ -23851,11 +23875,11 @@ function drawProjectiles() {
   }
   if (!sketch) drawKameCharge();                                // Lance's ultimate: the ki ball growing in his hand
   for (const f of fighters) if (f.action && f.action.type === 'uiTransform') drawUiKame(f);   // Lance's UI cutscene Kamehameha
-  for (const s of projectiles) if (s.kind === 'beam') drawBeam(s); else if (s.kind === 'tile') drawTile(s); else if (s.kind === 'disc') drawDisc(s); else if (s.kind === 'dragon') drawDragon(s); else if (s.kind === 'batarang') drawBatarang(s);
+  for (const s of projectiles) if (s.kunai) drawKunaiShot(s); else if (s.kind === 'beam') drawBeam(s); else if (s.kind === 'tile') drawTile(s); else if (s.kind === 'disc') drawDisc(s); else if (s.kind === 'dragon') drawDragon(s); else if (s.kind === 'batarang') drawBatarang(s);
   if (sketch) {                          // pen-drawn energy balls with a scribbled fill
     ctx.lineCap = 'round';
     for (const s of projectiles) {
-      if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'batarang' || s.kind === 'tile') continue;
+      if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
       const ink = s.owner ? inkOf(s.owner) : '#7a4b00';
       ctx.strokeStyle = ink;
       if (s.kind === 'wave') {
@@ -23878,7 +23902,7 @@ function drawProjectiles() {
     return;
   }
   for (const s of projectiles) {
-    if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'batarang' || s.kind === 'tile') continue;
+    if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
     if (s.electric) { drawThunderBolt(s); continue; }
     s.trail.forEach((t, i) => {
       const k = i / s.trail.length;
