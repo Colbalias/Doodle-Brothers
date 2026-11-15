@@ -10767,12 +10767,19 @@ const JJ_POSE = {
   scissors: pose({ lean: -0.25, bob: -2, legA: [0.6, 0.3], legB: [-0.6, 0.3], armA: [2.8, 0.05], armB: [-1.2, -0.6] }),
 };
 const jjHand = f => ({ x: f.x - f.face * 18, y: f.y - 46 });
-// GON's VOICE: the chant as he drops into the stance (sounds/battle/colby-jajanken.mp3 = 0:29-0:34 of the clip), then the
+// GON's VOICE: the chant as he drops into the stance (sounds/battle/colby-jajanken.mp3 = 0:29.9-0:34 of the clip - it starts
+// right on his voice, no quiet lead-in), then the
 // shout on his final input (sounds/battle/colby-jajanken-final.mp3 = from 0:35). The chant stops if he leaves the stance.
+// (both loaded up front and cloned to play - a brand-new Audio has to load first, and the start of the chant was lost)
+const JJ_SRC = { chant: 'sounds/battle/colby-jajanken.mp3', final: 'sounds/battle/colby-jajanken-final.mp3' }, JJ_EL = {};
+function jjEl(k) {
+  try { if (!JJ_EL[k]) { JJ_EL[k] = new Audio(JJ_SRC[k]); JJ_EL[k].preload = 'auto'; JJ_EL[k].load(); } return JJ_EL[k].cloneNode(); } catch (e) { return null; }
+}
+try { jjEl('chant'); jjEl('final'); } catch (e) {}
 function playJJ(f, final) {
   stopJJ(f);
   if (!soundOn || f.minion) return;
-  let el; try { el = new Audio(final ? 'sounds/battle/colby-jajanken-final.mp3' : 'sounds/battle/colby-jajanken.mp3'); } catch (e) { return; }
+  const el = jjEl(final ? 'final' : 'chant'); if (!el) return;
   el.preload = 'auto'; el.volume = clamp(1.0 * settings.master * settings.sfx, 0, 1);
   el.play().catch(() => {});
   f.jjSnd = { el, final };
@@ -12869,6 +12876,8 @@ const lerp = (a, b, k) => a + (b - a) * k;
 // land on him). (His ALOLAN WHIP dash grab used to be immune too - now projectiles CAN hit him out of it.)
 const projPhase = t => !!(t.char === 'AIDEN' && t.action && t.action.type === 'attack' &&
   t.action.key === 'neutralRanged' && t.action.phase !== 'end');
+// ...and a shot that's gone THROUGH him while he spun has MISSED him for good (it doesn't catch him as the spin ends)
+const phasedThrough = (s, t) => projPhase(t) && ((s.hit && circleHitsFighter(s.x, s.y, (s.r || 12) + 24, t) && s.hit.add(t)), true);
 // powering up (a transformation) or mid-COMEBACK: they can't be moved, swapped, frozen or stopped - it plays out
 function powerUpLocked(f) {
   const a = f && f.action;
@@ -18792,7 +18801,7 @@ function updateProjectiles(dt, only = null) {
     }
     if (!dead) {
       for (const t of fighters) {
-        if (t === s.owner || allies(s.owner, t) || s.hit.has(t) || t.respawnTimer > 0 || projPhase(t) || cloneShielded(s.owner, t)) continue;
+        if (t === s.owner || allies(s.owner, t) || s.hit.has(t) || t.respawnTimer > 0 || phasedThrough(s, t) || cloneShielded(s.owner, t)) continue;
         if (circleHitsFighter(s.x, s.y, s.r, t)) {
           if (s.holdTarget === t && t.action && t.action.downed) {   // Lance's ki barrage on the one he pinned: hurts, doesn't move them
             const d = s.dmg * s.mult; t.damage += d; if (!t.transformed && !s.ultHit) t.ult = Math.min(ULT_MAX, (t.ult || 0) + d);
@@ -19295,7 +19304,7 @@ function updateScythes(dt) {
       s.x += s.vx * dt; s.y += s.vy * dt; s.ang += s.dir * SCYTHE_THROW.spin * dt;
       if (Math.random() < dt * 40) particles.push({ x: s.x, y: s.y, vx: 0, vy: 0, life: 0.08, max: 0.08, size: 1, color: '#cfd8e6', type: 'bit', grav: 0 });
       for (const t of fighters) {
-        if (t === s.owner || t.respawnTimer > 0 || s.hit.has(t) || projPhase(t)) continue;
+        if (t === s.owner || t.respawnTimer > 0 || s.hit.has(t) || phasedThrough(s, t)) continue;
         if (!circleHitsFighter(s.x, s.y, SCYTHE_THROW.r, t)) continue;
         if (allies(s.owner, t)) continue;
         s.hit.add(t);
@@ -20565,6 +20574,109 @@ const AI_LEVELS = {
   FERAL:  AI_FERAL,                                                              // Colbalias's shadow clones
 };
 
+// AIDEN's DARKEST LARIAT (neutral K) is ANTI-RANGED: shots, thrown weapons, the Flame Dragon / Tiger all pass straight
+// through him while he spins. The CPU answers anything flying at him with it - a REFLEX (every frame, not just when it
+// "thinks"), timed so he's already spinning when it gets there. One roll per shot; better CPUs nearly always do it.
+const AIDEN_LARIAT_AI = { EASY: 0.3, NORMAL: 0.65, HARD: 0.85, MASTER: 0.95, IMPOSSIBLE: 1, FERAL: 0.5 };
+// the soonest anything reaches him (seconds) - within `horizon` - and what it is
+function aidenIncoming(f, horizon) {
+  let best = null;
+  const check = (s, x, y, vx, vy) => {
+    if (s.owner === f || (s.owner && allies(s.owner, f))) return;
+    const dx = f.x - x, dy = f.y - 50 - y, sp = Math.hypot(vx || 0, vy || 0); if (sp < 60) return;
+    const along = (dx * vx + dy * vy) / sp; if (along <= 0) return;                 // (moving away)
+    const miss = Math.abs(dx * vy - dy * vx) / sp; if (miss > 90) return;            // (won't come near him)
+    const tti = Math.max(0, along - 40) / sp;
+    if (tti <= horizon && (!best || tti < best.tti)) best = { s, tti };
+  };
+  for (const s of projectiles) {
+    if (s.kind === 'beam') continue;                                                 // (a beam lasts longer than the spin)
+    if (s.kind === 'dragon') { if (s.state === 'fly') check(s, s.x, s.y, Math.cos(s.dir) * FLAME_DRAGON.speed, Math.sin(s.dir) * FLAME_DRAGON.speed); continue; }
+    check(s, s.x, s.y, s.vx, s.vy);
+  }
+  for (const s of scythes) if (s.state === 'fly') check(s, s.x, s.y, s.vx, s.vy);
+  return best;
+}
+// ---- the CPU fetching its thrown weapon, wherever it landed (other floors of the skyscraper, a platform...) ----
+const fetchTarget = f => scythes.find(q => (q.owner === f || q.weapon === nativeWeapon(f) || f.char === 'COLTEN') && q.state === 'stuck');   // (their own, wherever it ended up)
+// the floor something at (x, y) is resting on: the highest surface at or just under it
+function surfaceUnder(x, y) {
+  let best = STAGE.y;
+  for (const pl of PLATFORMS) if (x > pl.x - 6 && x < pl.x + pl.w + 6 && pl.y >= y - 34 && pl.y < best) best = pl.y;
+  return best;
+}
+function aiFetchWeapon(f, ai) {
+  if (!ai.fetchOn) return;
+  const s = f.noScythe ? fetchTarget(f) : null;
+  if (!s) { ai.fetchOn = false; return; }
+  if (f.action && f.action.type !== 'land') return;
+  const dx = s.x - f.x, sf = surfaceUnder(s.x, s.y), toward = Math.abs(dx) > 10 ? Math.sign(dx) : 0;
+  ai.up = false; ai.down = false;
+  if (Math.hypot(dx, s.y - (f.y - 20)) < SCYTHE_THROW.pickup * 0.8) { ai.tapSpc = true; ai.dir = 0; return; }   // there: pick it up
+  if (f.ground) {
+    if (Math.abs(sf - f.y) < 24) { ai.dir = toward; return; }                 // same floor: walk to it
+    if (sf > f.y + 24) {                                                      // it's BELOW: drop through this floor...
+      if (f.onPlatform && !f.onPlatform.solid) { ai.down = true; ai.tapDown = true; ai.dir = Math.abs(dx) > 60 ? Math.sign(dx) : 0; }
+      else ai.dir = Math.sign(dx) || f.face;                                  // (...or walk off the edge of a solid one, toward it)
+      return;
+    }
+    // it's ABOVE: the next floor up on the way there - get under it, then jump
+    const next = PLATFORMS.filter(pl => pl.y < f.y - 10 && pl.y >= sf - 1).sort((a, b) => b.y - a.y)[0];
+    if (next && (f.x < next.x + 20 || f.x > next.x + next.w - 20)) { ai.dir = Math.sign(clamp(s.x, next.x + 40, next.x + next.w - 40) - f.x); return; }
+    ai.dir = 0; ai.tapJump = true; ai.jumpHold = 0.3; return;
+  }
+  // in the air on the way
+  if (sf > f.y + 24) { ai.down = true; ai.dir = Math.abs(dx) > 60 ? Math.sign(dx) : 0; return; }   // falling to it: straight through the floors between
+  if (sf < f.y - 12) {                                                        // still under its floor: keep rising (double jump at the top)
+    ai.dir = Math.abs(dx) > 160 ? Math.sign(dx) : 0;
+    if (f.vy > -120 && (f.airJumps || 0) > 0) { ai.tapJump = true; ai.jumpHold = 0.3; }
+    return;
+  }
+  ai.dir = toward;                                                            // up level with it: drift over and land
+}
+// ---- COLBY's TIME STOP (CPU): with the TIME meter full and them in reach, he stops time... and then goes to work on
+// them while they're frozen: right up on them, chaining his heaviest hits (all the knockback's stored and lands at once
+// when time resumes). Every frame, not just when it "thinks" - a frozen opponent is a free combo.
+const TS_AI = { use: { EASY: 0.02, NORMAL: 0.08, HARD: 0.18, MASTER: 0.3, IMPOSSIBLE: 0.5, FERAL: 0.1 }, reach: 155,
+                combo: [{ side: true }, { up: true }, { down: true }, { jab: true }, { side: true }, { up: true }],      // (with the scythe)
+                bare: [{ k: true }, { k: true }, { k: true }, { down: true }, { k: true }, { k: true }, { k: true }, { k: true }] };   // (bare-handed: the fast K punch string + the Inferno Axe Kick)
+function aiTimeStop(f, ai, o, level) {
+  if (!f.look || !f.look.timeStop || f.minion || !o) return;
+  const oa = o.action, mine = oa && oa.type === 'timeStop' && !oa.bind && !oa.hell;
+  const free = !f.action || f.action.type === 'land' || (f.action.type === 'attack' && f.action.phase === 'end' && f.action.hit.size > 0);
+  if (mine) {                                                       // THEY'RE FROZEN: go to work
+    ai.fetchOn = false;
+    const left = oa.dur - oa.t, dx = o.x - f.x, adx = Math.abs(dx), dir = Math.sign(dx) || f.face;
+    if (left < 0.12) return;                                       // (time's about to resume - let the last one land)
+    if (adx > 62 || Math.abs(o.y - f.y) > 90) {                    // get right up on them
+      ai.dir = dir; ai.up = ai.down = false; ai.block = false; ai.tapAtk = ai.tapSpc = ai.tapGrab = false;
+      if (o.y < f.y - 90 && f.ground) { ai.tapJump = true; ai.jumpHold = 0.2; }
+      return;
+    }
+    if (!free) { ai.dir = 0; return; }
+    if (f.face !== dir && f.ground && !f.action) { ai.dir = dir; return; }   // (turn to face them)
+    const list = f.noScythe ? TS_AI.bare : TS_AI.combo, q = list[(ai.tsStep = ((ai.tsStep || 0) + 1)) % list.length];
+    ai.up = !!q.up; ai.down = !!q.down; ai.dir = q.side ? dir : 0; ai.block = false;
+    if (!f.ground) { ai.up = !!q.up; ai.down = false; }            // (in the air: his airs)
+    if (q.k) { ai.up = ai.down = false; ai.dir = 0; ai.tapSpc = true; ai.tapAtk = ai.tapGrab = false; }   // (neutral K: the punch string)
+    else { ai.tapAtk = true; ai.tapSpc = ai.tapGrab = false; }
+    return;
+  }
+  // FULL METER: stop time when they're in reach of the aura
+  if ((f.timeMeter || 0) >= 100 && (f.tsCD || 0) <= 0 && free &&
+      Math.hypot(o.x - f.x, o.y - f.y) < TS_AI.reach && o.respawnTimer <= 0 && !isIntangible(o) && !(oa && oa.type === 'timeStop') &&
+      Math.random() < (TS_AI.use[level] ?? 0.04)) {
+    ai.down = true; ai.up = false; ai.dir = 0; ai.tapSpc = true; ai.tapAtk = ai.tapGrab = false; ai.tsStep = 0;
+  }
+}
+function aidenLariatReflex(f, ai, level) {
+  if (f.char !== 'AIDEN' || f.minion || (f.action && f.action.type !== 'land')) return;
+  const M = AIDEN_MOVES.neutralRanged, inc = aidenIncoming(f, M.startup + 0.32);
+  if (!inc || inc.tti < M.startup * 0.6) return;                                     // (too late to start it now)
+  if (inc.s.aidenRoll === f) return;
+  inc.s.aidenRoll = f;
+  if (Math.random() < (AIDEN_LARIAT_AI[level] ?? 0.65)) { ai.tapAtk = ai.tapGrab = ai.tapBlock = false; ai.block = false; ai.up = ai.down = false; ai.dir = 0; ai.tapSpc = true; }
+}
 function aiInput(f, level) {
   const L = AI_LEVELS[level];
   const ai = f.ai || (f.ai = { t: 0, dir: 0, up: false, down: false, block: false,
@@ -20610,7 +20722,10 @@ function aiInput(f, level) {
     }
   }
   aiSafety(f, ai);
-  aiDodgeKame(f, ai, level);                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
+  aiDodgeKame(f, ai, level);
+  aidenLariatReflex(f, ai, level);
+  aiFetchWeapon(f, ai);                                       // going to get the thrown weapon: walk / drop / climb to it
+  aiTimeStop(f, ai, o, level);                                // Colby: TIME STOP when it's full - then COMBO them while they're frozen                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
 
   // PARRY REFLEX (every frame, not just when it "thinks"): an attack is about to land on us - now and then snap the
   // shield up at just the right moment for a PERFECT BLOCK (better CPUs more often). Staggered from one of our own
@@ -20760,15 +20875,12 @@ function aiDecide(f, o, ai, L) {
     const hs = scythes.find(q => q.owner === f && q.state === 'hover');
     if (hs && hs.hoverT < SCYTHE_THROW.hoverTime - 0.3 && Math.random() < 0.6) { ai.tapSpc = true; return; }
   }
-  // Threw the scythe? Go get it (unless the opponent is right on top of us, or he's fighting bare-handed for now)
-  if (f.noScythe && f.ground && !stayBare) {
-    const s = scythes.find(q => (q.owner === f || q.weapon === nativeWeapon(f) || f.char === 'COLTEN') && q.state === 'stuck');   // (their own, wherever it ended up)
-    if (s && !(adx < 80 && Math.random() < 0.5)) {
-      if (Math.hypot(s.x - f.x, s.y - (f.y - 20)) < SCYTHE_THROW.pickup * 0.8) { ai.tapSpc = true; return; }
-      ai.dir = Math.sign(s.x - f.x);
-      if (s.y < f.y - 60 && Math.random() < 0.1) ai.tapJump = true;      // it's up on a platform
-      return;
-    }
+  // Threw the scythe? Go get it (unless the opponent is right on top of us, or he's fighting bare-handed for now) - the
+  // getting there (other floors too: dropping through, climbing up) is done every frame by aiFetchWeapon
+  ai.fetchOn = false;
+  if (f.noScythe && !stayBare) {
+    const s = fetchTarget(f);
+    if (s && !(adx < 80 && Math.random() < 0.5)) { ai.fetchOn = true; return; }
   }
 
   // Empty-handed and the RIVAL'S thrown weapon is about to reach us: press K to catch it
@@ -20797,6 +20909,9 @@ function aiDecide(f, o, ai, L) {
     else if (canAirDodge(f)) { ai.tapBlock = true; ai.up = true; ai.dir = 0; }
     return;
   }
+  // AIDEN with something flying at him: mid-LARIAT, let it spin (it passes straight through); otherwise don't start anything
+  // else - stay free, so the lariat reflex (aidenLariatReflex) can come out right on time
+  if (f.char === 'AIDEN' && !f.minion && aidenIncoming(f, projPhase(f) ? 9 : 0.8)) { ai.tapAtk = ai.tapSpc = ai.tapGrab = false; ai.dir = 0; ai.block = false; return; }
   if ((meleeThreat || shotThreat || dragonThreat) && Math.random() < Math.min(1, L.defend * 1.2)) {
     if (!f.ground && canAirDodge(f)) { ai.tapBlock = true; ai.dir = -toward; return; }   // (in the air: Z VANISH away, first)
     // A HIGH attack (every hitbox up at head height)? Sometimes just duck under it
