@@ -8598,63 +8598,20 @@ function drawMadara(hip, shoulder, f, fig, opts, main, layer, pz) {
 // COLBY - ROCK LEE'S CLOTHES: the jumpsuit (his body colour - ivory), orange leg warmers over the shins, blue sandals, the
 // red forehead-protector belt round his waist (its metal plate at the front) and a dark holster strapped to his thigh.
 const LEE = { warmer: '#f0962e', warmerD: '#c26a14', sandal: '#2f4fa8', belt: '#c8322a', plate: '#b9c0c6', holster: '#2d3a4a', strap: '#c8322a' };   // (the thigh strap: the same red as his belt)
-// COLTEN'S TRANSFORMATION - ESCANOR (The One): HUGE and bare-chested, tanned, every muscle showing - a torn open green vest
-// hanging off him, ragged green pants cut off below the knee, a brown belt with the gold SUN buckle, swept-back ginger hair
-// and that moustache
-const ESCANOR = { skin: '#e2a576', shade: '#a8653e', green: '#4a7a35', greenD: '#2f5222', belt: '#6b4423', gold: '#f2c230', hair: '#e07a2a', hairD: '#a8501a' };
-const escLook = l => l._esc || (l._esc = { ...l, ...ESCANOR_LOOK });
-const ESCANOR_LOOK = { body: ESCANOR.skin, headColor: ESCANOR.skin, knight: null, auraArmor: false, muscle: true, detail: ESCANOR.shade, glasses: false,
-                       foreSpikes: null, escanor: true, scale: 1.14, transformAura: '#ffb02e' };
-function drawEscanor(hip, shoulder, f, fig, opts, layer, pz) {
-  const tint = opts.tint, sk = sketch, col = c => tint || (sk ? '#333333' : c);
-  const w0 = ctx.lineWidth; ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  if (layer === 'legs') {                                       // the ragged green pants, cut off below the knee
-    const th = pz[0], bend = pz[1], mid = { x: hip.x + Math.sin(th) * LEG_UP * f, y: hip.y + Math.cos(th) * LEG_UP }, a2 = th - bend;
-    const end = { x: mid.x + Math.sin(a2) * LEG_LOW * f, y: mid.y + Math.cos(a2) * LEG_LOW };
-    const P = k => ({ x: lerp(mid.x, end.x, k), y: lerp(mid.y, end.y, k) }), cut = P(0.5);
-    ctx.strokeStyle = col(ESCANOR.green); ctx.lineWidth = 10.5;
-    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(cut.x, cut.y); ctx.stroke();
-    if (!tint && !sk) {                                         // the torn hem: jagged points
-      const dx = end.x - mid.x, dy = end.y - mid.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
-      ctx.fillStyle = ESCANOR.green;
-      for (let k = -2; k <= 2; k++) { const bx = cut.x + nx * k * 2.4, by = cut.y + ny * k * 2.4, len = 3 + ((k + 2) * 5 % 4);
-        ctx.beginPath(); ctx.moveTo(bx - nx * 1.6, by - ny * 1.6); ctx.lineTo(bx + ux * len, by + uy * len); ctx.lineTo(bx + nx * 1.6, by + ny * 1.6); ctx.fill(); }
-      ctx.strokeStyle = ESCANOR.greenD; ctx.lineWidth = 1.2;      // a tear in the thigh
-      const t1 = { x: lerp(hip.x, mid.x, 0.5), y: lerp(hip.y, mid.y, 0.5) }; ctx.beginPath(); ctx.moveTo(t1.x - 2, t1.y - 3); ctx.lineTo(t1.x + 1, t1.y); ctx.lineTo(t1.x - 1, t1.y + 3); ctx.stroke();
-    }
-  } else {
-    const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO, px = -uy, py = ux;
-    const Q = (a, u) => ({ x: hip.x + px * a + ux * u, y: hip.y + py * a + uy * u });
-    for (const sd of [-1, 1]) {                                 // the OPEN VEST: a torn flap hanging down each side of his chest
-      const top = Q(sd * 19, TORSO + 3), out = Q(sd * 20, TORSO - 4), lo = Q(sd * 11, 2), inn = Q(sd * 13, TORSO - 6);
-      ctx.fillStyle = col(ESCANOR.green);
-      ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(out.x, out.y); ctx.lineTo(lo.x, lo.y);
-      for (let k = 1; k <= 3; k++) { const a = Q(sd * (11 + k * 0.6), 2 - (k % 2) * 4 + k), b = Q(sd * (12 - k * 0.3), 6 + k * 3); ctx.lineTo(a.x, a.y); ctx.lineTo(b.x, b.y); }   // ragged edge
-      ctx.lineTo(inn.x, inn.y); ctx.closePath(); ctx.fill();
-      if (!tint && !sk) { ctx.strokeStyle = ESCANOR.greenD; ctx.lineWidth = 1.2; ctx.stroke(); }
-    }
-    ctx.strokeStyle = col(ESCANOR.belt); ctx.lineWidth = 4.5; ctx.lineCap = 'butt';   // the belt...
-    const b1 = Q(9, 1), b2 = Q(-9, 1); ctx.beginPath(); ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
-    const bk = Q(0, 1);                                         // ...and its gold SUN buckle
-    ctx.fillStyle = col(ESCANOR.gold); ctx.beginPath(); ctx.arc(bk.x, bk.y, 3.2, 0, Math.PI * 2); ctx.fill();
-    if (!sk) { ctx.strokeStyle = tint || ESCANOR.gold; ctx.lineWidth = 1.2; for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; ctx.beginPath(); ctx.moveTo(bk.x + Math.cos(a) * 3.5, bk.y + Math.sin(a) * 3.5); ctx.lineTo(bk.x + Math.cos(a) * 6, bk.y + Math.sin(a) * 6); ctx.stroke(); } }
-  }
-  ctx.restore(); ctx.lineWidth = w0;
-}
-function drawEscanorHead(head, f, opts) {
-  const tint = opts.tint, sk = sketch, col = c => tint || (sk ? '#333333' : c);
-  const X = dx => head.x + f * dx, Y = dy => head.y + dy;
-  ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  ctx.fillStyle = col(ESCANOR.hair);                           // the hair: swept up off his forehead and back, a few locks at the back
-  ctx.beginPath();
-  ctx.moveTo(X(10), Y(-5)); ctx.quadraticCurveTo(X(12), Y(-14), X(4), Y(-16)); ctx.quadraticCurveTo(X(-4), Y(-18), X(-11), Y(-12));
-  ctx.lineTo(X(-17), Y(-10)); ctx.lineTo(X(-12.5), Y(-6)); ctx.lineTo(X(-17), Y(-2)); ctx.lineTo(X(-12), Y(1)); ctx.lineTo(X(-14), Y(6)); ctx.lineTo(X(-9), Y(4));
-  ctx.quadraticCurveTo(X(-11), Y(-7), X(-2), Y(-9)); ctx.quadraticCurveTo(X(5), Y(-10), X(10), Y(-5)); ctx.closePath(); ctx.fill();
-  if (!tint && !sk) { ctx.strokeStyle = ESCANOR.hairD; ctx.lineWidth = 1.1; for (const [a, b] of [[[8, -9], [-8, -13]], [[6, -6], [-9, -9]]]) { ctx.beginPath(); ctx.moveTo(X(a[0]), Y(a[1])); ctx.quadraticCurveTo(X(0), Y(a[1] - 4), X(b[0]), Y(b[1])); ctx.stroke(); } }
-  ctx.fillStyle = col(ESCANOR.hair);                           // THE MOUSTACHE: thick, curling up at the ends
-  ctx.beginPath(); ctx.moveTo(X(4), Y(4)); ctx.quadraticCurveTo(X(8), Y(2), X(12.5), Y(4)); ctx.quadraticCurveTo(X(15), Y(2), X(15.5), Y(-1));
-  ctx.quadraticCurveTo(X(15), Y(5), X(12), Y(6.5)); ctx.quadraticCurveTo(X(8), Y(7), X(5), Y(7)); ctx.quadraticCurveTo(X(2.5), Y(7.5), X(1.5), Y(4)); ctx.closePath(); ctx.fill();
-  if (!tint && !sk) { ctx.strokeStyle = '#3a2412'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(X(7), Y(-3)); ctx.lineTo(X(10.5), Y(-3.5)); ctx.stroke(); }   // a confident brow
+// COLTEN'S TRANSFORMATION: he gets HUGE - every muscle showing, bare-chested (the breastplate, tabard and pauldron come off),
+// still himself: his hair, his glasses, his armoured legs and belt. When his ultimate's done he's back to normal.
+const COLTEN_BUFF = { scale: 1.14 };
+const escLook = l => l._esc || (l._esc = { ...l, body: l.headColor || '#3fae49', muscle: true, detail: shade(l.headColor || '#3fae49', 0.6), scale: COLTEN_BUFF.scale,
+                                            auraArmor: false, knight: l.knight ? { ...l.knight, shirtless: true } : null, buffLegs: true });
+// (his armour still on his legs: steel greaves over the thigh and shin, a dark knee guard)
+function drawBuffLegs(hip, f, opts, pz, K) {
+  if (opts.tint || !K) return;
+  const steel = sketch ? '#ffffff' : K.steel, dark = sketch ? '#1b1b1b' : K.dark;
+  const th = pz[0], bend = pz[1], mid = { x: hip.x + Math.sin(th) * LEG_UP * f, y: hip.y + Math.cos(th) * LEG_UP }, a2 = th - bend;
+  const end = { x: mid.x + Math.sin(a2) * LEG_LOW * f, y: mid.y + Math.cos(a2) * LEG_LOW };
+  ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = steel; ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(mid.x, mid.y, 4.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 // HAILIE - WRAITH'S HELLCAT: black pants with red, boots fading GOLD to ORANGE, a black harness over a red top with a gold
@@ -9995,7 +9952,7 @@ const CHARACTERS = {
       greatsword: true,         // the huge sword (drawn in his front hand, angle from the pose's "sw")
       weapon: 'sword',          // his own weapon (Colby's is the scythe) - see WEAPONS
       auraArmor: true,          // transformed: glowing aura armor (ultra armor + less knockback)
-      escanorForm: true,        // TRANSFORMED he becomes ESCANOR - huge, bare-chested, torn green clothes (see ESCANOR_LOOK)
+      escanorForm: true,        // TRANSFORMED he gets HUGE and bare-chested (still his hair, glasses and armoured legs) - see escLook
       transformAura: '#7dffb0',
       // PROUD stance: chest out, standing tall, the greatsword held up in front of him, blade pointing to the
       // sky, free hand on his hip
@@ -14897,6 +14854,7 @@ function swordUltSwing(U, k) {
 }
 function endUlt(U) {
   const u = U.user, v = U.target;
+  if (u.char === 'COLTEN' && u.transformed) { endTransform(u); u.ult = 0; }   // (Colten: the ultimate spends the transformation - he's back to normal)
   v.action = null;
   v.x = U.baseX; v.y = U.baseY;
   u.action = { type: 'land', t: 0, dur: 0.3 };
@@ -15186,7 +15144,7 @@ function powerOf(f) {
          (f.revenge > 0 ? 1 + f.revenge : 1) *                                        // Aiden's stored REVENGE power
          hypePower(f);                                                                // Aiden's HYPE (weaker at low hype)
 }
-function auraColor(f) { return f.ui ? UI.color : f.ssg ? SSG.color : (f.transformed && f.look && f.look.escanorForm) ? ESCANOR_LOOK.transformAura : (f.look && f.look.transformAura) || f.energy; }
+function auraColor(f) { return f.ui ? UI.color : f.ssg ? SSG.color : (f.look && f.look.transformAura) || f.energy; }
 // GOD SPEED (Colby transformed): every hit he lands zaps them with EXTRA lightning damage on top
 // (zap = % added per hit; tiny rapid hits add tickZap instead)
 const GOD_SPEED = { zap: 1.5, tickZap: 0.3, colors: ['#ffffff', '#7fd8ff', '#bfeaff'] };
@@ -22098,7 +22056,7 @@ function figureOf(p) {
   return { x: p.x, y: p.y, vx: p.vx, vy: p.vy, face: p.face, pose: p.disp || getPose(p), squash: p.squash,
            color: bodyColorOf(p), ink: inkOf(p), look: p.look, transformed: !!p.transformed, noScythe: !!p.noScythe || p.spareSwordT > 0, ui: !!p.ui, lanceForm: p.lanceForm || 0, ssg: !!p.ssg, odmGas: p.odmGas, sizeMul: p.sizeMul || 1, hForm: p.hForm || 0, hairGrow: p.hairGrow,
            ...(p.hForm && p.look && p.look.rage ? { look: hunterFormLook(p.look, p.hForm) } : {}),
-           ...(p.transformed && p.look && p.look.escanorForm ? { look: escLook(p.look), color: ESCANOR.skin } : {}) };   // (Colten as ESCANOR: his skin, not steel)
+           ...(p.transformed && p.look && p.look.escanorForm ? { look: escLook(p.look), color: escLook(p.look).body } : {}) };   // (Colten transformed: his skin, not steel)
 }
 
 // Characters can have their own body color (Colby is red). If both players pick the same character,
@@ -22193,7 +22151,7 @@ function drawFigure(fig, opts = {}) {
     pz = { ...pz, sc: { ...pz.sc, yaw: Math.PI - pz.sc.yaw, n: [-n[0], -n[1], -n[2]] } };   // blade keeps leading
   }
   const look0 = fig.look || {};
-  // COLTEN TRANSFORMED = ESCANOR: the armour's gone - the look swaps for the whole of it (cached on the look)
+  // COLTEN TRANSFORMED: huge and bare-chested (see escLook - cached on the look)
   const look = fig.transformed && look0.escanorForm ? escLook(look0) : look0;
   ctx.save();
   ctx.globalAlpha = opts.alpha ?? 1;
@@ -22462,7 +22420,7 @@ function drawFigure(fig, opts = {}) {
   if (look.haori) drawHaori(hip, shoulder, f, fig, opts, main, 'front');   // SEVON: the haori's front panel, over his torso and near leg
   if (look.madara) { drawMadara(hip, shoulder, f, fig, opts, main, 'legs', pz.legB); drawMadara(hip, shoulder, f, fig, opts, main, 'legs', pz.legA);
                      drawMadara(hip, shoulder, f, fig, opts, main, 'front'); }   // COLBALIAS: shin wraps + sandals, then the armour
-  if (look.escanor) { drawEscanor(hip, shoulder, f, fig, opts, 'legs', pz.legB); drawEscanor(hip, shoulder, f, fig, opts, 'legs', pz.legA); drawEscanor(hip, shoulder, f, fig, opts, 'front'); }   // COLTEN as ESCANOR
+  if (look.buffLegs) { drawBuffLegs(hip, f, opts, pz.legB, look.knight); drawBuffLegs(hip, f, opts, pz.legA, look.knight); }   // COLTEN transformed: his armoured legs
   if (look.hellcat) { drawHellcat(hip, shoulder, f, fig, opts, 'legs', pz.legB); drawHellcat(hip, shoulder, f, fig, opts, 'legs', pz.legA); drawHellcat(hip, shoulder, f, fig, opts, 'front'); }   // HAILIE
   if (look.lee) { drawLee(hip, shoulder, f, fig, opts, main, 'legs', pz.legB); drawLee(hip, shoulder, f, fig, opts, main, 'legs', pz.legA);
                   drawLee(hip, shoulder, f, fig, opts, main, 'front', pz.legA); }   // COLBY: leg warmers + sandals, holster, belt
@@ -22836,7 +22794,7 @@ function drawFigure(fig, opts = {}) {
   if (S && S.depth >= -8) drawScythe3D(S, opts.tint);    // scythe is in front of his body
 
   if (look.hellcat) drawHellcatHead(head, f, opts, look);
-  if (look.escanor) drawEscanorHead(head, f, opts);                 // COLTEN as ESCANOR: the hair and the moustache                 // HAILIE: the hood and the gold mask
+                 // HAILIE: the hood and the gold mask
   // Near arm last, so the gripping hand sits on top of the shaft
   ctx.lineWidth = ARM_W;
   ctx.strokeStyle = main;
@@ -23003,6 +22961,12 @@ function drawKnightArmor(hip, shoulder, head, pz, f, opts, K) {
   if (opts.tint) return;
   const steel = sketch ? '#ffffff' : K.steel, dark = sketch ? '#1b1b1b' : K.dark;
   const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO, nx = -uy, ny = ux;
+  if (K.shirtless) {                                             // (transformed: bare-chested - only his steel belt stays on)
+    const bx = hip.x + ux * 3, by = hip.y + uy * 3;
+    ctx.strokeStyle = dark; ctx.lineWidth = 4; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(bx - nx * 9, by - ny * 9); ctx.lineTo(bx + nx * 9, by + ny * 9); ctx.stroke(); ctx.lineCap = 'round';
+    return;
+  }
   // breastplate
   ctx.strokeStyle = steel; ctx.lineCap = 'round'; ctx.lineWidth = 13;
   ctx.beginPath(); ctx.moveTo(hip.x + ux * 7, hip.y + uy * 7); ctx.lineTo(shoulder.x - ux * 2, shoulder.y - uy * 2); ctx.stroke();
