@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.60",
+    "version":  "0.7.61",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,16 +8,16 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "30d2f74cff3c5cbf9ceadbf5f3f965240edac8bf45fa3fd7863f859db559955f",
-                                     "size":  1896272
+                                     "hash":  "09ba98641caf1250baec1e3473ae32072e59ce5e1f865abdade7c8693ebccec0",
+                                     "size":  1997273
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
                                             "size":  92865
                                         },
                   "net.js":  {
-                                 "hash":  "69e060db2f07f57c6dcf754d0fed412b95863553533f06520457c15ad8070c9c",
-                                 "size":  65677
+                                 "hash":  "99137eeb8109351e9b64e68b166f2c2d9ae7eed5ea17edf7ffb87d6d29515875",
+                                 "size":  67887
                              },
                   "sounds/battle/a-samurais-death.mp3":  {
                                                              "hash":  "0fa2765a6f521e2154568fbc2ff61c08a726a9283388ea9e57a6065d9ba8752c",
@@ -67,6 +67,10 @@
                                                         "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
                                                         "size":  1010304
                                                     },
+                  "sounds/battle/colten-sun.mp3":  {
+                                                       "hash":  "510f71e8ed4dade1f2fa2c18fc8f55214a6bf59704d026f4dc68175b14075605",
+                                                       "size":  404121
+                                                   },
                   "sounds/battle/courtesy-call.mp3":  {
                                                           "hash":  "695c6b45ce63b5d6c534f79a3898aabb4ec1a835408b92e19f91565e658c5be3",
                                                           "size":  6012519
