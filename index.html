@@ -3910,7 +3910,7 @@ function stepRKO(f, a, dt) {
   const v = a.victim, F = a.face0, T = a.t;
   if (a.released) { f.vx = approach(f.vx, 0, FRICTION * dt); return; }
   v.vx = v.vy = 0;
-  if (!a.vx0) { a.vx0 = f.x + F * 42; a.gy0 = f.y; playBuffer(rkoBuf, 0.9, RKO_SOUND_FROM); }   // "WATCH OUT, WATCH OUT... RKO! OUTTA NOWHERE!"
+  if (!a.vx0) { a.vx0 = f.x + F * 42; a.gy0 = f.y; ultTrack(playBuffer(rkoBuf, 0.9, RKO_SOUND_FROM)); }   // "WATCH OUT, WATCH OUT... RKO! OUTTA NOWHERE!"
   const shoulder = { x: f.x - F * 4, y: a.gy0 - 60 };          // where they lie across his shoulders (their hip on his shoulders)
   if (T < RKO.lift) {                                          // 1. UP ONTO HIS SHOULDERS
     const u = easeOut(T / RKO.lift);
@@ -7405,12 +7405,12 @@ function updateStatueUlt(U, dt) {
       U.strikes.push({ k, t: 0, dur: 0.13, ox: (Math.random() - 0.5) * 40, oy: -30 - Math.random() * 50, tg });
       U.nextStrike += lerp(0.085, 0.028, (T - T1) / STATUE.barrage) / L.length;   // (more of them: more palms, so everyone gets the whole barrage)
       if (once('barrage')) {                                         // the barrage of hits from your clip
-        sfx.whoosh(true); U.hitSnd = playBuffer(neteroHitsBuf, 0.55);
+        sfx.whoosh(true); U.hitSnd = ultTrack(playBuffer(neteroHitsBuf, 0.55));
         if (U.hitSnd && actx) U.hitSnd.g.gain.linearRampToValueAtTime(0.95, actx.currentTime + 0.9);   // swells up as the voice line finishes
       }
     }
     // the clip is ~1.7s; the barrage is 2.4s - start it again (overlapping a touch) to cover the rest
-    if (neteroHitsBuf && T >= T1 + neteroHitsBuf.duration - 0.15 && once('barrage2')) U.hitSnd2 = playBuffer(neteroHitsBuf, 0.95);
+    if (neteroHitsBuf && T >= T1 + neteroHitsBuf.duration - 0.15 && once('barrage2')) U.hitSnd2 = ultTrack(playBuffer(neteroHitsBuf, 0.95));
   }
   if (T >= T2 && once('barrageEnd')) { stopBuffer(U.hitSnd, 0.15); stopBuffer(U.hitSnd2, 0.15); }   // silence as the hands fold in
   for (let i = U.strikes.length - 1; i >= 0; i--) {
@@ -11925,6 +11925,13 @@ function startBattleSong() {
 const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong'];
 let ultAudioSeq = 0;
 const ultAudioOrder = new WeakMap();                              // (handle -> when it started)
+const ULT_EXTRA = [];                                            // (voice lines / clips belonging to ultimates and cutscenes)
+function ultTrack(h) {
+  if (!h) return h;
+  ultAudioOrder.set(h, ++ultAudioSeq); ULT_EXTRA.push(h);          // (the NEWEST from the moment it starts)
+  if (h.s) { try { h.s.addEventListener('ended', () => { h.done = true; }); } catch (e) {} }
+  return h;
+}
 function cutUltAudio(h) {
   h.cut = true;
   if (h.el) h.el.muted = true;
@@ -11933,7 +11940,13 @@ function cutUltAudio(h) {
 function ultAudioFocus() {
   let top = null, topN = -1;
   const live = [];
-  for (const f of fighterPool) for (const k of ULT_AUDIO_SLOTS) {
+  for (let i = ULT_EXTRA.length - 1; i >= 0; i--) {                // the voice lines / clips (dropped once they're over)
+    const h = ULT_EXTRA[i];
+    if (h.done || (h.el && (h.el.ended || h.el.paused && h.el.currentTime > 0))) { ULT_EXTRA.splice(i, 1); continue; }
+    const n = ultAudioOrder.get(h) || 0; live.push(h); if (n > topN) { topN = n; top = h; }
+  }
+  for (const f of fighterPool) for (const k of [...ULT_AUDIO_SLOTS, 'kameSnd']) {
+    if (k === 'kameSnd' && !(f.action && f.action.type === 'ultBeam')) continue;   // (the Kamehameha's sound only counts when it's his ULTIMATE)
     const h = f[k];
     if (!h || typeof h !== 'object') continue;
     if (h.el && h.el.ended) { if (k === 'roarSnd') f[k] = null; continue; }
@@ -13780,7 +13793,7 @@ function startUltimate(f, alt = false, up = false, side = false) {   // (side = 
   impactFrame = 0.12; impactAt = { x: f.x, y: f.y - 50, ang: 0, all: true, focus: true, invert: true };
   shake = Math.max(shake, 10);
   sfx.parry(); sfx.clash(true);
-  if (def.statue) playBuffer(neteroVoiceBuf, 1.0);   // Colbalias: "99 hands" as he activates it
+  if (def.statue) ultTrack(playBuffer(neteroVoiceBuf, 1.0));   // Colbalias: "99 hands" as he activates it
 }
 
 function stepUltStart(f, a, dt) {
@@ -15068,7 +15081,7 @@ function updateRushUlt(U, dt) {
       const s = v.onPlatform || ((v.x > STAGE.x && v.x < STAGE.x + STAGE.w) ? STAGE : null);
       if (s) { U.baseY = s.y; v.y = s.y; }
       flash(u.x, v.x + D * 110); u.x = v.x + D * 110; u.y = U.baseY; u.face = D;   // on the far side of them, back turned
-      U.voice = playBuffer(myTurnBuf, RUSH.voiceVol);
+      U.voice = ultTrack(playBuffer(myTurnBuf, RUSH.voiceVol));
       painTexts.push({ x: v.x, y: v.y - 150, t: 0.6, max: 0.6, text: '!?', big: true, ult: true });
     }
     v.x = U.baseX; v.y = U.baseY; U.victimPose = null;
@@ -15730,7 +15743,7 @@ function playSharinganSfx() {
   try {
     if (!sharinganEl) { sharinganEl = new Audio('sounds/battle/sharingan-eyes.mp3'); sharinganEl.preload = 'auto'; }
     const c = sharinganEl.cloneNode(); c.volume = clamp(1.0 * settings.master * settings.sfx, 0, 1); c.play().catch(() => {});
-    return { el: c };
+    return ultTrack({ el: c });
   } catch (e) { return null; }
 }
 function playTsuSong(f) {
