@@ -2558,7 +2558,7 @@ const AETHER = { throwAt: 0.07, riseTime: 0.24, height: 320, hang: 0.1, fall: 15
                  snag:  { dmg: 3 },                                                   // caught on the way down
                  slam:  { dmg: 8, base: 430, growth: 5.6, angle: 72 },                // driven into the ground
                  wave:  { dmg: 6, base: 360, growth: 4.6, angle: 60 },                // the landing shockwave
-                 waveR: 150, endlag: 0.34 };
+                 waveR: 150, endlag: 0.34, cd: 1.8, mash: 5 };   // (cd: seconds before he can use it again; mash: presses to struggle off the blade)
 COLBY_MOVES.upRanged = { name: "Reaper's Aether", startup: 0.06, active: 9, endlag: AETHER.endlag, landLag: 0.2, aether: true, noClash: true, throwScythe: true,
   hitboxes: [],
   wind: pose({ lean: 0.1, bob: -14, legA: [0.9, 1.4], legB: [-0.5, 0.8], sc: { gx: 8, gy: 8, pitch: -0.4, yaw: 0.1, n: [0, 0, -1], hands: 2 } }),
@@ -2567,6 +2567,7 @@ COLBY_MOVES.upRanged = { name: "Reaper's Aether", startup: 0.06, active: 9, endl
   step(f, a, dt, inp) { return stepAether(f, a, dt, inp); } };
 const aetherImpale = (f, a, t, dmg) => {
   if (a.ae.victims.includes(t) || !canBeGrabbed(f, t)) return;
+  if (grabParried(f, t)) return;
   t.shielding = false; t.vx = t.vy = 0;
   t.action = { type: 'impaled', t: 0, holder: f, spin: 0 };
   a.ae.victims.push(t);
@@ -2589,6 +2590,7 @@ function stepAether(f, a, dt, inp) {
   if (a.ae && a.ae.phase === 'done') return false;
   if (!a.ae) {
     a.ae = { phase: 'throw', victims: [], x0: f.x, y0: f.y, startedGround: f.ground };
+    f.aetherCD = AETHER.cd;                                       // (not again straight away - it was far too spammable)
     if (!f.ground && f.upSpecialUsed) { a.ae.phase = 'hang'; a.ae.t0 = a.t; a.air = false; }   // already used this trip in the air: no more height - it just spins down
   }
   const A = a.ae, T = a.t, F = f.face;
@@ -2907,6 +2909,7 @@ function stepDashChoke(f, a, dt, inp) {
       const gx = f.x + F * 34, gy = f.y - 74;
       for (const t of fighters) {
         if (!canBeGrabbed(f, t) || !circleHitsFighter(gx, gy, CHOKE.grabR, t)) continue;
+        if (grabParried(f, t, gx, gy)) return true;
         t.shielding = false; t.vx = t.vy = 0; t.face = -F;
         t.action = { type: 'whipped', t: 0, holder: f, spin: 0 };
         a.held = t; a.whipVictim = t;
@@ -3404,10 +3407,11 @@ function stepAlolanWhip(f, a, dt, inp) {
     if (Math.random() < dt * 40) burst(f.x - f.face * 20, f.y - 50, FIRE, 1, f.face > 0 ? Math.PI : 0, 0.4, 260, { grav: -100 });
     const gx = f.x + f.face * WHIP.reach * 0.7, gy = f.y - 55;
     for (const t of fighters) {
-      if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t)) continue;
+      if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t)) continue;
       const ta = t.action;
       if (ta && ['grabbed', 'holding', 'thrown', 'whipped', 'ultVictim', 'ultSeq'].includes(ta.type)) continue;
       if (!circleHitsFighter(gx, gy, WHIP.r, t)) continue;
+      if (grabParried(f, t, gx, gy)) return true;
       // CAUGHT (shields don't stop it - it's a grab)
       t.shielding = false; t.vx = t.vy = 0;
       t.action = { type: 'whipped', t: 0, holder: f, spin: 0 };
@@ -3487,7 +3491,7 @@ const CROSS_CHOP = { grabR: 50, aoe: 140, maxDrop: 360,             // maxDrop: 
                      held: { dmg: 14, base: 460, growth: 6.6, angle: 70 },     // the one he carried down with him
                      near: { dmg: 10, base: 400, growth: 5.6, angle: 60 },     // everyone else in the shockwave
                      drop: { dmg: 4,  base: 260, growth: 2,   angle: 80 } };   // never reached the floor: let go
-const canBeGrabbed = (f, t) => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !(t.halo > 0) && !isIntangible(t) && !t.dead && !(t.poofT > 0) &&
+const canBeGrabbed = (f, t) => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !(t.halo > 0) && !isIntangible(t) && !t.dead && !(t.poofT > 0) && !unstoppable(t) &&
   !(t.action && ['grabbed', 'holding', 'thrown', 'whipped', 'impaled', 'ultVictim', 'ultSeq', 'timeStop', 'shipUlt'].includes(t.action.type));
 // Only someone STANDING ON THE GROUND gets grabbed. Someone IN THE AIR just gets HIT and dragged along with him.
 // (Either way a well-timed Z vanish dodges it - you're intangible, so it can't catch you.)
@@ -3498,6 +3502,7 @@ function crossChopGrab(f, a) {
   for (const t of fighters) {
     if (!canBeGrabbed(f, t) || !circleHitsFighter(gx, gy, CROSS_CHOP.grabR, t)) continue;
     if (a.escaped && a.escaped.has(t)) continue;                // (Z-vanished out of it: not caught again this time)
+    if (grabParried(f, t, gx, gy)) return true;
     const air = !t.ground;
     t.shielding = false; t.vx = t.vy = 0;
     t.action = { type: 'whipped', t: 0, holder: f, spin: 0, drag: air };   // (held / dragged: moved by him every frame)
@@ -3887,10 +3892,11 @@ function trySPD(f) {
   // the stick motion is spent either way
   f.circle = null;
   for (const t of fighters) {
-    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || !t.ground) continue;
+    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t) || !t.ground) continue;
     const ta = t.action;
     if (ta && ['grabbed', 'holding', 'thrown', 'whipped', 'ultVictim', 'timeStop'].includes(ta.type)) continue;
     if (!circleHitsFighter(gx, gy, SPD.grabR, t)) continue;
+    if (grabParried(f, t, gx, gy)) return true;
     t.shielding = false; t.face = -f.face;
     t.action = { type: 'grabbed', t: 0, holder: f, escape: 9 };
     f.action = { type: 'holding', t: 0, victim: t, pummelCD: 0 };
@@ -7007,10 +7013,11 @@ function stepHellGrab(f, a) {
   const gx = f.x + f.face * 62, gy = f.y - 58;
   if (Math.random() < 0.5) burst(gx, gy, HELLFIRE, 1, 0, Math.PI, 120, { grav: 0 });
   for (const t of fighters) {
-    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t)) continue;
+    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t)) continue;
     const ta = t.action;
     if (ta && ['grabbed', 'holding', 'thrown', 'whipped', 'ultVictim', 'ultSeq', 'timeStop'].includes(ta.type)) continue;
     if (!circleHitsFighter(gx, gy, 40, t)) continue;   // (Hell Grab reach: raised a bit, 34 -> 40)
+    if (grabParried(f, t, gx, gy)) return true;
     // CAUGHT: straight into a hold - now any direction throws them (shields don't stop it)
     t.shielding = false; t.face = -f.face; t.vx = t.vy = 0;
     t.action = { type: 'grabbed', t: 0, holder: f, escape: 1.2 + t.damage * 0.015 };
@@ -9214,6 +9221,7 @@ Object.assign(HUNTER_MOVES, {
       const S = hScale(f), gx = f.x + f.face * H_JAB_GRAB.reach * S / HS, gy = f.y - 55 * S;
       for (const t of fighters) {
         if (!canBeGrabbed(f, t) || !circleHitsFighter(gx, gy, H_JAB_GRAB.r * S / HS, t)) continue;
+        if (grabParried(f, t, gx, gy)) return true;
         t.shielding = false; t.face = -f.face; t.vx = t.vy = 0;
         t.action = { type: 'grabbed', t: 0, holder: f, escape: 1.0 + t.damage * 0.015 };
         f.action = { type: 'holding', t: 0, victim: t, pummelCD: 0 };
@@ -9458,7 +9466,7 @@ function stepHunterCrusher(f, a, dt) {
     if (f.ground) f.vx *= 0.5; else { f.vx *= 0.9; f.vy = Math.min(f.vy, 120); a.air = true; }
     a.poseOverride = pose({ bob: -4, armA: [2.7, 0.1], armB: [2.5, 0.25], legA: [0.5, 0.5], legB: [-0.4, 0.3], lean: 0.05 });
     const gx = f.x + F * 26 * S / HS, gy = f.y - 100 * S;
-    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, C.grabR * S / HS, t)) { hunterCatch(f, a, t); a.c0 = T; break; }
+    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, C.grabR * S / HS, t)) { if (grabParried(f, t, gx, gy)) return true; hunterCatch(f, a, t); a.c0 = T; break; }
     return true;
   }
   // CAUGHT: straight back DOWN with them under him - steered back over the stage so it's never a suicide
@@ -9524,7 +9532,7 @@ function stepHunterBreaker(f, a, dt, inp) {
     a.ghostT = (a.ghostT || 0) - dt;
     if (a.ghostT <= 0) { a.ghostT = 0.03; ghosts.push({ fig: figureOf(f), life: 0.15, max: 0.15, color: '#4dff6a' }); }
     const gx = f.x + F * 24 * S / HS, gy = f.y - 110 * S;
-    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, B.grabR * S / HS, t)) { hunterCatch(f, a, t); a.c0 = T; break; }
+    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, B.grabR * S / HS, t)) { if (grabParried(f, t, gx, gy)) return true; hunterCatch(f, a, t); a.c0 = T; break; }
     return true;
   }
   // CAUGHT: held up close, ki building between them... then it BLOWS
@@ -9577,7 +9585,7 @@ function stepHunterExpress(f, a, dt) {
     if (a.ghostT <= 0) { a.ghostT = 0.035; ghosts.push({ fig: figureOf(f), life: 0.16, max: 0.16, color: HUNTER_RAGE.color }); }
     if (Math.random() < dt * 30) dust(f.x - F * 10, f.y, 2, 1);
     const gx = f.x + F * 34 * S, gy = f.y - 50 * S;
-    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, E.grabR * S / HS, t)) { hunterCatch(f, a, t); break; }
+    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, E.grabR * S / HS, t)) { if (grabParried(f, t, gx, gy)) return true; hunterCatch(f, a, t); break; }
     return true;
   }
   // THE DRAG: their face ground into the floor in front of him, his hand on the back of their head
@@ -9614,7 +9622,7 @@ function stepHunterBuster(f, a, dt) {
   if (!v) {
     if (a.t > a.move.active) { a.phase = 'end'; a.t = 0; a.whiff = true; return true; }   // MISSED: stuck in it
     const gx = f.x + F * B.reach * S / HS, gy = f.y - 50 * S;
-    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, B.r * S / HS, t)) { hunterCatch(f, a, t); a.y0 = f.y; break; }
+    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, B.r * S / HS, t)) { if (grabParried(f, t, gx, gy)) return true; hunterCatch(f, a, t); a.y0 = f.y; break; }
     if (!a.held) return true;
   }
   const t = a.held, T = a.t - a.c0;
@@ -9675,7 +9683,7 @@ function stepHunterChoke(f, a, dt) {
     a.ghostT = (a.ghostT || 0) - dt;
     if (a.ghostT <= 0) { a.ghostT = 0.03; ghosts.push({ fig: figureOf(f), life: 0.16, max: 0.16, color: HUNTER_RAGE.color }); }
     const gx = f.x + F * 34 * S, gy = f.y - 56 * S;
-    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, C.grabR * S / HS, t)) { hunterCatch(f, a, t); break; }
+    for (const t of fighters) if (canBeGrabbed(f, t) && circleHitsFighter(gx, gy, C.grabR * S / HS, t)) { if (grabParried(f, t, gx, gy)) return true; hunterCatch(f, a, t); break; }
     return true;
   }
   const T = a.t - a.c0;
@@ -9952,12 +9960,22 @@ function updatePortals(dt) {
         break;
       }
     }
-    for (const q of projectiles) {                               // ...and shots (beams and the big scenery ones aside)
-      if (q.portalCD > 0 || ['beam', 'dragon', 'disc', 'batarang'].includes(q.kind) || q.stuck) continue;
+    for (const q of projectiles) {                               // ...and EVERY shot - discs, batarangs, the Flame Dragon / Tiger, ultimates' too
+      if (q.portalCD > 0 || q.kind === 'beam' || q.stuck) continue;   // (beams are a line from the fighter's hands, not a thing that flies - they can't)
       for (const [A, B] of ends) {
         if (Math.hypot(q.x - A.x, q.y - (A.y - 50)) > H_PORTAL.r + (q.r || 6)) continue;
         q.x += B.x - A.x; q.y += B.y - A.y; q.portalCD = H_PORTAL.cd;
         if (q.trail) q.trail.length = 0;
+        burst(B.x, B.y - 50, [hPortalColor(o), '#ffffff'], 6, 0, Math.PI, 260, { grav: 0 });
+        break;
+      }
+    }
+    for (const w of scythes) {                                   // ...and THROWN WEAPONS in flight
+      if ((w.portalCD || 0) > 0) { w.portalCD -= dt; continue; }
+      if (w.state !== 'fly' && w.state !== 'fall' && w.state !== 'recall') continue;
+      for (const [A, B] of ends) {
+        if (Math.hypot(w.x - A.x, w.y - (A.y - 50)) > H_PORTAL.r + 20) continue;
+        w.x += B.x - A.x; w.y += B.y - A.y; w.portalCD = H_PORTAL.cd;
         burst(B.x, B.y - 50, [hPortalColor(o), '#ffffff'], 6, 0, Math.PI, 260, { grav: 0 });
         break;
       }
@@ -10823,20 +10841,34 @@ CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active:
     if (a.t > JAJAN.timeout) { a.phase = 'end'; a.t = 0; }
     return true;
   } };
-CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, active: 0.14, endlag: 0.32, landLag: 0.14, lunge: 980, lungeFriction: 0.3, impactOnHit: true, noClash: true,
-  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 13, base: 520, growth: 6.2, angle: 38, group: 0 },
-             { x: 78, y: -58, r: 46, dmg: 13, base: 520, growth: 6.2, angle: 38, group: 0 }],   // (the NEN ORB round his fist: hits too, further out)
+CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, active: 0.16, endlag: 0.32, landLag: 0.14, lunge: 1750, lungeFriction: 0.2, impactOnHit: true, noClash: true,
+  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 15, base: 760, growth: 8.6, angle: 38, group: 0 },
+             { x: 78, y: -58, r: 46, dmg: 15, base: 760, growth: 8.6, angle: 38, group: 0 }],   // (the NEN ORB round his fist: hits too, further out) - it LAUNCHES
   wind: JJ_POSE.stance, strike: JJ_POSE.rock,
   fire(f) { const x = f.x + f.face * 56, y = f.y - 58; burst(x, y, [JAJAN.gold, JAJAN.orange, '#ffffff'], 30, f.face > 0 ? 0 : Math.PI, 0.7, 700, { grav: 0 }); ring(x, y); shake = Math.max(shake, 10); sfx.huge ? sfx.huge() : sfx.slam(); } };
 CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, active: 0.06, endlag: 0.26, landLag: 0.12, noClash: true, hitboxes: [],
   wind: JJ_POSE.paperWind, strike: JJ_POSE.paper,
+  step(f, a, dt) {                                             // the open palm SENDS PROJECTILES BACK (from the push out, for a moment)
+    if (a.phase === 'startup' && a.t < a.move.startup * 0.5) return false;
+    a.rt = (a.rt || 0) + dt; if (a.rt > 0.36) return false;
+    const px = f.x + f.face * 46, py = f.y - 62;
+    for (const q of projectiles) {
+      if (q.owner === f || (q.owner && allies(f, q.owner)) || q.stuck || q.kind === 'beam' || ultProjectile(q) || q.vx === undefined) continue;
+      if (Math.hypot(q.x - px, q.y - py) > 95 + (q.r || 0)) continue;
+      const sp = Math.max(700, Math.hypot(q.vx, q.vy || 0)) * 1.15;
+      q.vx = f.face * sp; q.vy = 0; q.owner = f; q.mult = powerOf(f); q.hit = new Set(); q.life = Math.max(q.life || 0, 1.0); q.reflected = true; if (q.color) q.color = JAJAN.gold;
+      burst(q.x, q.y, [JAJAN.gold, '#ffffff'], 14, f.face > 0 ? 0 : Math.PI, 0.6, 500, { grav: 0 }); ring(q.x, q.y); sfx.parry();
+      painTexts.push({ x: q.x, y: q.y - 40, t: 0.5, max: 0.5, text: 'REFLECTED!', big: false });
+    }
+    return false;
+  },
   fire(f, mult, c, a) {
     const m = (a && a.mult) || 1, sp = 950;
     projectiles.push({ owner: f, x: f.x + f.face * 46, y: f.y - 62, vx: f.face * sp, vy: 0, r: 24 + 6 * (m - 1) / JAJAN.chargeBonus, dmg: 8 * m, base: 360, growth: 4.5, angle: 35,
                        mult: powerOf(f), life: 0.9, kind: 'orb', color: JAJAN.gold, hit: new Set(), pierce: false, trail: [], grav: 0, trailLen: 10 });
     burst(f.x + f.face * 46, f.y - 62, [JAJAN.gold, '#ffffff'], 16, f.face > 0 ? 0 : Math.PI, 0.5, 500, { grav: 0 }); sfx.blast();
   } };
-CHARACTERS.COLBY.bareMoves.jjScissors = { name: 'Jajanken: Scissors', startup: 0.05, active: 0.2, endlag: 0.3, landLag: 0.14, noClash: true,
+CHARACTERS.COLBY.bareMoves.jjScissors = { name: 'Jajanken: Scissors', startup: 0.05, active: 0.2, endlag: 0.3, landLag: 0.14, noClash: true, lunge: 1250, lungeFriction: 0.25,
   hitboxes: [{ x: 66, y: -14, r: 34, dmg: 11, base: 470, growth: 6, angle: 80, from: 0, to: 0.07, group: 0 },
              { x: 78, y: -66, r: 38, dmg: 11, base: 470, growth: 6, angle: 80, from: 0.05, to: 0.13, group: 0 },
              { x: 52, y: -124, r: 40, dmg: 11, base: 470, growth: 6, angle: 84, from: 0.11, to: 0.2, group: 0 },
@@ -10845,11 +10877,22 @@ CHARACTERS.COLBY.bareMoves.jjScissors = { name: 'Jajanken: Scissors', startup: 0
              { x: 60, y: -178, r: 32, dmg: 11, base: 470, growth: 6, angle: 84, from: 0.11, to: 0.2, group: 0 }],
   wind: JJ_POSE.scWind, strike: JJ_POSE.scissors,
   fire(f) { slashLine(f.x + f.face * 70, f.y - 70, f.face > 0 ? -1.2 : -1.94, 260, 0.2); slashLine(f.x + f.face * 60, f.y - 60, f.face > 0 ? -1.3 : -1.84, 200, 0.16); sfx.cut ? sfx.cut(1) : sfx.whoosh(true); },
-  step(f, a, dt) {                                             // ...and it CUTS anything thrown at him out of the air
-    if (a.phase === 'active') for (let i = projectiles.length - 1; i >= 0; i--) {
+  step(f, a, dt) {                                             // ...and it CUTS THROUGH any projectile it meets - and stops it dead
+    if (a.phase !== 'active') return false;
+    const cx = f.x + f.face * 60, cy = f.y - 70;
+    const cut = (x, y) => { burst(x, y, ['#ffffff', JAJAN.gold], 14, 0, Math.PI, 460, { grav: 0 }); slashLine(x, y, Math.random() * Math.PI, 100, 0.12); sfx.cut ? sfx.cut(0.7) : sfx.block(); };
+    for (let i = projectiles.length - 1; i >= 0; i--) {
       const q = projectiles[i];
-      if (q.owner === f || allies(f, q.owner) || q.beam) continue;
-      if (Math.hypot(q.x - (f.x + f.face * 60), q.y - (f.y - 70)) < 120) { burst(q.x, q.y, ['#ffffff', JAJAN.gold], 12, 0, Math.PI, 420, { grav: 0 }); slashLine(q.x, q.y, Math.random() * Math.PI, 90, 0.12); projectiles.splice(i, 1); }
+      if (q.owner === f || (q.owner && allies(f, q.owner)) || q.stuck || ultProjectile(q)) continue;   // (an ULTIMATE's shot is too much for it)
+      if (q.kind === 'beam') {                                     // a BEAM: cut where it crosses the blade
+        const along = q.vdir ? (cy - q.y) * -q.vdir : (cx - q.x) * (q.dir || 1), off = q.vdir ? Math.abs(cx - q.x) : Math.abs(cy - q.y);
+        if (off < (q.w || 30) / 2 + 60 && along > -40 && along < (q.len || 0) + 60) { cut(q.vdir ? q.x : cx, q.vdir ? cy : q.y); projectiles.splice(i, 1); }
+        continue;
+      }
+      if (Math.hypot(q.x - cx, q.y - cy) < 120 + (q.r || 0)) { cut(q.x, q.y); projectiles.splice(i, 1); }
+    }
+    for (const w of scythes) if (w.owner !== f && (w.state === 'fly' || w.state === 'hover') && Math.hypot(w.x - cx, w.y - cy) < 130) {   // a THROWN WEAPON: knocked out of the air
+      w.state = 'fall'; w.vx = -(w.vx || 0) * 0.2; w.vy = -200; cut(w.x, w.y);
     }
     return false;
   } };
@@ -11256,6 +11299,7 @@ function stepCruelSun(f, a, dt) {
         if (t === f || allies(f, t) || a.frozen.includes(t) || t.respawnTimer > 0 || t.out || t.dead || t.poofT > 0 || isIntangible(t)) continue;
         if (!circleHitsFighter(hx, hy, K.r, t) && !(B && bladeTouch(B, t))) continue;
         if (t.shielding && t.shieldAge <= PARRY_WINDOW && parryRoll(t)) { perfectBlock(t, {}, t.x, t.y - 55); continue; }   // (a PERFECT block still turns it away)
+        if (unstoppable(t)) { knock(t, { dmg: 6, base: 0, growth: 0, angle: 45 }, f.face, powerOf(f), t.x, t.y - 55); continue; }   // (can't be stopped)
         t.damage += 6 * powerOf(f); t.hitFlash = 0.12; t.shielding = false;
         t.action = { type: 'sunFrozen', t: 0, by: f, x: t.x, y: t.y };  // STOPPED
         t.vx = t.vy = 0; a.frozen.push(t);
@@ -11708,6 +11752,7 @@ function updateDragon(s, dt) {
       if (t.minion) { knock(t, D.final, Math.sign(Math.cos(s.dir)) || 1, s.mult, s.x, s.y); continue; }   // clones just get torched on the way through
       // THE CLASH: a flash and a beat of stillness... then he drives on through them in its jaws
       t.shielding = false;
+      if (unstoppable(t)) { knock(t, D.final, Math.sign(Math.cos(s.dir)) || 1, s.mult, s.x, s.y); continue; }   // (can't be carried off: just burned on the way through)
       s.state = 'carry'; s.t = 0; s.victim = t; s.tickT = 0; s.extra = [];
       if (Math.cos(s.dir) * (o.face || 1) < 0.2) s.dir = Math.atan2(-0.25, o.face || 1);   // drives them on, away from where he came from
       hitstop = Math.max(hitstop, 0.22); shake = Math.max(shake, 22); sfx.clash(true); sfx.huge();
@@ -12912,7 +12957,7 @@ const phasedThrough = (s, t) => projPhase(t) && ((s.hit && circleHitsFighter(s.x
 // powering up (a transformation) or mid-COMEBACK: they can't be moved, swapped, frozen or stopped - it plays out
 function powerUpLocked(f) {
   const a = f && f.action;
-  return !!a && (['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform', 'sgCut', 'sgWait'].includes(a.type) || (a.type === 'leeUlt' && a.comeback));
+  return !!a && (['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform', 'sgCut', 'sgWait', 'cruelSun'].includes(a.type) || (a.type === 'leeUlt' && a.comeback));
 }
 // LANCE / HUNTER TRANSFORMING: untouchable - EXCEPT by an ULTIMATE or a COMEBACK. ultHitCtx is on while one of those is
 // doing its hitting (set around each fighter's update / their hitboxes / each projectile / the ultimate sequence).
@@ -12922,6 +12967,10 @@ const isUltSource = f => !!(f && f.action && (ULT_SRC_TYPES.includes(f.action.ty
   (f.action.type === 'attack' && (f.action.key === 'ult' || (f.action.move && (f.action.move.hunterUlt || f.action.move.tigerUlt || f.action.move.finalExp))))));
 const ultProjectile = s => !!(s && (s.ult || s.ultHit || s.kind === 'dragon' || s.kind === 'tiger' || s.eraser || s.bigKi || (s.owner && isUltSource(s.owner))));
 const TF_HITTABLE = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform'];
+const TF_CUT_DMG = 0.5;   // damage taken while in a transformation cutscene (no control): half
+// UNSTOPPABLE: mid-TRANSFORMATION, or COLTEN in THE SUN. Hits on them do their DAMAGE - but no knockback (none stored either),
+// no grabs, no freezing, no swapping, no being carried off by an ultimate. It plays out.
+const unstoppable = t => !!(t && t.action && (t.action.type === 'cruelSun' || TF_HITTABLE.includes(t.action.type)));
 function isIntangible(f) {
   if (ultHitCtx && f.action && TF_HITTABLE.includes(f.action.type) && (f.char === 'LANCE' || f.char === 'HUNTER') && !(f.invuln > 0)) return false;   // (an ultimate / comeback gets through)
   if (f.invuln > 0) return true;
@@ -12930,7 +12979,7 @@ function isIntangible(f) {
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return true;   // (vanished: nothing can touch him)
   if (a && a.type === 'attack' && a.move && a.move.dragonFist && a.ph && a.ph !== 'wind' && a.ph !== 'dash') return true;   // (Hunter mid-Dragon Fist)
   if (a && a.type === 'attack' && a.move && a.move.finalExp) return true;   // (Lance's Final Explosion: NOTHING interrupts it - no hit, grab or throw)
-  if (a && ['sunFrozen', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
+  if (a && ['sunFrozen', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
   return !!a && (a.type === 'spot' || a.type === 'roll' || a.type === 'air') && a.t >= a.iStart && a.t <= a.iEnd;
 }
 // CROUCHING: hold down on the ground to duck. Your hurtbox shrinks to ~60% height, so HIGH attacks
@@ -13022,7 +13071,15 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
 function knock(t, h, dirSign, mult, hx, hy) {
   if (t.phaseT > 0) return;                                       // (Hailie incorporeal: nothing lands)
   if (typeof ult !== 'undefined' && ult && ult.user && ult.user !== t) t.lastHitBy = ult.user;   // (an ultimate's launch: its user knocked them out)
-  const dmg = h.dmg * mult * (t.kaioken ? KAIOKEN.taken : 1) * (t.arcadeBoss ? ARCADE_BOSS.taken : 1);    // Kaioken: takes 7% more per hit (the ARCADE BOSS: less)
+  let dmg = h.dmg * mult * (t.kaioken ? KAIOKEN.taken : 1) * (t.arcadeBoss ? ARCADE_BOSS.taken : 1);    // Kaioken: takes 7% more per hit (the ARCADE BOSS: less)
+  if (unstoppable(t)) {                                           // TRANSFORMING / THE SUN: the damage - nothing else (no knockback, none stored)
+    const tfCut = TF_HITTABLE.includes(t.action.type);            // (in a TRANSFORMATION CUTSCENE - no control of yourself: HALF damage)
+    if (tfCut) dmg = dmg * TF_CUT_DMG;
+    t.damage += dmg; t.hitFlash = 0.1; shake = Math.max(shake, 4); hitstop = Math.max(hitstop, 0.04);
+    if (!t.transformed && !h.ultHit && !h.ultFinal) t.ult = Math.min(ULT_MAX, (t.ult || 0) + dmg * ULT_GAIN * 0.5);
+    burst(hx ?? t.x, hy ?? t.y - 55, ['#ffffff', '#ffd23f'], 8, 0, Math.PI, 320, { grav: 0 }); sfx.hit(0.5);
+    return;
+  }
   // Colbalias hit WHILE charging his Hellfire Shot: the charge is lost
   if (t.action && t.action.type === 'attack' && t.action.charging && t.action.move.chargeShot && t.cshot > 0) {
     painTexts.push({ x: t.x, y: t.y - 130, t: 0.5, max: 0.5, text: 'CHARGE LOST', big: false });
@@ -13342,7 +13399,7 @@ function stepGrab(f, a, dt) {
   for (const t of fighters) {
     if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0) continue;
     const ta = t.action;
-    if (isIntangible(t)) continue;                                        // dodges beat grabs
+    if (isIntangible(t) || unstoppable(t)) continue;                      // dodges beat grabs (and no grabbing anyone mid-transformation / in THE SUN)
     if (ta && ['grabbed', 'holding', 'clash'].includes(ta.type)) continue;
     // stunned: GRABBABLE in a combo - on the ground any time, in the air once they're past the first 40% of the
     // stun (so a grab can finish a string). Not while they're pinned in place by a move (locked / impaled / crits).
@@ -13967,14 +14024,22 @@ function stepFlyDash(f, a, dt) {
 //  and you instantly fire your counter attack. Projectiles get reflected back instead.
 // =====================================================================
 // (just the perfect block's flash and sound - for a hit that's part of a cutscene, where nobody gets staggered)
+// PERFECT BLOCK REWARD: 2 Z vanish charges back (whatever got perfect-blocked)
+function parryRestoreZ(def) { if (!def || def.minion) return; const before = def.dodgeCount || 0; def.dodgeCount = Math.max(0, before - 2); if (def.dodgeCount < before) painTexts.push({ x: def.x, y: def.y - 120, t: 0.6, max: 0.6, text: '+' + (before - def.dodgeCount) + ' Z', big: false }); }
+// EVERYTHING is perfect-blockable - grabs and command grabs too: a block pressed right as they arrive stops it, and the
+// grabber staggers. (Call at the moment of contact; true = it was perfect-blocked.)
+function grabParried(f, t, hx, hy) {
+  if (!(t.shielding && t.shieldAge <= PARRY_WINDOW && parryRoll(t))) return false;
+  perfectBlock(t, { fighter: f }, hx ?? t.x, hy ?? t.y - 55); return true;
+}
 function perfectBlockFx(def, hx, hy) {
-  def.parryFlash = 0.6; if (!playPerfectShield()) sfx.parry(); if (soundOn && actx) smashClip('parry', 0.75);
+  def.parryFlash = 0.6; parryRestoreZ(def); if (!playPerfectShield()) sfx.parry(); if (soundOn && actx) smashClip('parry', 0.75);
   burst(hx, hy, ['#ffd23f', '#fff3a8', '#ffffff'], 34, 0, Math.PI, 700, { grav: 200 }); ring(def.x, def.y - 40);
   painTexts.push({ x: def.x, y: def.y - 150, t: 0.9, max: 0.9, text: 'PERFECT BLOCK!', big: true });
   hitstop = Math.max(hitstop, 0.15);
 }
 function perfectBlock(def, src, hx, hy) {
-  def.parryFlash = 0.6;
+  def.parryFlash = 0.6; parryRestoreZ(def);
   if (!playPerfectShield()) sfx.parry();      // your Smash perfect shield sound (synth fallback if it isn't loaded)
   if (soundOn && actx) smashClip('parry', 0.75);   // + its own crack (that sound is ONLY for perfect blocks)
   def.shieldHP = SHIELD_MAX;
@@ -14335,7 +14400,7 @@ function stepUltStart(f, a, dt) {
     const hx = f.x + f.face * 40, hy = f.y - 55;
     for (const t of fighters) {
       if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || t.dead || t.poofT > 0) continue;
-      if (circleHitsFighter(hx, hy, G.rushR, t)) { f.vx = 0; startUltSequence(f, t, def); return; }
+      if (circleHitsFighter(hx, hy, G.rushR, t)) { f.vx = 0; if (!dashUltParried(f, t, hx, hy)) startUltSequence(f, t, def); return; }   // (a perfect block repels it)
     }
     return;
   }
@@ -14358,7 +14423,7 @@ function stepUltStart(f, a, dt) {
   const hx = f.x + f.face * 40, hy = f.y - 50;
   for (const t of fighters) {
     if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t)) continue;
-    if (circleHitsFighter(hx, hy, 46, t)) { startUltSequence(f, t, def); return; }
+    if (circleHitsFighter(hx, hy, 46, t)) { if (!dashUltParried(f, t, hx, hy)) startUltSequence(f, t, def); return; }   // (a perfect block repels it)
   }
 }
 
@@ -15263,6 +15328,7 @@ function drawIceWalls() {
   }
 }
 function startUltSequence(u, v, def) {
+  if (unstoppable(v)) { knock(v, { dmg: 8, base: 0, growth: 0, angle: 45, ultHit: true }, u.face, u.ultPower || 1, v.x, v.y - 55); return; }   // (it can't carry them off - just the hit)
   const U = def || CHARACTERS[u.char].ult;
   ult = { def: U, user: u, target: v, phase: 'flurry', t: 0, strikeT: 0, n: 0, dir: u.face, power: u.ultPower || 1,
           baseX: v.x, baseY: v.y, userPose: U.finalWind, jolt: 0, slashed: false, events: new Set() };
@@ -16091,6 +16157,17 @@ function stepHunterL3Cut(f, a, dt) {
       if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
       if (Math.abs(o.x - f.x) > half + o.w / 2) continue;
       applyHit(o, { dmg: 7, base: 480, growth: 3.2, angle: 88 }, Math.sign(o.x - f.x) || f.face, 1, o.x, o.y - 50, { fighter: f });
+    }
+  }
+  // ...and it KEEPS HURTING for as long as it's up (33s - 44s): anyone in the column takes a blast every 0.3s, carried upward
+  if (T > C.pillar[0] + 0.05 && T < C.pillar[1] && (a.pillarT = (a.pillarT ?? 0.3) - dt) <= 0) {
+    a.pillarT = 0.3;
+    const half = 150 * (S / HS);
+    for (const o of fighters) {
+      if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
+      if (Math.abs(o.x - f.x) > half + o.w / 2) continue;
+      applyHit(o, { dmg: 3, base: 300, growth: 1.6, angle: 88 }, Math.sign(o.x - f.x) || f.face, 1, o.x, o.y - 50, { fighter: f });
+      burst(o.x, o.y - 50, ['#e6ff86', '#ffffff', '#86e63c'], 8, -Math.PI / 2, 0.6, 500, { grav: 0 });
     }
   }
   if (T >= C.redEyes && ev('red')) { impactFrame = Math.max(impactFrame, 0.06); impactAt = { x: f.x, y: headY, ang: 0, all: false, focus: true }; sfx.parry(); }
@@ -19062,7 +19139,7 @@ function startAttack(f, inp, btn) {
   }
   if (f.phaseT > 0) { f.phaseT = 0; ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#b06aff' }); }   // (Hailie: attacking pulls her straight back in)
   let key = chooseMove(f, inp, btn);
-  if (f.noScythe && f.char === 'COLBY' && btn === 'atk' && f.ground && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(jab|[pk]1)$/.test(key)) key = 'jajanken';   // (bare Colby's neutral J: JAJANKEN)
+  if (f.noScythe && f.char === 'COLBY' && btn === 'spc' && f.ground && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(p1|neutralRanged)$/.test(key)) key = 'jajanken';   // (bare Colby's neutral K: JAJANKEN - his neutral J is the kick string again)
   // COLBALIAS: summoning a shadow clone is INSTANT - no attack animation, he keeps running/jumping at full
   // speed. (With a full D-E-M-O-N meter he can summon ONE past his limit - see summonShadowClone.)
   if (key === 'downRanged' && f.look && f.look.demonMeter && !f.minion) {
@@ -19091,6 +19168,7 @@ function startAttack(f, inp, btn) {
   if (!move) {                                        // (a string's next hit that he doesn't have right now - e.g. the scythe's back in his hand)
     move = f.moveset[key.replace(/\d+$/, '')] || f.moveset.jab; if (!move) return;
   }
+  if (move.aether && f.ground && (f.aetherCD || 0) > 0) { f.spcBuf = 0; return; }   // (Reaper's Aether: on cooldown on the ground - never blocks his recovery)
   // DON'T SPAM IT: the same move three times in a row - from the THIRD, every use costs a Z vanish dot (none left = it
   // won't come out). A string of presses (jab, jab 2, jab 3 / Colby's punch-kick chain / any combo follow-up) counts as ONE use.
   if (!f.minion) {
@@ -19615,7 +19693,12 @@ function stepAction(f, inp, dt) {
   }
   if (a.type === 'impaled') {                                     // on Colby's scythe (Reaper's Aether): he moves them
     const h = a.holder.action;
-    if (!h || h.type !== 'attack' || !h.move.aether || !h.ae || !h.ae.victims.includes(f) || a.holder.respawnTimer > 0) f.action = null;
+    if (!h || h.type !== 'attack' || !h.move.aether || !h.ae || !h.ae.victims.includes(f) || a.holder.respawnTimer > 0) { f.action = null; return; }
+    // GETTING OFF IT: a Z vanish slips straight off the blade - or MASH (any buttons) to struggle free
+    const off = () => { h.ae.victims = h.ae.victims.filter(v => v !== f); f.action = null; ghosts.push({ fig: figureOf(f), life: 0.25, max: 0.25, color: '#ffffff' }); painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: 'BROKE FREE!', big: false }); };
+    if (inp.blockTap && canAirDodge(f)) { off(); startDodge(f, inp.dir, inp.down, inp.up); return; }
+    if (inp.atkTap || inp.spcTap || inp.jumpTap || inp.grabTap || inp.dirTap) a.mash = (a.mash || 0) + 1;
+    if ((a.mash || 0) >= AETHER.mash) { off(); f.vx = -a.holder.face * 260; f.vy = -320; f.ground = false; f.action = { type: 'hitstun', t: 0, dur: 0.12 }; }
     return;
   }
 
@@ -20174,6 +20257,7 @@ function updateFighter(f, inp, dt) {
   f.squash = approach(f.squash, 0, dt * 6);
   f.dropTimer = Math.max(0, f.dropTimer - dt);
   f.dodgeCool = Math.max(0, f.dodgeCool - dt);
+  if (f.aetherCD > 0) f.aetherCD -= dt;                          // (Colby's Reaper's Aether cooldown)
   f.comboTimer = Math.max(0, (f.comboTimer || 0) - dt);
   f.slide = Math.max(0, f.slide - dt);
   f.dodgedFlash = Math.max(0, f.dodgedFlash - dt);
@@ -20186,7 +20270,7 @@ function updateFighter(f, inp, dt) {
   if (f.ground && f.swapBonus) f.swapBonus = 0;               // (the Demon's Gaze swap bonus: gone once you're back on the stage)
   const dodging = f.action && ['spot', 'roll', 'air'].includes(f.action.type);
   // Blue dodge dots only refill while you're on the ground (so you can't vanish forever in the air)
-  if (!dodging && f.dodgeCount > 0 && (f.ground || f.halo > 0)) {
+  if (!dodging && f.dodgeCount > 0 && (f.ground || f.halo > 0 || unstoppable(f))) {   // (and through a transformation, wherever they are)
     f.dodgeRecover -= dt;
     if (f.dodgeRecover <= 0) { f.dodgeCount--; f.dodgeRecover = f.dodgeCount > airDodgeMax(f) ? DODGE_RECOVER_TIRED : DODGE_RECOVER; }
   }
@@ -20685,7 +20769,7 @@ function aiFetchWeapon(f, ai) {
 // when time resumes). Every frame, not just when it "thinks" - a frozen opponent is a free combo.
 const TS_AI = { use: { EASY: 0.02, NORMAL: 0.08, HARD: 0.18, MASTER: 0.3, IMPOSSIBLE: 0.5, FERAL: 0.1 }, reach: 155,
                 combo: [{ side: true }, { up: true }, { down: true }, { jab: true }, { side: true }, { up: true }],      // (with the scythe)
-                bare: [{ k: true }, { k: true }, { k: true }, { down: true }, { k: true }, { k: true }, { k: true }, { k: true }] };   // (bare-handed: the fast K punch string + the Inferno Axe Kick)
+                bare: [{ jab: true }, { jab: true }, { jab: true }, { down: true }, { jab: true }, { jab: true }, { jab: true }, { jab: true }] };   // (bare-handed: the J kick string + the Inferno Axe Kick - neutral K is Jajanken now)
 function aiTimeStop(f, ai, o, level) {
   if (!f.look || !f.look.timeStop || f.minion || !o) return;
   const oa = o.action, mine = oa && oa.type === 'timeStop' && !oa.bind && !oa.hell;
@@ -26860,14 +26944,15 @@ const COLBY_SECTIONS = {
   k: { title: 'K (SCYTHE SPECIALS)', rows: [
     ['K, K, K', 'Horizontal Slash > Reaping Pull > Diagonal Cleave', 'A 3-hit scythe string with long reach. Hold K on the last one to charge it.'],
     ['SIDE K', "Reaper's Toss", 'Hurls the scythe. It flies, then HOVERS spinning (chips anyone who touches it) - press K to call it back. If not, it drops and sticks: walk over and press K to pick it up.'],
-    ['UP K', "Reaper's Aether", 'His recovery: hurls the scythe straight up (impaling anyone next to him), warps up to it and spins back down with it.'],
+    ['UP K', "Reaper's Aether", 'His recovery: hurls the scythe straight up (impaling anyone next to him), warps up to it and spins back down with it. On the ground it needs 1.8s before he can use it again; anyone impaled can Z vanish off the blade or MASH to struggle free.'],
     ['DOWN K', 'Reaper Whirl', 'A full 360 spin with the scythe out at waist height - hits everything around him.'],
     ['AIR K', 'Crescent Wheel', 'Spins a full circle with the scythe at arm\'s length: a cut, then a launching cut.'],
     ['AIR FWD K', 'Sky Reaper', 'A big diagonal cleave - the very end of the swing SPIKES.'],
     ['AIR BACK K', 'Backhand Reap', 'A flat swing round to behind him.'],
     ['AIR DOWN K', 'Grave Drop', 'Raises the scythe, then dives with it plunged straight down (spike).'] ] },
   bare: { title: 'BARE-HANDED (AFTER THROWING THE SCYTHE)', rows: [
-    ['J (GROUND)', 'Jajanken', 'The stance - his aura gathers in his fist, the longer the harder. LEFT / RIGHT = a big hop that way. Then J = ROCK (a giant punch), K = PAPER (a projectile), BLOCK = SCISSORS (a huge rising slash that cuts projectiles out of the air).'],
+    ['J, J, J...', 'Kick String', 'His bare-handed 7-hit kick string - high kicks and spinning hooks, finished with a spinning gut kick. Mix in K for the punches.'],
+    ['K (GROUND)', 'Jajanken', 'The stance - his aura gathers in his fist, the longer the harder. LEFT / RIGHT = a big hop that way. Then J = ROCK (a giant lunging punch that LAUNCHES), K = PAPER (a projectile - and the palm sends incoming shots back), BLOCK = SCISSORS (a huge lunging rising slash that cuts through any shot - beams and thrown weapons too).'],
     ['SIDE J, J, J', 'Flying Spin Kicks', 'Three flying spinning kicks, each one carrying him forward off his feet. Press J again for the next - the third sends them flying.'],
     ['UP J', 'Thunder Bolt / Thunder Headbutt', 'A ball of lightning shot straight up - he is HELD where he fired it while he STEERS it with the stick. Steer it back into HIMSELF and it fires him off as a massive flying headbutt the way it was going (his recovery too). J or block lets it go.'],
     ['DOWN J', 'Inferno Axe Kick', 'A blazing axe kick.'],
