@@ -5987,7 +5987,8 @@ COLBALIAS_MOVES.twinSpin = { name: 'Twin Spin', startup: 0.07, active: TWIN_SPIN
 COLBALIAS_MOVES.nair = COLBALIAS_MOVES.twinSpin;
 COLBALIAS_MOVES.uair = COLBALIAS_MOVES.cloneSwipe;
 COLBALIAS_MOVES.dair = COLBALIAS_MOVES.cloneDive;
-COLBALIAS_MOVES.downGround = COLBALIAS_MOVES.twinAxe;          // (Clone Detonation is now only what his CLONES do with down J)
+COLBALIAS_MOVES.hellSweep = COLBALIAS_MOVES.downGround;        // (his old down J - his CLONES' down J now: they don't blow themselves up any more)
+COLBALIAS_MOVES.downGround = COLBALIAS_MOVES.twinAxe;
 // (his clone-string hits were tuned for when he was only a boss - 50% harder now that he's a real fighter)
 for (const m of [CLONE_STRING.catapultKick, CLONE_STRING.vaultAxe, CLONE_STRING.upKick, CLONE_STRING.headCrushHit, COLBALIAS_MOVES.jab2])
   for (const h of m.hitboxes || []) h.dmg = Math.round(h.dmg * 1.5 * 10) / 10;
@@ -7188,7 +7189,7 @@ function getCloneMoves() {
   const src = COLBALIAS_MOVES, S = CLONE.slow;
   // his clones have EVERYTHING he has (slower and weaker) - the clone string, the clone weapons, the Red Chidori, the
   // Hell Missile... - except his ultimates, the Demon's Gaze and summoning more clones (their down K = a Hell Missile)
-  const from = { upGround: 'hbUpJ', downRanged: 'hellMissile' };
+  const from = { upGround: 'hbUpJ', downRanged: 'hellMissile', downGround: 'hellSweep' };   // (down J: a HELL SWEEP - not the detonation that killed them)
   for (const k of ['counter', 'jab', 'jab2', 'jab3', 'jab4', 'sideGround', 'upGround', 'downGround', 'dashAttack', 'nair', 'fair', 'bair', 'uair', 'dair',
                    'upRanged', 'sideRanged', 'neutralRanged', 'downRanged']) {
     const m = src[from[k] || k];
