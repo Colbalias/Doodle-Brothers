@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.64",
+    "version":  "0.7.65",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "682d3b3b459f4b46363777d0ec325ae3b1f0021454476db1a68641d789549fe3",
-                                     "size":  2003399
+                                     "hash":  "51f0aeaf9004be31e860ee7ebf931aeba1009d715f710cffa30468f1f28db302",
+                                     "size":  2036190
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -63,6 +63,14 @@
                                                       "hash":  "f500c381ce7f163de211dc4eb23bc08474eea6ae79eb94db466313457443b2f4",
                                                       "size":  5023868
                                                   },
+                  "sounds/battle/colby-jajanken.mp3":  {
+                                                           "hash":  "dc0a315d0556c8834495ef579b900df6044b9830dce17ff454e06f3dbba52f44",
+                                                           "size":  107506
+                                                       },
+                  "sounds/battle/colby-jajanken-final.mp3":  {
+                                                                 "hash":  "7e130464560a34709a5331a251979e7ae44555e1b6ba96af9789bf92a883bdaf",
+                                                                 "size":  56776
+                                                             },
                   "sounds/battle/colby-lotus.mp3":  {
                                                         "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
                                                         "size":  1010304

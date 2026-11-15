@@ -658,13 +658,17 @@ const STAGE_LIST = [
     { x: 50, y: 335, w: 1180 }, { x: 50, y: 170, w: 1180 }, { x: 50, y: 5, w: 1180 },
     { x: 150, y: -160, w: 980 }, { x: 150, y: -325, w: 980 },
     { x: 270, y: -490, w: 740, roof: true } ] },
-  // WRESTLING RING: an arena floor, flat, with the RING in the middle of it (on the floor - ropes and corner posts, the mat)
-  // and RINGSIDE out past the ropes on both sides to fight on too - then the edges of the arena floor. (Captain Heel's CAGE
-  // MATCH drags everyone here - see startCage.)
-  { name: 'WRESTLING RING', ring: true, platforms: [] },
+  // WRESTLING RING: an ARENA - the floor (ringside, the barricade and the crowd, the entrance ramp) runs flat right out past
+  // both KO lines, so there's nowhere to fall off: you're only out if you're launched out. In the middle, the RING sits up on
+  // it: a raised, SOLID box (jump up onto the apron, walk off it to drop back to the floor - no dropping through the mat).
+  // (Captain Heel's CAGE MATCH drags everyone here - see startCage.)
+  { name: 'WRESTLING RING', ring: true, arena: true, platforms: [] },
 ];
-const RING = { w: 760, cageH: 400 };
-const ringL = () => STAGE.x + (STAGE.w - RING.w) / 2, ringR = () => ringL() + RING.w;
+const RING = { w: 760, cageH: 400, raise: 64 };                // raise: how far the mat sits up off the arena floor
+const ringL = () => 50 + (1180 - RING.w) / 2, ringR = () => ringL() + RING.w;   // (centred on the normal stage)
+const ringTop = () => STAGE.y - RING.raise;
+// (the floor that runs past the KO lines: the walk-off hills, and the wrestling arena)
+const wideFloor = () => !!(stageDef && (stageDef.walkoff || stageDef.arena));
 // CAPTAIN HEEL'S CAGE MATCH teleports the whole match to the ring (and back, when the cage comes down)
 let ringTrip = null;
 function switchStage(i) {
@@ -708,10 +712,11 @@ const pitCracks = [];
 let stageDef = STAGE_LIST[0];
 function applyStage(i) {
   stageDef = STAGE_LIST[i] || STAGE_LIST[0];
-  if (stageDef.walkoff) { STAGE.x = BLAST.left - 400; STAGE.w = BLAST.right + 400 - STAGE.x; }   // (the floor runs past both KO lines)
+  if (wideFloor()) { STAGE.x = BLAST.left - 400; STAGE.w = BLAST.right + 400 - STAGE.x; }   // (the floor runs past both KO lines)
   else { STAGE.x = STAGE_HOME.x; STAGE.w = STAGE_HOME.w; }
   PLATFORMS.length = 0;
   for (const p of stageDef.platforms) PLATFORMS.push({ ...p });
+  if (stageDef.ring) PLATFORMS.push({ x: ringL(), y: ringTop(), w: RING.w, solid: true, ringBox: true });   // THE RING (raised, solid)
   BLAST.top = stageDef.tower ? TOWER.top : BLAST_TOP;            // (the skyscraper: the top KO line is way up over the roof)
 }
 // The BOTTOM blast line is well below the stage (~780px under its underside), with room to Z-vanish all the way
@@ -725,8 +730,8 @@ const CAM_CEIL = -230;                          // ...and the highest (where it 
 const SPAWN = { x: 640, y: 170 };
 // how far moves that carry / drag people "to the edge" go: the stage's edge - or, on the walk-off stage, well short of the
 // KO lines (so a move never walks Hunter and his victim off the map by itself). The CPUs use these to stay on too.
-const stageL = () => stageDef.walkoff ? BLAST.left + 320 : STAGE.x;
-const stageR = () => stageDef.walkoff ? BLAST.right - 320 : STAGE.x + STAGE.w;
+const stageL = () => wideFloor() ? BLAST.left + 320 : STAGE.x;
+const stageR = () => wideFloor() ? BLAST.right - 320 : STAGE.x + STAGE.w;
 
 // ---------------- CAMERA ----------------
 // Follows the fighters smoothly. Stays in CLOSE (fighters big on screen, like an animated fight) and
@@ -754,7 +759,7 @@ function updateCamera(dt) {
     tx = lerp(STAGE.x + STAGE.w / 2, (minX + maxX) / 2, steady ? STEADY_CAM.follow : 0.8);        // follow the action (stage stays in view)
     ty = lerp(STAGE.y - 90, (minY + maxY) / 2, stageDef.tower ? (steady ? TOWER.steadyFollow : TOWER.follow) : steady ? STEADY_CAM.followY : 0.6);
     tz = clamp(Math.min(W / (maxX - minX + CAM_PAD.x), H / (maxY - minY + CAM_PAD.y)), stageDef.tower ? TOWER.zMin : steady ? STEADY_CAM.zMin : CAM_ZOOM_MIN, steady ? STEADY_CAM.zMax : CAM_ZOOM_MAX);
-    if (steady && stageDef.walkoff) tx = clamp(tx, stageL() + 300, stageR() - 300);   // (the walk-off stage: stays over the playable part)
+    if (steady && wideFloor()) tx = clamp(tx, stageL() + 300, stageR() - 300);   // (the walk-off stage: stays over the playable part)
   }
   let speed = steady ? STEADY_CAM.speed : 4;
   // CLASH teleports: pull out to the whole arena (floor to sky) so you can see them zip all over it
@@ -4484,12 +4489,12 @@ function startCage(f) {
   if (stageDef.ring) {                                           // THE RING: the cage fills it - and EVERYONE is inside it
     const members = [f, ...fighters.filter(p => p !== f && p.respawnTimer <= 0 && !p.out && !p.dead && !(p.poofT > 0))];
     const x0 = ringL(), w = RING.w;
-    cage = { owner: f, members, x0, x1: x0 + w, y: STAGE.y, top: STAGE.y - RING.cageH, drop: 0, ring: true };
+    cage = { owner: f, members, x0, x1: x0 + w, y: ringTop(), top: ringTop() - RING.cageH, drop: 0, ring: true };
     for (const p of members) {
-      const inside = p.x > x0 + 20 && p.x < x0 + w - 20 && p.y <= STAGE.y + 2 && p.y > cage.top + 60;
+      const inside = p.x > x0 + 20 && p.x < x0 + w - 20 && p.y <= ringTop() + 2 && p.y > cage.top + 60;
       if (!inside) {
         ghosts.push({ fig: figureOf(p), life: 0.25, max: 0.25, color: '#ffffff' });
-        p.x = clamp(p.x, x0 + 50, x0 + w - 50); p.y = STAGE.y; p.vx = p.vy = 0; p.ground = true; p.onPlatform = null;
+        p.x = clamp(p.x, x0 + 50, x0 + w - 50); p.y = ringTop(); p.vx = p.vy = 0; p.ground = true; p.onPlatform = PLATFORMS.find(q => q.ringBox) || null;
         if (p.action && p.action.type !== 'attack') p.action = null;
       }
     }
@@ -7815,6 +7820,79 @@ function buildKnight(src) {
   return out;
 }
 const COLTEN_MOVES = buildKnight(COLTEN_GANON);
+// UP K: AIR SLASH - he RISES on a big upward cut of the greatsword; whoever the cut catches is carried up with him. At the
+// top of the climb, press K AGAIN for the second cut: a big sideways slash (toward whoever he carried up, or the way he's
+// facing) that sends them flying - and gives him a little extra lift, so it also buys him air time to get back.
+// Don't press it and he just lets them go at the top.
+const AIR_SLASH = { rise: 1320, riseVx: 160, riseT: 0.32, window: 0.42, lift: 460, slashT: 0.16, endlag: 0.3,
+                    catchR: 62, carry: { dmg: 5, base: 0, growth: 0, angle: 88, noStop: true },
+                    drop: { dmg: 3, base: 300, growth: 3, angle: 80 },
+                    slash: { dmg: 10, base: 560, growth: 7, angle: 38 }, slashR: 78, purple: ['#7a2fb0', '#c08bff', '#ffffff'] };
+const AIR_SLASH_POSE = {
+  wind: pose({ bob: -14, lean: 0.3, legA: [0.9, 1.5], legB: [-0.5, 0.9], armA: [0.4, -0.6], armB: [0.2, -0.6], sw: 0.6 }),     // crouched, blade low
+  rise: pose({ lean: -0.1, legA: [0.3, 0.6], legB: [-0.3, 0.9], armA: [3.05, 0], armB: [2.8, -0.2], sw: 3.14 }),            // carried up on the cut, blade overhead
+  cock: pose({ lean: -0.2, legA: [0.8, 1.3], legB: [0.2, 1.0], armA: [-2.4, -0.3], armB: [-2.2, -0.4], sw: -2.6 }),         // at the top: drawn back behind him
+  slash: pose({ lean: 0.5, legA: [0.9, 1.2], legB: [-0.2, 0.9], armA: [1.5, 0], armB: [1.35, -0.1], sw: 1.5 }),            // swept straight across
+};
+const airSlashHit = (f, t, h, dir, x, y) => !isIntangible(t) && applyHit(t, h, dir, powerOf(f), x, y, { fighter: f });
+COLTEN_MOVES.upRanged = { name: 'Air Slash', startup: 0.1, active: 99, endlag: 0, landLag: 0.2, noClash: true, hitboxes: [],
+  wind: AIR_SLASH_POSE.wind, strike: AIR_SLASH_POSE.rise,
+  fire(f, mult, c, a) {
+    const A = AIR_SLASH;
+    a.st = 'rise'; a.t0 = 0; a.carry = []; a.tried = new Set();
+    if (!f.upSpecialUsed) { f.vy = -A.rise; f.vx = f.face * A.riseVx; }   // (already used it this jump: just the cut, no lift) f.ground = false; f.y -= 2; a.air = true; f.upSpecialUsed = true;
+    burst(f.x, f.y, A.purple, 16, -Math.PI / 2, 0.6, 450); slashLine(f.x + f.face * 40, f.y - 60, -Math.PI / 2 + f.face * 0.5, 180, 0.2); sfx.slash(1.1);
+  },
+  step(f, a, dt, inp) {
+    if (a.phase !== 'active') return false;
+    const A = AIR_SLASH, T = a.t - a.t0;
+    const hold = (dx, dy) => { for (const t of a.carry) {                         // carried up with him, stuck on the blade
+      if (!fighters.includes(t) || t.respawnTimer > 0 || !t.action || t.action.type !== 'hitstun') continue;
+      t.x = f.x + f.face * dx; t.y = f.y + dy; t.vx = f.vx; t.vy = f.vy; t.ground = false;
+      t.action.locked = true; t.action.dur = Math.max(t.action.dur, t.action.t + 0.2);
+    } };
+    const letGo = () => { for (const t of a.carry) if (t.action && t.action.type === 'hitstun') t.action.locked = false; };
+    if (a.st === 'rise') {                                         // THE RISING CUT
+      a.poseOverride = AIR_SLASH_POSE.rise;
+      const hx = f.x + f.face * 46, hy = f.y - 90, B = bladeSeg(f);
+      for (const t of fighters) {
+        if (t === f || allies(f, t) || a.tried.has(t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0) continue;
+        if (!circleHitsFighter(hx, hy, A.catchR, t) && !(B && bladeTouch(B, t))) continue;   // (the blade itself catches them too)
+        a.tried.add(t);
+        if (airSlashHit(f, t, A.carry, f.face, hx, hy) && !t.minion && t.action && t.action.type === 'hitstun') a.carry.push(t);
+      }
+      hold(46, -24);
+      if (realRandom() < dt * 40) burst(f.x, f.y, A.purple, 1, Math.PI / 2, 0.6, 200, { grav: 0 });
+      if (realRandom() < dt * 50) ghosts.push({ fig: figureOf(f), life: 0.12, max: 0.12, color: '#7a2fb0' });
+      if (T >= A.riseT || f.vy > -60) { a.st = 'top'; a.t0 = a.t; }
+    } else if (a.st === 'top') {                                   // THE TOP: K again = the second cut
+      a.poseOverride = AIR_SLASH_POSE.cock;
+      f.vy = Math.min(f.vy, 160);                                 // (hangs there a moment)
+      hold(40, -10);
+      if (inp.spcTap) {
+        const v = a.carry.find(t => fighters.includes(t) && t.respawnTimer <= 0);
+        a.dir = v ? (Math.sign(v.x - f.x) || f.face) : (inp.dir || f.face);
+        f.face = a.dir; f.vy = -A.lift; f.vx = a.dir * 140;       // ...and a little more air time
+        a.st = 'slash'; a.t0 = a.t; f.spcBuf = 0;
+        letGo();
+        const hx = f.x + a.dir * 70, hy = f.y - 60;
+        for (const t of fighters) {
+          if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0) continue;
+          if (!a.carry.includes(t) && !circleHitsFighter(hx, hy, A.slashR, t)) continue;
+          airSlashHit(f, t, A.slash, a.dir, hx, hy);
+        }
+        slashLine(f.x + a.dir * 60, f.y - 60, a.dir > 0 ? 0 : Math.PI, 240, 0.22); slashLine(f.x + a.dir * 50, f.y - 50, a.dir > 0 ? 0.15 : Math.PI - 0.15, 200, 0.18);
+        burst(hx, hy, A.purple, 22, a.dir > 0 ? 0 : Math.PI, 0.6, 700, { grav: 0 }); shake = Math.max(shake, 8); sfx.slash(1.3);
+      } else if (T >= A.window) {                                  // no second cut: lets them go
+        for (const t of a.carry) if (fighters.includes(t) && t.respawnTimer <= 0 && t.action && t.action.type === 'hitstun') { t.action.locked = false; knock(t, A.drop, f.face, powerOf(f), t.x, t.y - 50); }
+        a.carry = []; f.action = null;
+      }
+    } else if (a.st === 'slash') {                                 // THE SIDE CUT, then a beat to recover
+      a.poseOverride = AIR_SLASH_POSE.slash;
+      if (T >= A.slashT + A.endlag) f.action = null;
+    }
+    return true;
+  } };
 // SIDE K: GATE THROW - whatever weapon he's holding goes spinning across the stage (it hovers, K calls it back, or it drops
 // and he walks over and picks it up). A STOLEN weapon: his own Dragonslayer falls back into his hand out of the Gate.
 COLTEN_MOVES.sideRanged = { name: 'Gate Throw', startup: 0.16, active: 0.06, endlag: 0.36, landLag: 0.16, throwScythe: true,
@@ -7876,22 +7954,36 @@ const SEVON_MOVES = {
     strike: pose({ lean: 0.5, bob: -14, legA: [1.0, 0.8], legB: [-0.8, 0.1], armA: [1.2, 0.1], armB: [-0.6, -0.4], sw: 0.95, sw2: -2.2 }),   // front blade brought straight down, back one swept away behind
     fire(f) { flameSlash(f, 70, -50, 14); shake = Math.max(shake, 6); sfx.slash && sfx.slash(); } },
   // ---------- J + direction ----------
-  // SIDE J: FLAME SLASH - one wide cut, and the flames off the blade ROLL OUTWARD: the hit reaches further and further
-  // through the swing (point blank -> ~190px out), so it's good from close up and from mid range
-  sideGround: { name: 'Flame Slash', startup: 0.11, active: 0.3, endlag: 0.28, charge: true, lunge: 260, lungeFriction: 0.4,
-    hitboxes: [{ x: 52,  y: -64, r: 34, dmg: 10, base: 400, growth: 6, angle: 36, from: 0,    to: 0.08 },
-               { x: 98,  y: -60, r: 38, dmg: 10, base: 400, growth: 6, angle: 36, from: 0.06, to: 0.16 },
-               { x: 146, y: -56, r: 44, dmg: 9,  base: 390, growth: 5.8, angle: 36, from: 0.14, to: 0.24 },
-               { x: 180, y: -52, r: 44, dmg: 9,  base: 390, growth: 5.8, angle: 36, from: 0.22, to: 0.3 }],   // (one hit per swing)
-    wind: pose({ lean: -0.3, bob: -10, legA: [0.9, 0.8], legB: [-0.7, 0.3], armA: [2.6, 0.4], armB: [2.4, 0.5], sw: 2.9 }),    // blade drawn back high
-    strike: pose({ lean: 0.55, bob: -12, legA: [1.1, 0.6], legB: [-0.9, 0.1], armA: [1.35, 0.05], armB: [1.2, 0.1], sw: 1.25 }), // swept through
-    fire(f) { flameSlash(f, 50, -64, 14); sfx.whoosh(true); sfx.slash && sfx.slash(); },
+  // SIDE J: FLAME DRAW - hold to CHARGE (hand on the hilt, crouched), let go and he BLASTS straight across the stage the
+  // way he's facing, drawing the katana as he goes. The longer the charge, the further (and harder) he goes: a tap is a
+  // short hop forward, full charge crosses most of the stage. The first one he runs into gets cut and the dash stops there.
+  // (On the floor he stops at the ledge; in the air he keeps his height and goes the full way.)
+  sideGround: { name: 'Flame Draw', startup: 0.1, active: 0.24, endlag: 0.3, landLag: 0.16, charge: true, quickDraw: true, noClash: true,
+    hitboxes: [{ x: 44, y: -58, r: 40, dmg: 9, base: 400, growth: 6, angle: 32, group: 0 },
+               { x: 92, y: -58, r: 36, dmg: 9, base: 400, growth: 6, angle: 32, group: 0 },
+               { x: 4,  y: -58, r: 34, dmg: 9, base: 400, growth: 6, angle: 32, group: 0 }],   // (one hit; covers his whole body as he flies)
+    wind: pose({ lean: 0.2, bob: -16, legA: [1.2, 1.4], legB: [-0.5, 0.6], armA: [-0.8, -0.2], armB: [-0.7, -0.1], sw: 0.3 }),   // hand on the hilt at his hip
+    strike: pose({ lean: 0.55, bob: -14, legA: [1.2, 0.7], legB: [-0.9, 0.1], armA: [1.7, 0.1], armB: [-1.2, -0.4], sw: 1.75 }),   // drawn and cut in one motion
+    fire(f, mult, cf, a) {
+      a.dashV = (240 + 640 * clamp(cf || 0, 0, 1)) / this.active;      // tap = 240px, full charge = 880px
+      burst(f.x - f.face * 20, f.y - 40, SEVON_FIRE, 14 + Math.round(16 * (cf || 0)), f.face > 0 ? Math.PI : 0, 0.7, 420, { grav: -200 });
+      if ((cf || 0) > 0.6) { ring(f.x, f.y - 55); shake = Math.max(shake, 6); }
+      sfx.whoosh(true); sfx.slash && sfx.slash();
+    },
+    onHit(f, t, a) { if (a && !a.struck) { a.struck = true; f.vx = f.face * 120; flameSlash(f, 70, -58, 14); shake = Math.max(shake, 8); } },
     step(f, a, dt) {
-      if (a.phase === 'active') {                      // the wall of flame rolling out ahead of the cut
-        const front = 50 + 145 * clamp(a.t / 0.3, 0, 1), grow = 0.7 + 0.6 * clamp(a.t / 0.3, 0, 1);
-        if (Math.random() < dt * 80) burst(f.x + f.face * (front + (Math.random() - 0.5) * 30), f.y - 40 - Math.random() * 40 * grow, SEVON_FIRE, 3, Math.PI / 2, 1.0, 220 * grow, { grav: -420 });
-        if (Math.random() < dt * 40) burst(f.x + f.face * front * 0.6, f.y - 55, SEVON_FIRE, 2, f.face > 0 ? 0 : Math.PI, 0.4, 500, { grav: -200 });
-      }
+      if (a.phase === 'active' && !a.struck) {                  // THE DASH: dead straight
+        f.vx = f.face * (a.dashV || 1000);
+        if (!f.ground) f.vy = 0;                                 // (in the air: holds his height)
+        if (f.ground && !f.onPlatform) {                         // stops at the ledge instead of running off
+          const edge = f.face > 0 ? STAGE.x + STAGE.w - 14 : STAGE.x + 14;
+          if ((f.face > 0 && f.x + f.vx * dt > edge) || (f.face < 0 && f.x + f.vx * dt < edge)) { f.x = edge; f.vx = 0; }
+        }
+        a.ghostT = (a.ghostT || 0) - dt;
+        if (a.ghostT <= 0) { a.ghostT = 0.02; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#ff7a1a' }); }
+        if (realRandom() < dt * 70) burst(f.x - f.face * 24, f.y - 30 - realRandom() * 50, SEVON_FIRE, 2, f.face > 0 ? Math.PI : 0, 0.4, 300, { grav: -160 });
+        if (f.ground && realRandom() < dt * 40) dust(f.x - f.face * 10, f.y, 2, 1);
+      } else if (a.phase === 'end' && !a.braked) { a.braked = true; f.vx *= 0.15; }   // skids to a stop
       return false;
     } },
   upGround: { name: 'Sun Arc', startup: 0.09, active: 0.14, endlag: 0.26, charge: true,
@@ -7975,12 +8067,39 @@ const SEVON_MOVES = {
     wind: pose({ lean: 0.1, legA: [0.9, 1.6], legB: [0.3, 1.0], armA: [1.2, 0.2], armB: [1.1, 0.3], sw: 1.2 }),
     strike: pose({ lean: -0.2, legA: [0.5, 1.2], legB: [0.1, 0.8], armA: [3.0, 0.05], armB: [2.9, 0.1], sw: 3.1 }),
     fire(f) { flameSlash(f, 10, -118, 10); } },
-  // DOWN AIR J: DOWNWARD THRUST - the katana driven straight down underneath him, stabbing whoever's below (spikes)
-  dair: { name: 'Downward Thrust', startup: 0.08, active: 0.14, endlag: 0.2, landLag: 0.16, spike: true,
-    hitboxes: [{ x: 4, y: 26, r: 26, dmg: 9, base: 400, growth: 5.6, angle: -86 }, { x: 4, y: -4, r: 22, dmg: 9, base: 400, growth: 5.6, angle: -86 }],
-    wind: pose({ lean: -0.15, legA: [1.0, 1.7], legB: [0.6, 1.5], armA: [2.8, 0.2], armB: [2.6, 0.3], sw: 3.14 }),   // blade raised, point up
-    strike: pose({ lean: 0.1, legA: [1.25, 2.0], legB: [0.85, 1.9], armA: [0.15, 0], armB: [0.1, 0.1], sw: 0 }),       // knees up, blade driven straight down
-    fire(f) { flameSlash(f, 0, 10, 10); sfx.slash && sfx.slash(); } },
+  // DOWN AIR J: FALLING FLAME WHEEL - the Flame Wheel REVERSED: he flips backwards head over heels, swords out, wrapped in
+  // a burning wheel, and DROPS straight down with it. Anyone under him gets cut over and over and dragged down; the last
+  // turn spikes. If he hits the floor while still spinning, it ERUPTS round him.
+  dair: { name: 'Falling Flame Wheel', startup: 0.06, active: 0.42, endlag: 0.2, landLag: 0.2, spike: true,
+    flip: true, flipDir: -1, flipTurns: 3, flameWheel: true, slamLand: true, fastFall: true,
+    hitboxes: [0, 1, 2, 3].map(i => ({ x: 0, y: -40, r: 64, dmg: 2.5, base: 90, growth: 0, angle: -80, noStop: true, from: i * 0.08, to: i * 0.08 + 0.07, group: i }))
+      .concat([{ x: 0, y: -30, r: 70, dmg: 6, base: 420, growth: 5.6, angle: -82, from: 0.34, to: 0.42, group: 4 }]),
+    wind: pose({ lean: -0.15, legA: [1.0, 1.7], legB: [0.6, 1.5], armA: [2.8, 0.2], armB: [2.6, 0.3], sw: 3.14 }),   // blade raised
+    strike: pose({ lean: 0.2, legA: [0.9, 1.4], legB: [0.4, 1.2], armA: [1.6, 0], armB: [1.5, 0.05], sw: 1.6 }),      // tucked, swords straight out
+    fire(f) { f.vy = Math.max(f.vy, 1400); f.vx *= 0.25; burst(f.x, f.y - 50, SEVON_FIRE, 22, 0, Math.PI, 520, { grav: -260 }); sfx.whoosh(true); sfx.slash && sfx.slash(); },
+    step(f, a, dt) {
+      if (a.phase === 'active') {
+        if (!f.ground) { f.vy = Math.max(f.vy, 1500); f.vx *= Math.pow(0.02, dt); }   // straight DOWN, all momentum
+        for (let k = 0; k < 2; k++) {                              // fire flung off the rim of the wheel
+          const an = realRandom() * Math.PI * 2;
+          particles.push({ x: f.x + Math.cos(an) * 62, y: f.y - 50 + Math.sin(an) * 62, vx: Math.sin(an) * 240 * f.face, vy: -Math.cos(an) * 240 - 160,
+                           life: 0.28, max: 0.28, size: realRandom() < 0.4 ? 3 : 2, color: SEVON_FIRE[(realRandom() * 4) | 0], type: 'bit', grav: -300 });
+        }
+        a.ghostT = (a.ghostT || 0) - dt;
+        if (a.ghostT <= 0) { a.ghostT = 0.035; ghosts.push({ fig: figureOf(f), life: 0.14, max: 0.14, color: '#ff7a1a' }); }
+      } else if (a.phase === 'end' && !a.slowed) { a.slowed = true; f.vy = Math.min(f.vy, 600); }   // (spin over: back to a normal fall)
+      return false;
+    },
+    onLand(f, a) {                                                // hit the floor mid-spin: the wheel ERUPTS
+      if (a.phase !== 'active' && a.phase !== 'startup') return;
+      const cx = f.x, cy = f.y - 24;
+      for (const t of fighters) {
+        if (t === f || allies(f, t) || t.respawnTimer > 0 || t.dead) continue;
+        if (Math.abs(t.x - cx) < 100 && Math.abs((t.y - 30) - cy) < 70)
+          applyHit(t, { dmg: 6, base: 420, growth: 5.4, angle: 70 }, Math.sign(t.x - f.x) || f.face, powerOf(f), t.x, t.y - 30, { fighter: f });
+      }
+      for (let k = 0; k < 5; k++) burst(f.x + (k - 2) * 24, f.y - 4, SEVON_FIRE, 9, -Math.PI / 2, 0.5, 520, { grav: -420 });
+    } },
   // ---------- K ----------
   // NEUTRAL K: ODM HOOK - see ODM / stepOdm
   neutralRanged: { name: 'ODM Hook', startup: 0.035, active: 0.04, endlag: 0.1, landLag: 0.06, noClash: true,
@@ -8205,7 +8324,7 @@ SEVON_MOVES.downRanged = { name: 'Total Concentration', startup: 0.02, active: 0
 //    cable holds it ALWAYS gets to them - the only answers are a last-second SHIELD or a last-second Z VANISH.
 // (The cable snaps if he's hit, if it times out, or if they get too far apart.)
 const ODM = { hookSpeed: 2700, hookLife: 0.45, hookR: 18, dur: 2.5, maxDist: 1050,   // (NERFED: slower, shorter range, a 2.5s tether)
-              turn: 5.5, missChance: 0.15,                          // tracking: turn rate (rad/s), and the chance it's fired a hair off and misses
+              turn: 5.5, missChance: 0,                             // tracking: turn rate (rad/s), and the chance it's fired a hair off and misses
               reel: 3900, reelTime: 0.42, arrive: 80,             // (a SNAPPY reel: yanked in almost instantly)
               spin: 2700, spinTime: 0.9, contact: 62, hits: 4, every: 0.06,
               hookHit: { dmg: 1.5, base: 60, growth: 0, angle: 30, noStop: true },
@@ -8481,13 +8600,13 @@ function drawLeviSpin(f) {
 function drawFlameWheel(f) {
   const a = f.action;
   if (!a || a.type !== 'attack' || !a.move.flameWheel || a.phase !== 'active') return;
-  const k = clamp(a.t / a.move.active, 0, 1), turn = f.face * Math.PI * 2 * (a.move.flipTurns || 2) * k;
+  const dir = f.face * (a.move.flipDir || 1), k = clamp(a.t / a.move.active, 0, 1), turn = dir * Math.PI * 2 * (a.move.flipTurns || 2) * k;
   const cx = f.x, cy = f.y - 50, R = 64;
   ctx.save(); ctx.lineCap = 'round';
   for (const [w, col, al] of sketch ? [[3, '#333', 1]] : [[22, '#e0301e', 0.3], [12, '#ff7a1a', 0.6], [6, '#ffb02e', 0.85], [2.5, '#fff3a8', 1]]) {
     ctx.globalAlpha = al; ctx.strokeStyle = col; ctx.lineWidth = w;
     const st = turn - Math.PI / 2;                               // (the bright head of the wheel follows his blade; its tail trails behind)
-    ctx.beginPath(); if (f.face < 0) ctx.arc(cx, cy, R, st, st + Math.PI * 1.4); else ctx.arc(cx, cy, R, st - Math.PI * 1.4, st); ctx.stroke();
+    ctx.beginPath(); if (dir < 0) ctx.arc(cx, cy, R, st, st + Math.PI * 1.4); else ctx.arc(cx, cy, R, st - Math.PI * 1.4, st); ctx.stroke();
   }
   ctx.restore();
 }
@@ -8703,6 +8822,31 @@ function nenOrb(x, y, r, now) {
   if (sketch) { ctx.strokeStyle = '#333333'; ctx.lineWidth = 2; ctx.stroke(); }
   ctx.restore();
 }
+// THE CHARGING FIST (in the stance): a ball of Nen swelling round his fist - white-hot core, yellow body, a flickering
+// orange rim of flame licking off it - pulsing harder and growing as the charge builds (11px -> 30px)
+function jjChargeBall(x, y, k, now) {
+  const pulse = 1 + (0.06 + 0.08 * k) * Math.sin(now * (10 + 10 * k)), R = (11 + 19 * k) * pulse;
+  ctx.save();
+  if (sketch) {
+    ctx.strokeStyle = '#333333'; ctx.lineWidth = 2; ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); for (let i = 0; i <= 24; i++) { const a = i / 24 * Math.PI * 2, r = R * (1 + 0.14 * Math.sin(a * 7 + now * 14)); i ? ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+    ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); return;
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(x, y, R * 0.3, x, y, R * 1.8);          // the light it throws
+  glow.addColorStop(0, `rgba(255,210,90,${0.25 + 0.2 * k})`); glow.addColorStop(1, 'rgba(255,110,20,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, R * 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,90,20,0.55)';                                       // the flickering rim of flame
+  ctx.beginPath();
+  for (let i = 0; i <= 36; i++) { const a = i / 36 * Math.PI * 2, r = R * (1.12 + 0.16 * Math.sin(a * 9 + now * 16) + 0.08 * Math.sin(a * 5 - now * 23)); i ? ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  ctx.closePath(); ctx.fill();
+  const body = ctx.createRadialGradient(x - R * 0.2, y - R * 0.2, R * 0.05, x, y, R);   // the ball: white-hot in the middle
+  body.addColorStop(0, '#ffffff'); body.addColorStop(0.35, '#fff3a0'); body.addColorStop(0.75, '#ffc23a'); body.addColorStop(1, 'rgba(255,130,30,0.85)');
+  ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,220,0.7)'; ctx.lineWidth = 1.5;               // swirling streaks inside it
+  for (let i = 0; i < 3; i++) { const a0 = now * (6 + 4 * k) + i * 2.1; ctx.beginPath(); ctx.arc(x, y, R * (0.45 + 0.15 * i), a0, a0 + 1.4); ctx.stroke(); }
+  ctx.restore();
+}
 function drawJajanFx() {
   const now = time;
   for (const f of fighters) {
@@ -8712,7 +8856,7 @@ function drawJajanFx() {
       if (!sketch) { ctx.save(); ctx.globalCompositeOperation = 'lighter';
         const g = ctx.createRadialGradient(f.x, f.y - 50, 10, f.x, f.y - 50, 78 + 18 * k); g.addColorStop(0, `rgba(255,200,80,${0.22 * pulse})`); g.addColorStop(0.7, `rgba(255,150,40,${0.14 * pulse})`); g.addColorStop(1, 'rgba(255,120,20,0)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(f.x, f.y - 50, 60 + 14 * k, 86 + 16 * k, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-      const h = jjHand(f); nenOrb(h.x, h.y, 6 + 10 * k, now);
+      const h = jjHand(f); jjChargeBall(h.x, h.y, k, now);
     } else if (a.key === 'jjRock' && a.phase !== 'end') {          // ROCK: the orb round his fist, out in front
       const m = ((a.mult || 1) - 1) / JAJAN.chargeBonus, x = a.phase === 'startup' ? jjHand(f).x : f.x + f.face * 66, y = a.phase === 'startup' ? jjHand(f).y : f.y - 58;
       nenOrb(x, y, 16 + 12 * m, now);
@@ -10033,9 +10177,9 @@ const CHARACTERS = {
       auraArmor: false,         // (his old aura armor - replaced by the 2-hit HYPER ARMOR while transformed: see COLTEN_ARMOR)
       escanorForm: true,        // TRANSFORMED he gets HUGE and bare-chested (still his hair, glasses and armoured legs) - see escLook
       transformAura: '#7dffb0',
-      // PROUD stance: chest out, standing tall, the greatsword held up in front of him, blade pointing to the
-      // sky, free hand on his hip
-      idle: pose({ lean: -0.08, bob: -5, legA: [0.55, 0.35], legB: [-0.5, 0.1], armA: [0.95, -1.15], armB: [-0.55, -1.6], sw: 2.95 }),
+      // BATTLE-READY stance: low and wide, leaning into it, both hands on the hilt down at his front hip and the
+      // greatsword angled up and forward across him - ready to cut
+      idle: pose({ lean: 0.16, bob: -14, legA: [0.85, 0.75], legB: [-0.75, 0.3], armA: [0.3, -0.85], armB: [0.2, -1.0], sw: 2.62 }),
     },
   },
   SEVON: {
@@ -10612,7 +10756,8 @@ function thunderHeadbutt(f, s) {
 //   J      = ROCK      - a GIANT punch
 //   K      = PAPER     - his aura thrown out of his open palm: a projectile
 //   BLOCK  = SCISSORS  - a huge slash rising from below: great range, slices up high - and cuts through anything thrown at him
-const JAJAN = { maxCharge: 1.2, chargeBonus: 0.6, hops: 2, hopVx: 820, hopVy: -760, timeout: 3, gold: '#ffd23f', orange: '#ff8a1a' };
+const JAJAN = { maxCharge: 1.2, chargeBonus: 0.6, hops: 2, hopVx: 820, hopVy: -760, timeout: 5,   // (timeout: the stance lasts the whole chant)
+                gold: '#ffd23f', orange: '#ff8a1a' };
 const JJ_POSE = {
   stance: pose({ lean: 0.45, bob: -24, legA: [1.2, 1.4], legB: [-0.9, 0.4], armA: [-0.9, -1.6], armB: [0.6, -1.2] }),
   rock: pose({ lean: 0.75, bob: -14, legA: [1.25, 0.6], legB: [-1.1, 0.2], armA: [1.6, 0], armB: [-1.0, -0.6] }),
@@ -10622,19 +10767,35 @@ const JJ_POSE = {
   scissors: pose({ lean: -0.25, bob: -2, legA: [0.6, 0.3], legB: [-0.6, 0.3], armA: [2.8, 0.05], armB: [-1.2, -0.6] }),
 };
 const jjHand = f => ({ x: f.x - f.face * 18, y: f.y - 46 });
+// GON's VOICE: the chant as he drops into the stance (sounds/battle/colby-jajanken.mp3 = 0:29-0:34 of the clip), then the
+// shout on his final input (sounds/battle/colby-jajanken-final.mp3 = from 0:35). The chant stops if he leaves the stance.
+function playJJ(f, final) {
+  stopJJ(f);
+  if (!soundOn || f.minion) return;
+  let el; try { el = new Audio(final ? 'sounds/battle/colby-jajanken-final.mp3' : 'sounds/battle/colby-jajanken.mp3'); } catch (e) { return; }
+  el.preload = 'auto'; el.volume = clamp(1.0 * settings.master * settings.sfx, 0, 1);
+  el.play().catch(() => {});
+  f.jjSnd = { el, final };
+}
+function stopJJ(f) { if (f && f.jjSnd) { try { f.jjSnd.el.pause(); } catch (e) {} f.jjSnd = null; } }
 function jjStart(f, key, mult) {
   const move = CHARACTERS.COLBY.bareMoves[key];
   f.action = { type: 'attack', key, move, btn: 'atk', phase: 'startup', t: 0, charge: 0, mult, hit: new Set(), air: !f.ground, started: time, startupMul: 1 };
 }
 CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active: 9, endlag: 0.12, landLag: 0.1, noClash: true, hitboxes: [],
   wind: JJ_POSE.stance, strike: JJ_POSE.stance,
-  fire(f, mult, c, a) { a.ct = 0; a.hops = 0; a.lastD = 0; painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'JAN... KEN...', big: false }); sfx.parry(); },
+  fire(f, mult, c, a) { a.ct = 0; a.hops = 0; a.lastD = 0; painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'JAN... KEN...', big: false }); sfx.parry(); playJJ(f, false); },
   step(f, a, dt, inp) {
     if (a.phase !== 'active') return false;
     a.ct = Math.min(JAJAN.maxCharge, (a.ct || 0) + dt);
     const k = a.ct / JAJAN.maxCharge, h = jjHand(f);
     if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt);
-    if (Math.random() < dt * (20 + 40 * k)) burst(h.x + (Math.random() - 0.5) * 16, h.y + (Math.random() - 0.5) * 16, [JAJAN.gold, JAJAN.orange, '#ffffff'], 1, 0, Math.PI, 120 + 160 * k, { grav: -80 });
+    for (let q = 0; q < 2; q++) if (Math.random() < dt * (30 + 50 * k)) {        // aura POURING INTO the fist from all round him
+      const an = Math.random() * Math.PI * 2, d = 60 + Math.random() * 50, life = 0.22;
+      particles.push({ x: h.x + Math.cos(an) * d, y: h.y + Math.sin(an) * d, vx: -Math.cos(an) * d / life, vy: -Math.sin(an) * d / life,
+                       life, max: life, size: Math.random() < 0.4 ? 3 : 2, color: [JAJAN.gold, JAJAN.orange, '#ffffff'][(Math.random() * 3) | 0], type: 'bit', grav: 0 });
+    }
+    if (Math.random() < dt * (8 + 20 * k)) burst(h.x, h.y, [JAJAN.gold, JAJAN.orange], 1, -Math.PI / 2, 0.8, 120 + 100 * k, { grav: -200 });   // (and flame licking up off it)
     if ((a.wT = (a.wT || 0) - dt) <= 0) { a.wT = 0.5 - 0.3 * k; auraWaves.push({ x: h.x, y: h.y, t: 0, dur: 0.3, max: 30 + 40 * k, color: JAJAN.gold }); }
     // LEFT / RIGHT: a big hop that way (still in the stance)
     const d = inp.dir || 0;
@@ -10651,7 +10812,7 @@ CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active:
       pick = dy < -60 || projectiles.some(q => q.owner !== f && Math.hypot(q.x - f.x, q.y - f.y) < 220) ? 'jjScissors' : dx < 110 ? 'jjRock' : 'jjPaper';
       if (o) f.face = Math.sign(o.x - f.x) || f.face;
     }
-    if (pick) { f.atkBuf = f.spcBuf = f.dodgeBuf = 0; jjStart(f, pick, mult); painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: pick === 'jjRock' ? 'ROCK!' : pick === 'jjPaper' ? 'PAPER!' : 'SCISSORS!', big: true }); return true; }
+    if (pick) { f.atkBuf = f.spcBuf = f.dodgeBuf = 0; jjStart(f, pick, mult); playJJ(f, true); painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: pick === 'jjRock' ? 'ROCK!' : pick === 'jjPaper' ? 'PAPER!' : 'SCISSORS!', big: true }); return true; }
     if (a.t > JAJAN.timeout) { a.phase = 'end'; a.t = 0; }
     return true;
   } };
@@ -11136,6 +11297,138 @@ CHARACTERS.SEVON.altUlt = {
 // which takes a beating), PERFECT-BLOCK it (repelled - he's left staggered) or Z vanish through it.
 // (The wind-up runs in REAL seconds so the rush always leaves on the shout in the clip.)
 CHARACTERS.SEVON.ult = { name: 'NINTH FORM: RENGOKU', dragon: true };
+// Sevon's SIDE ultimate (hold LEFT/RIGHT as you press ULT): FIFTH FORM: FLAME TIGER - he sets his feet and cuts, and a huge
+// TIGER OF FIRE bursts out of the swing and bounds straight ahead the way he's facing, jaws wide. Anyone it touches is
+// stunned and swept up in its mouth... until it CHOMPS down at the end of its run and sends them flying.
+// (Z vanish slips it; a PERFECT block breaks it apart; a plain shield doesn't stop it.)
+const TIGER = { wind: 0.34, endlag: 0.42, speed: 1500, range: 660, chomp: 0.14, fade: 0.3, r: 80,
+                grab: { dmg: 4, base: 0, growth: 0, angle: 90, noStop: true, ultHit: true },
+                final: { dmg: 16, base: 600, growth: 7, angle: 40, ultFinal: true } };
+const TIGER_POSE = {
+  wind: pose({ lean: -0.25, bob: -18, legA: [1.1, 1.1], legB: [-0.8, 0.4], armA: [2.7, 0.4], armB: [2.5, 0.5], sw: 3.0 }),     // blade drawn back high
+  cut: pose({ lean: 0.6, bob: -16, legA: [1.2, 0.8], legB: [-1.0, 0.2], armA: [1.3, 0.05], armB: [1.2, 0.1], sw: 1.2 }),       // swept through
+};
+const SEVON_TIGER_MOVE = { startup: 0, active: 99, endlag: 0, noClash: true, hitboxes: [], name: 'Fifth Form: Flame Tiger', tigerUlt: true,
+  wind: TIGER_POSE.wind, strike: TIGER_POSE.cut, floatWhile: f => !f.ground,
+  step(f, a, dt) {
+    f.vx = approach(f.vx, 0, FRICTION * 2 * dt); if (!f.ground) f.vy = Math.min(f.vy, 40);
+    if (!a.loosed) {
+      a.poseOverride = TIGER_POSE.wind;
+      if (realRandom() < dt * 50) burst(f.x + (realRandom() - 0.5) * 50, f.y - realRandom() * 90, SEVON_FIRE, 1, -Math.PI / 2, 0.6, 200, { grav: -300 });
+      if (a.t >= TIGER.wind) {                                    // THE CUT: out comes the tiger
+        a.loosed = true; a.t0 = a.t; a.poseOverride = TIGER_POSE.cut;
+        projectiles.push({ owner: f, kind: 'tiger', state: 'run', t: 0, x: f.x + f.face * 70, y: f.y - 62, dir: f.face, vx: f.face * TIGER.speed, vy: 0,
+                           r: TIGER.r, trail: [], hit: new Set(), caught: [], dist: 0, mult: (f.ultPower || 1) * powerOf(f) });
+        flameSlash(f, 60, -62, 24); ring(f.x + f.face * 70, f.y - 62);
+        shake = Math.max(shake, 14); sfx.whoosh(true); sfx.slash && sfx.slash(); sfx.beam(0.6); sfx.huge && sfx.huge();
+        burst(f.x + f.face * 70, f.y - 62, SEVON_FIRE, 40, f.face > 0 ? 0 : Math.PI, 0.8, 900, { grav: -200 });
+      }
+    } else if (a.t - a.t0 >= TIGER.endlag) f.action = null;
+    return true;
+  } };
+CHARACTERS.SEVON.sideUlt = { name: 'FIFTH FORM: FLAME TIGER', hunterMove: SEVON_TIGER_MOVE };
+// returns true when it's gone
+function updateTiger(s, dt) {
+  const o = s.owner;
+  s.t += dt;
+  const holdCaught = () => s.caught.forEach((c, i) => {           // held in its jaws, stunned
+    if (!fighters.includes(c) || c.respawnTimer > 0) return;
+    c.x = s.x + s.dir * (64 - 22 * i); c.y = s.y + 56 - 10 * i; c.vx = c.vy = 0; c.ground = false;
+    if (c.action && c.action.type === 'hitstun') { c.action.locked = true; c.action.dur = Math.max(c.action.dur, c.action.t + 0.25); }
+  });
+  if (s.state === 'run') {
+    const step = TIGER.speed * dt;
+    s.x += s.dir * step; s.dist += step;
+    for (const t of fighters) {
+      if (!o || t === o || allies(o, t) || s.hit.has(t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0 || projPhase(t)) continue;
+      if (!circleHitsFighter(s.x + s.dir * 20, s.y, TIGER.r, t)) continue;
+      s.hit.add(t);
+      if (isIntangible(t)) { t.dodgedFlash = 0.35; continue; }                                // Z vanished through it
+      if (t.shielding && !t.minion && t.shieldAge <= PARRY_WINDOW && parryRoll(t)) {          // PERFECT BLOCK: it breaks apart on them
+        perfectBlock(t, {}, t.x - s.dir * 14, t.y - 55);
+        painTexts.push({ x: t.x, y: t.y - 150, t: 0.8, max: 0.8, text: 'REPELLED!', big: true });
+        for (let k = 0; k < 6; k++) burst(s.x, s.y, SEVON_FIRE, 16, Math.random() * Math.PI * 2, 0.7, 700, { grav: -200 });
+        s.state = 'fade'; s.t = 0; s.caught.forEach(c => { if (c.action && c.action.type === 'hitstun') c.action.locked = false; }); s.caught = [];
+        return false;
+      }
+      if (t.shielding && !t.minion) painTexts.push({ x: t.x, y: t.y - 150, t: 0.7, max: 0.7, text: 'SHIELD PIERCED!', big: true });
+      t.shielding = false;
+      knock(t, TIGER.grab, s.dir, s.mult, t.x, t.y - 50);                                    // STUNNED - and swept up
+      if (t.minion) continue;                                                                 // (clones just get torched)
+      s.caught.push(t);
+      hitstop = Math.max(hitstop, 0.08); shake = Math.max(shake, 12); sfx.clash(true);
+      burst(t.x, t.y - 50, SEVON_FIRE, 30, 0, Math.PI, 700, { grav: -250 });
+    }
+    holdCaught();
+    if (s.dist >= TIGER.range) { s.state = 'chomp'; s.t = 0; }
+  } else if (s.state === 'chomp') {                                // the jaws SNAP shut (it slows to a stop as it bites)
+    s.x += s.dir * TIGER.speed * 0.25 * dt;
+    holdCaught();
+    if (s.t >= TIGER.chomp) {
+      const bite = [...s.caught];
+      for (const t of fighters) {                                   // (anyone right in its mouth as it bites gets it too)
+        if (!o || t === o || allies(o, t) || bite.includes(t) || s.hit.has(t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || isIntangible(t) || projPhase(t)) continue;
+        if (circleHitsFighter(s.x + s.dir * 30, s.y, TIGER.r * 0.8, t)) bite.push(t);
+      }
+      for (const t of bite) {
+        if (!fighters.includes(t) || t.respawnTimer > 0) continue;
+        if (t.action && t.action.type === 'hitstun') t.action.locked = false;
+        knock(t, TIGER.final, s.dir, s.mult, s.x, s.y);
+      }
+      for (let k = 0; k < 8; k++) burst(s.x + s.dir * 30, s.y, SEVON_FIRE, 20, Math.random() * Math.PI * 2, 0.7, 1000, { grav: -200 });
+      for (let k = 0; k < 3; k++) auraWaves.push({ x: s.x + s.dir * 30, y: s.y, t: -k * 0.07, dur: 0.6, max: 200 + k * 80, color: k % 2 ? '#ffb02e' : '#ff5a1a' });
+      ring(s.x + s.dir * 30, s.y);
+      if (bite.length) { impactFrame = Math.max(impactFrame, 0.1); impactAt = { x: s.x + s.dir * 30, y: s.y, ang: 0, all: true, focus: true, fire: true }; camPunch = 1; }
+      shake = Math.max(shake, bite.length ? 26 : 12); sfx.clash(true); sfx.huge && sfx.huge();
+      s.caught = []; s.state = 'fade'; s.t = 0;
+    }
+  } else if (s.state === 'fade') {
+    s.x += s.dir * 120 * dt;
+    if (s.t >= TIGER.fade) return true;
+  }
+  if (realRandom() < dt * 90) burst(s.x - s.dir * (40 + realRandom() * 140), s.y - 40 + realRandom() * 80, SEVON_FIRE, 1, -Math.PI / 2, 0.8, 200, { grav: -320 });
+  return false;
+}
+// THE FLAME TIGER: a roaring tiger's head made of fire, its body a mane of flame streaming out behind it.
+// (Drawn facing right, mirrored when it runs left.) Its jaws are wide while it runs and SNAP shut on the chomp.
+function drawTiger(s) {
+  const now = time, open = s.state === 'run' ? 1 : s.state === 'chomp' ? 1 - easeOut(clamp(s.t / TIGER.chomp, 0, 1)) : 0;
+  const alpha = s.state === 'fade' ? clamp(1 - s.t / TIGER.fade, 0, 1) : 1;
+  const sc = 1.45 * (1 + (s.state === 'fade' ? 0.25 * (s.t / TIGER.fade) : 0));
+  ctx.save(); ctx.translate(s.x, s.y); ctx.scale(s.dir * sc, sc); ctx.globalAlpha = alpha;
+  const ink = sketch ? '#333333' : null;
+  const fill = (c) => { ctx.fillStyle = sketch ? '#ffffff' : c; ctx.fill(); if (ink) { ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.stroke(); } };
+  // the BODY: flame streaming back off the head
+  if (!sketch) { ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(-60, 0, 10, -60, 0, 190); g.addColorStop(0, 'rgba(255,200,80,0.55)'); g.addColorStop(1, 'rgba(255,80,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(-70, 0, 190, 110, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  for (let i = 0; i < 9; i++) {                                    // tongues of flame, flickering back
+    const k = i / 8, y0 = -70 + 140 * k, wob = Math.sin(now * 18 + i * 1.9) * 12, len = 130 + 60 * Math.sin(i * 2.3 + now * 9);
+    ctx.beginPath(); ctx.moveTo(-10, y0 * 0.55 - 14); ctx.quadraticCurveTo(-len * 0.5, y0 + wob, -len, y0 * 1.1 + wob * 1.5); ctx.quadraticCurveTo(-len * 0.45, y0 * 0.7 + 14, -10, y0 * 0.55 + 14); ctx.closePath();
+    fill(i % 3 === 0 ? '#e0301e' : i % 3 === 1 ? '#ff7a1a' : '#ffb02e');
+  }
+  // the HEAD
+  ctx.beginPath(); ctx.moveTo(-26, -40); ctx.lineTo(-14, -74); ctx.lineTo(4, -46); ctx.closePath(); fill('#ff7a1a');   // ears
+  ctx.beginPath(); ctx.moveTo(4, -48); ctx.lineTo(22, -76); ctx.lineTo(34, -44); ctx.closePath(); fill('#ff7a1a');
+  if (!sketch) { const hg = ctx.createRadialGradient(10, -16, 6, 0, 0, 60); hg.addColorStop(0, '#fff3b0'); hg.addColorStop(0.45, '#ffb02e'); hg.addColorStop(1, '#ff5a1a'); ctx.fillStyle = hg; }
+  ctx.beginPath(); ctx.ellipse(4, -8, 54, 46, 0, 0, Math.PI * 2); if (sketch) fill(); else { ctx.fill(); }
+  // the JAWS (pivot at the back of the mouth)
+  const ja = 0.55 * open;
+  for (const [sgn, ang] of [[-1, -ja], [1, ja]]) {
+    ctx.save(); ctx.translate(22, 10); ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(0, -12 * (sgn < 0 ? 1 : 0)); ctx.lineTo(70, sgn * 2); ctx.lineTo(62, sgn * 22); ctx.lineTo(0, sgn * 24); ctx.closePath(); fill(sgn < 0 ? '#ff9a2a' : '#ff6a1a');
+    ctx.fillStyle = sketch ? '#ffffff' : '#fffbe6';                  // FANGS
+    for (const fx of [14, 30, 50]) { ctx.beginPath(); ctx.moveTo(fx - 5, sgn * 2); ctx.lineTo(fx, -sgn * (fx === 50 ? 15 : 9)); ctx.lineTo(fx + 5, sgn * 2); ctx.closePath(); ctx.fill(); if (ink) ctx.stroke(); }
+    ctx.restore();
+  }
+  if (!sketch && open > 0.1) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,240,180,${0.5 * open})`; ctx.beginPath(); ctx.ellipse(60, 10, 24 * open + 4, 20 * open + 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  // stripes + the EYE
+  ctx.strokeStyle = sketch ? '#333333' : '#b3200f'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  for (const [x, y] of [[-30, -22], [-22, -38], [-34, -4]]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 18, y + 6); ctx.stroke(); }
+  ctx.fillStyle = sketch ? '#333333' : '#fffbe6'; ctx.beginPath(); ctx.moveTo(14, -24); ctx.quadraticCurveTo(28, -34, 42, -20); ctx.quadraticCurveTo(28, -18, 14, -24); ctx.fill();
+  if (!sketch) { ctx.fillStyle = '#7a1408'; ctx.beginPath(); ctx.ellipse(30, -24, 2.5, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
 CHARACTERS.SEVON.look.swordShield = true;
                   // his block: a circle of flaming sword cuts (see drawFighter)
 let ninthFormBuf = null;
@@ -11554,8 +11847,8 @@ function setCharacter(f, charName, alt = 0) {
 }
 function resetFighter(f, atSpawn) {
   Object.assign(f, {
-    x: atSpawn ? SPAWN.x + (f.startX < W / 2 ? -40 : 40) : f.startX,
-    y: atSpawn ? SPAWN.y : STAGE.y,
+    x: atSpawn ? SPAWN.x + (f.startX < W / 2 ? -40 : 40) : stageDef.ring ? clamp(f.startX, ringL() + 70, ringR() - 70) : f.startX,
+    y: atSpawn ? SPAWN.y : stageDef.ring ? ringTop() : STAGE.y,          // (the wrestling arena: everyone starts IN the ring)
     vx: 0, vy: 0, face: f.startX < W / 2 ? 1 : -1,
     ground: !atSpawn, onPlatform: null,
     airJumps: AIR_JUMPS, airDodges: AIR_DODGES, upSpecialUsed: false,
@@ -12017,6 +12310,8 @@ function ultAudioFocus() {
   for (const h of live) if (h !== top && !h.cut) cutUltAudio(h);
 }
 function updateBattleMusic(dt) {
+  for (const f of fighters) if (f.jjSnd && !f.jjSnd.final && !(f.action && f.action.key === 'jajanken' && f.action.phase !== 'end')) stopJJ(f);   // (Gon's chant: only while he's in the stance)
+  for (const f of fighters) if (f.jjSnd && f.jjSnd.final) { const ct = f.jjSnd.el.currentTime; if (ct > 2.1) f.jjSnd.el.volume = clamp(settings.master * settings.sfx * (1 - (ct - 2.1) / 0.45), 0, 1); if (f.jjSnd.el.ended) f.jjSnd = null; }   // (the shout: fades out at the end)
   const fighting = scene === 'fight' && !matchOver;
   ultAudioFocus();
   if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); stopSunSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
@@ -12518,6 +12813,33 @@ function isIntangible(f) {
 // (head kicks, high punches, some projectiles) sail right over you. You can't walk while crouched.
 const CROUCH_HEIGHT = 0.6;
 const hurtH = f => f.crouching ? f.h * CROUCH_HEIGHT : f.h;
+// THE GREATSWORD's blade in the world, as it's drawn this frame: from just past the crossguard to the point (and how
+// thick it is). Only for the big sword (Colten's Dragonslayer - or anyone holding it), only while the pose aims it.
+function bladeSeg(p) {
+  const fig = figureOf(p), look = fig.look || {};
+  if (!look.greatsword || look.katana || look.dualKatana || fig.noScythe) return null;
+  let pz = fig.pose, f = fig.face;
+  if (!pz || pz.sw === undefined) return null;
+  if (pz.mirror) f = -f;
+  const turnX = pz.turnX !== undefined ? pz.turnX : 1; if (turnX < 0) f = -f;
+  const S = (look.scale || 1) * (fig.sizeMul || 1), sx = turnX !== 1 ? Math.max(0.22, Math.abs(turnX)) : 1;
+  const hipY = -(LEG_UP + LEG_LOW - 1) - pz.bob * LEG_SCALE;
+  const shoulder = { x: Math.sin(pz.lean) * TORSO * f, y: hipY - Math.cos(pz.lean) * TORSO };
+  const { hand, ux, uy } = swordHold(shoulder, pz, f);
+  const W = (lx, ly) => {                                         // local -> world (spin round the hip, then scale)
+    if (pz.spin) { const c = Math.cos(pz.spin), s = Math.sin(pz.spin), dy = ly - hipY; [lx, ly] = [lx * c - dy * s, hipY + lx * s + dy * c]; }
+    return { x: fig.x + lx * S * sx, y: fig.y + ly * S };
+  };
+  return { a: W(hand.x + ux * 8, hand.y + uy * 8), b: W(hand.x + ux * 156, hand.y + uy * 156), r: 17 * S };
+}
+// does the blade touch them? (samples along it) - returns the contact point
+function bladeTouch(B, t) {
+  for (let k = 0; k <= 10; k++) {
+    const x = B.a.x + (B.b.x - B.a.x) * (1 - k / 10), y = B.a.y + (B.b.y - B.a.y) * (1 - k / 10);   // (from the point inward)
+    if (circleHitsFighter(x, y, B.r, t)) return { x, y };
+  }
+  return null;
+}
 function circleHitsFighter(x, y, r, f) {
   const cx = clamp(x, f.x - f.w / 2, f.x + f.w / 2);
   const cy = clamp(y, f.y - hurtH(f), f.y);
@@ -14655,7 +14977,7 @@ function stepHunterGrind(f, a, dt) {
     const onMain = f.ground && !f.onPlatform;
     if (onMain && (F > 0 ? f.x + f.vx * dt >= edgeX - 30 : f.x + f.vx * dt <= edgeX + 30)) {   // THE EDGE: over it and down the wall
       iceWallCollapse(a);
-      if (stageDef.walkoff) { next('smash'); return true; }      // (the walk-off stage: no wall to go down - straight to the slams)
+      if (wideFloor()) { next('smash'); return true; }      // (the walk-off stage: no wall to go down - straight to the slams)
       f.x = edgeX + F * 30; a.wallY = f.y; next('wall'); f.ground = false; sfx.whoosh(true);
       return true;
     }
@@ -18306,6 +18628,7 @@ function updateProjectiles(dt, only = null) {
     if (s.kind === 'beam') { if (updateBeam(s, dt)) projectiles.splice(i, 1); continue; }
     if (s.kind === 'disc') { if (updateDisc(s, dt)) projectiles.splice(i, 1); continue; }   // Lance's Destructo Disc
     if (s.kind === 'dragon') { if (updateDragon(s, dt)) projectiles.splice(i, 1); continue; }   // Sevon's Flame Dragon
+    if (s.kind === 'tiger') { if (updateTiger(s, dt)) projectiles.splice(i, 1); continue; }     // Sevon's Flame Tiger
     if (s.kind === 'batarang') { if (updateBatarang(s, dt)) projectiles.splice(i, 1); continue; }   // Sevon's batarang
     if (s.kunai) {                                         // HAILIE'S KUNAI: flying - or stuck in someone
       const o = s.owner;
@@ -19580,7 +19903,7 @@ function freeMove(f, dir, inp, dt) {
   }
 
   // 5) Drop through a platform
-  if (inp.downTap && f.ground && f.onPlatform && f.squat <= 0) {
+  if (inp.downTap && f.ground && f.onPlatform && !f.onPlatform.solid && f.squat <= 0) {
     f.dropTimer = 0.22;
     f.ground = false;
     f.y += 2;
@@ -19796,7 +20119,7 @@ function updateFighter(f, inp, dt) {
     // corner), out the NEAREST side. (It used to go by which way they were moving, so moving right just inside the
     // RIGHT edge threw them all the way over to the LEFT ledge.)
     const L = STAGE.x - f.w / 2, R = STAGE.x + STAGE.w + f.w / 2;
-    if ((stageDef.pit || stageDef.walkoff || f.y - STAGE.y < 30) && prevX > L && prevX < R) {
+    if ((stageDef.pit || wideFloor() || f.y - STAGE.y < 30) && prevX > L && prevX < R) {
       // (only just INSIDE the top of the floor - or on a stage with no sides to fall off: THE PIT / the walk-off stage -
       //  they're popped UP onto it. Shoving them out the side threw them off the end - or, on those stages, BELOW the floor.)
       f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true;
@@ -19816,15 +20139,19 @@ function updateFighter(f, inp, dt) {
   if (overX && f.vy >= 0 && prevFeet <= STAGE.y + 1 && f.y >= STAGE.y) { f.y = STAGE.y; f.vy = 0; f.ground = true; }   // (the whole path checked - even a huge spike can't skip through the floor in one frame)
   else if (overlapsStage(f)) {
     if (f.vy >= 0 && prevFeet <= STAGE.y + 1) { f.y = STAGE.y; f.vy = 0; f.ground = true; }
-    else if (f.vy < 0 && !stageDef.pit && !stageDef.walkoff) { f.y = STAGE.y + STAGE.h + f.h; f.vy = 0; }
+    else if (f.vy < 0 && !stageDef.pit && !wideFloor()) { f.y = STAGE.y + STAGE.h + f.h; f.vy = 0; }
   }
   // THE PIT and the walk-off stage: the floor covers the whole place - there's no "under the stage" there, so anyone who ever
   // ends up below the floor line (any move, any speed) is put straight back on top of it instead of falling forever
-  if ((stageDef.pit || stageDef.walkoff) && overX && f.y > STAGE.y) { f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true; }
-  if (!f.ground && f.vy >= 0 && f.dropTimer <= 0) {
+  if ((stageDef.pit || wideFloor()) && overX && f.y > STAGE.y) { f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true; }
+  if (stageDef.ring) ringBoxSides(f, prevX, prevFeet);
+  // THE ARENA's walls, out past the crowd: nobody walks (or jumps) out of the building - only someone LAUNCHED goes through
+  if (stageDef.arena && !(f.action && f.action.type === 'hitstun')) { const x = clamp(f.x, stageL(), stageR()); if (x !== f.x) { f.x = x; f.vx = 0; } }              // THE RING's apron: a solid wall from the floor up to the mat
+  if (!f.ground && f.vy >= 0) {
     for (const pl of PLATFORMS) {
+      if (f.dropTimer > 0 && !pl.solid) continue;
       if (prevFeet <= pl.y + 1 && f.y >= pl.y && f.x > pl.x - 6 && f.x < pl.x + pl.w + 6) {
-        if (inp.down && !wasGround && !f.action) continue;
+        if (inp.down && !wasGround && !f.action && !pl.solid) continue;
         f.y = pl.y; f.vy = 0; f.ground = true; f.onPlatform = pl;
         break;
       }
@@ -20000,6 +20327,16 @@ function stepLedge(f, a, inp, dt) {
   else if (phase === 'roll') { startDodge(f, toward, false, false); }                               // ledge roll inward
 }
 
+// THE RING (wrestling arena): its sides are a solid wall from the arena floor up to the mat. Someone just under the lip
+// (a step up) is popped onto it; anyone lower is stopped at the apron. (Nobody ends up inside the box.)
+function ringBoxSides(f, prevX, prevFeet) {
+  const top = ringTop(), hw = f.w / 2, L = ringL() - hw, R = ringR() + hw;
+  if (f.y <= top + 0.5 || f.x <= L || f.x >= R) return;            // above the mat, or not over the ring
+  if (prevFeet <= top + 0.5 || f.y - top < 18) { f.y = top; if (f.vy > 0) f.vy = 0; f.ground = true; f.onPlatform = PLATFORMS.find(q => q.ringBox) || null; return; }
+  if (prevX <= L) f.x = L; else if (prevX >= R) f.x = R; else f.x = (f.x - L < R - f.x) ? L : R;
+  const stunned = f.action && f.action.type === 'hitstun';
+  if (stunned && Math.abs(f.vx) > 300) { f.vx = -f.vx * 0.4; shake = Math.max(shake, 5); dust(f.x, f.y - 30, 6, 1.2); } else f.vx = 0;   // (knocked into the apron: bounces off)
+}
 function overlapsStage(f) {
   return f.x + f.w / 2 > STAGE.x && f.x - f.w / 2 < STAGE.x + STAGE.w &&
          f.y > STAGE.y && f.y - f.h < STAGE.y + STAGE.h;
@@ -20835,6 +21172,7 @@ function beingUlted(f) {
   const a = f.action;
   if (a && (a.type === 'ultVictim' || a.type === 'thrown' && a.holder && a.holder.action && a.holder.action.type === 'shipUlt')) return true;
   if (projectiles.some(s => s.kind === 'dragon' && s.victim === f)) return true;
+  if (projectiles.some(s => s.kind === 'tiger' && s.caught && s.caught.includes(f))) return true;
   if (fighters.some(o => o !== f && o.action && o.action.type === 'attack' && o.action.move && o.action.move.hunterUlt && o.action.whipVictim === f)) return true;   // (Hunter's Glacier Grind)
   return fighters.some(o => o !== f && o.action && ((o.action.type === 'uiTransform' || o.action.type === 'ssj2Cut') && o.action.victim === f ||
                                                     o.action.type === 'kiBarrage' && o.action.target === f));   // (It's My Turn's ki barrage)
@@ -21041,6 +21379,17 @@ function updateSim(dt) {
     const a = f.action;
     if (!a || a.type !== 'attack' || a.phase !== 'active' || !a.move.hitboxes || f.respawnTimer > 0 || f.uiFrozen) continue;
     const boxes = a.powered && a.move.chargedHit ? a.move.chargedHit.hitboxes : a.move.hitboxes;   // power jab = its own big hitbox
+    // THE GREATSWORD HITS WHERE IT'S DRAWN: anyone the blade itself touches is hit too (by the live hitbox nearest the
+    // contact) - so the whole length and width of that huge sword counts, all the way through the swing
+    const blade = bladeSeg(f), SM0 = f.sizeMul || 1;
+    const live = blade ? boxes.filter(h => h.from === undefined || (a.t >= h.from && a.t <= h.to)) : null;
+    const bladeBox = t => {                                        // which live hitbox the blade lands this target with
+      if (!blade || !live.length) return null;
+      const c = bladeTouch(blade, t); if (!c) return null;
+      let best = null, bd = 1e9;
+      for (const h of live) { const d = Math.hypot(f.x + h.x * f.face * SM0 - c.x, f.y + h.y * SM0 - c.y); if (d < bd) { bd = d; best = h; } }
+      return best;
+    };
     hitLoop:
     for (const h of boxes) {
       const SM = f.sizeMul || 1, hx = f.x + h.x * f.face * SM, hy = f.y + h.y * SM;   // (Hunter's reach grows with him)
@@ -21049,7 +21398,7 @@ function updateSim(dt) {
         if (h.from !== undefined && (a.t < h.from || a.t > h.to)) continue;
         const key = fighters.indexOf(t) + ':' + (h.group || 0);
         if (t === f || a.hit.has(key) || allies(f, t) || t.dead || t.poofT > 0) continue;   // (Colbalias and his clones never hit each other)
-        if (!circleHitsFighter(hx, hy, h.r * SM, t)) continue;
+        if (!circleHitsFighter(hx, hy, h.r * SM, t) && bladeBox(t) !== h) continue;
         if (cloneShielded(f, t)) continue;                    // (Colbalias's clones can't break up his grabs / clashes)
         // Darkest Lariat loses to PHYSICAL attacks: someone in the middle of a J attack is passed over (their hit wins)
         if (a.move.losesToPhysical && h.group !== 5 && t.action && t.action.type === 'attack' && t.action.btn === 'atk' && t.action.phase !== 'end') continue;
@@ -21193,7 +21542,7 @@ function updateSim(dt) {
   updateRopes(dt);
   // THE PIT / the walk-off stage: the floor covers the whole place, so NOBODY ends a frame below it - not even someone a
   // move is carrying or dragging (a grab "down the wall", a throw that dips under the floor...): they're lifted onto it
-  if (stageDef.pit || stageDef.walkoff) for (const g of fighters) {
+  if (stageDef.pit || wideFloor()) for (const g of fighters) {
     if (g.respawnTimer > 0 || g.y <= STAGE.y || g.x + g.w / 2 <= STAGE.x || g.x - g.w / 2 >= STAGE.x + STAGE.w) continue;
     g.y = STAGE.y; if (g.vy > 0) g.vy = 0;
   }
@@ -21770,25 +22119,69 @@ function drawTowerStage() {
   for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
   ctx.globalAlpha = 1;
 }
-// the arena floor (black mats, a blue skirt on the ring), the RING on it: the mat, the corner posts with their pads, and
-// three ropes (red, white, blue) - flat on the floor, so the fight runs straight across it
+// THE ARENA: the floor runs flat out past both KO lines - black mats ringside, then the barricade with the front rows of the
+// crowd behind it on the right, and on the left the ENTRANCE: a ramp coming down from the entrance stage (its big screen,
+// the lights) onto the floor. In the middle the RING sits up on the floor: the blue skirt, the steel steps at its corners,
+// the mat on top, the posts and the three ropes.
+const ringFans = Array.from({ length: 60 }, (_, i) => ({ x: i * 26 + (i % 3) * 7, s: rnd(), c: rnd() }));
 function drawRingStage() {
-  const s = STAGE, L = ringL(), R = ringR();
-  ctx.fillStyle = '#16161f'; ctx.fillRect(s.x, s.y, s.w, s.h);                         // the arena floor's front
-  ctx.fillStyle = '#22222e'; for (let y = s.y + 22; y < s.y + s.h; y += 30) ctx.fillRect(s.x, y, s.w, 3);
-  ctx.fillStyle = '#2c2c3a'; ctx.fillRect(s.x, s.y, s.w, 8);                            // the floor mats (ringside)
-  ctx.fillStyle = '#1b3a8a'; ctx.fillRect(L, s.y, R - L, 60);                            // the ring's skirt
-  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.globalAlpha = 0.8;
-  ctx.fillText('DOODLE BROTHERS WRESTLING', (L + R) / 2, s.y + 40); ctx.globalAlpha = 1;
-  ctx.fillStyle = '#d9d6cc'; ctx.fillRect(L, s.y, R - L, 8);                            // the mat
-  ctx.fillStyle = '#b8b4a8'; ctx.fillRect(L, s.y + 6, R - L, 3);
-  const ropes = [['#d8262a', 34], ['#f2f2f2', 62], ['#2a5bd8', 90]];
-  for (const [col, h] of ropes) {                                                        // the ropes (sagging a touch)
-    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(L, s.y - h); ctx.quadraticCurveTo((L + R) / 2, s.y - h + 5, R, s.y - h); ctx.stroke();
+  const s = STAGE, L = ringL(), R = ringR(), T = ringTop(), mid = (L + R) / 2;
+  // --- the ENTRANCE (left): the stage set + big screen, and the ramp down to the floor ---
+  const eX0 = L - 900, eX1 = L - 520, eY = s.y - 120;                 // the entrance stage
+  ctx.fillStyle = '#0c0c16'; ctx.fillRect(eX0 - 40, eY - 260, eX1 - eX0 + 80, 260);   // the set behind it
+  ctx.fillStyle = '#1a1a30'; ctx.fillRect(eX0, eY - 230, eX1 - eX0, 150);              // the big screen
+  const scr = ctx.createLinearGradient(eX0, 0, eX1, 0); scr.addColorStop(0, '#3a1a6e'); scr.addColorStop(0.5, '#d8262a'); scr.addColorStop(1, '#2a5bd8');
+  ctx.globalAlpha = 0.55 + 0.15 * Math.sin(time * 2); ctx.fillStyle = scr; ctx.fillRect(eX0 + 10, eY - 220, eX1 - eX0 - 20, 130); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 34px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('DB', (eX0 + eX1) / 2, eY - 140);
+  ctx.font = 'bold 12px sans-serif'; ctx.fillText('DOODLE BROTHERS WRESTLING', (eX0 + eX1) / 2, eY - 112);
+  for (let k = 0; k < 6; k++) {                                       // the lights on the set, chasing
+    const on = Math.floor(time * 6 + k) % 3 === 0; ctx.fillStyle = on ? '#ffe9a0' : '#3a3550';
+    ctx.beginPath(); ctx.arc(eX0 + 20 + k * (eX1 - eX0 - 40) / 5, eY - 244, 6, 0, Math.PI * 2); ctx.fill();
   }
-  for (const x of [L, R]) {                                                              // the corner posts + turnbuckle pads
-    ctx.fillStyle = '#9aa0ab'; ctx.fillRect(x - 6, s.y - 108, 12, 108);
-    for (const [col, h] of ropes) { ctx.fillStyle = col; ctx.fillRect(x - 9, s.y - h - 9, 18, 18); }
+  ctx.fillStyle = '#26263a'; ctx.fillRect(eX0 - 40, eY, eX1 - eX0 + 80, s.y - eY);       // the entrance stage itself
+  ctx.fillStyle = '#3a3a58'; ctx.fillRect(eX0 - 40, eY, eX1 - eX0 + 80, 6);
+  const rX0 = eX1 + 40, rX1 = L - 200;                                // THE RAMP: down from the stage onto the floor
+  ctx.fillStyle = '#20203a'; ctx.beginPath(); ctx.moveTo(rX0, eY); ctx.lineTo(rX1, s.y); ctx.lineTo(rX0, s.y); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#3a3a58'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(eX0 - 40, eY); ctx.lineTo(rX0, eY); ctx.lineTo(rX1, s.y); ctx.stroke();
+  for (let k = 0; k <= 10; k++) {                                     // LED strip along its edge
+    const x = lerp(rX0, rX1, k / 10), y = lerp(eY, s.y, k / 10), on = (Math.floor(time * 8) - k) % 4 === 0;
+    ctx.fillStyle = on ? '#ffffff' : k % 2 ? '#2a5bd8' : '#d8262a'; ctx.fillRect(x - 3, y - 6, 6, 4);
+  }
+  // --- the BARRICADE and the front rows of the crowd (right side, past ringside) ---
+  const bX0 = R + 240;
+  for (const c of ringFans) {
+    const x = bX0 + 20 + c.x, y = s.y - 58 + Math.sin(time * (4 + c.c * 3) + c.s * 20) * (c.c < 0.35 ? 5 : 1.5);
+    ctx.fillStyle = c.c < 0.5 ? '#3d3a5e' : '#4a4672';
+    ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(x - 13, y + 7, 26, 34);
+    if (c.c < 0.2) { ctx.fillRect(x - 17, y - 22, 5, 26); ctx.fillRect(x + 12, y - 22, 5, 26); }   // (arms up)
+    if (c.s > 0.97 - 0.02 * Math.sin(time * 9 + c.c * 40)) { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x + 4, y - 2, 3, 0, Math.PI * 2); ctx.fill(); }   // camera flashes
+  }
+  ctx.fillStyle = '#0d0c18'; ctx.fillRect(bX0, s.y - 26, 2400, 26);                    // the barricade
+  ctx.fillStyle = '#4a4a66'; ctx.fillRect(bX0, s.y - 26, 2400, 4);
+  // --- the ARENA FLOOR (it goes on past the KO lines) ---
+  ctx.fillStyle = '#16161f'; ctx.fillRect(s.x, s.y, s.w, s.h + 400);
+  ctx.fillStyle = '#22222e'; for (let y = s.y + 22; y < s.y + s.h + 400; y += 30) ctx.fillRect(s.x, y, s.w, 3);
+  ctx.fillStyle = '#2c2c3a'; ctx.fillRect(s.x, s.y, s.w, 8);
+  ctx.fillStyle = '#34344a'; ctx.fillRect(L - 200, s.y, R - L + 400, 8);              // the ringside mats
+  // --- THE RING (raised) ---
+  ctx.fillStyle = '#1b3a8a'; ctx.fillRect(L, T, R - L, s.y - T);                       // the skirt
+  ctx.fillStyle = '#16307a'; for (let x = L + 30; x < R; x += 60) ctx.fillRect(x, T + 10, 3, s.y - T - 10);   // its folds
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.globalAlpha = 0.85;
+  ctx.fillText('DOODLE BROTHERS WRESTLING', mid, T + 42); ctx.globalAlpha = 1;
+  for (const [x, d] of [[L, -1], [R, 1]]) {                           // the steel steps at the corners
+    ctx.fillStyle = '#7d828e';
+    for (let k = 0; k < 3; k++) ctx.fillRect(d < 0 ? x - 46 + k * 14 : x + k * 0, s.y - (k + 1) * 18, 46 - k * 14, 18);
+    ctx.fillStyle = '#a7acb6'; for (let k = 0; k < 3; k++) ctx.fillRect(d < 0 ? x - 46 + k * 14 : x, s.y - (k + 1) * 18, 46 - k * 14, 3);
+  }
+  ctx.fillStyle = '#d9d6cc'; ctx.fillRect(L, T, R - L, 8);                             // the mat
+  ctx.fillStyle = '#b8b4a8'; ctx.fillRect(L, T + 6, R - L, 3);
+  const ropes = [['#d8262a', 34], ['#f2f2f2', 62], ['#2a5bd8', 90]];
+  for (const [col, h] of ropes) {                                                     // the ropes (sagging a touch)
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(L, T - h); ctx.quadraticCurveTo(mid, T - h + 5, R, T - h); ctx.stroke();
+  }
+  for (const x of [L, R]) {                                                           // the corner posts + turnbuckle pads
+    ctx.fillStyle = '#9aa0ab'; ctx.fillRect(x - 6, T - 108, 12, 108);
+    for (const [col, h] of ropes) { ctx.fillStyle = col; ctx.fillRect(x - 9, T - h - 9, 18, 18); }
   }
   for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
   ctx.globalAlpha = 1;
@@ -23959,11 +24352,11 @@ function drawProjectiles() {
   }
   if (!sketch) drawKameCharge();                                // Lance's ultimate: the ki ball growing in his hand
   for (const f of fighters) if (f.action && f.action.type === 'uiTransform') drawUiKame(f);   // Lance's UI cutscene Kamehameha
-  for (const s of projectiles) if (s.kunai) drawKunaiShot(s); else if (s.kind === 'beam') drawBeam(s); else if (s.kind === 'tile') drawTile(s); else if (s.kind === 'disc') drawDisc(s); else if (s.kind === 'dragon') drawDragon(s); else if (s.kind === 'batarang') drawBatarang(s);
+  for (const s of projectiles) if (s.kunai) drawKunaiShot(s); else if (s.kind === 'beam') drawBeam(s); else if (s.kind === 'tile') drawTile(s); else if (s.kind === 'disc') drawDisc(s); else if (s.kind === 'dragon') drawDragon(s); else if (s.kind === 'tiger') drawTiger(s); else if (s.kind === 'batarang') drawBatarang(s);
   if (sketch) {                          // pen-drawn energy balls with a scribbled fill
     ctx.lineCap = 'round';
     for (const s of projectiles) {
-      if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
+      if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'tiger' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
       const ink = s.owner ? inkOf(s.owner) : '#7a4b00';
       ctx.strokeStyle = ink;
       if (s.kind === 'wave') {
@@ -23986,7 +24379,7 @@ function drawProjectiles() {
     return;
   }
   for (const s of projectiles) {
-    if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
+    if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'tiger' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
     if (s.electric) { drawThunderBolt(s); continue; }
     s.trail.forEach((t, i) => {
       const k = i / s.trail.length;
@@ -24564,6 +24957,9 @@ function drawHitboxes() {
         sctx.strokeStyle = live ? '#ff0044' : 'rgba(255,0,68,0.3)';
         sctx.beginPath(); sctx.arc(f.x + h.x * f.face, f.y + h.y, h.r, 0, Math.PI * 2); sctx.stroke();
       }
+      const B = a.phase === 'active' ? bladeSeg(f) : null;         // the greatsword's blade (it hits too)
+      if (B) { sctx.save(); sctx.strokeStyle = 'rgba(255,0,68,0.8)'; sctx.lineWidth = B.r * 2; sctx.globalAlpha = 0.35; sctx.lineCap = 'round';
+        sctx.beginPath(); sctx.moveTo(B.a.x, B.a.y); sctx.lineTo(B.b.x, B.b.y); sctx.stroke(); sctx.restore(); }
     }
   }
   sctx.strokeStyle = '#ff0044';
