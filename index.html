@@ -9723,12 +9723,19 @@ function rasenHit(f, t) {
 //      through to the first. Anyone who touches an end comes out the other - and so do shots (even ultimate ones). 15s.
 function hailiePortal(f) {
   const P = f.hPortal;
-  if (!P || P.b) {
-    f.hPortal = { a: { x: f.x, y: f.y }, b: null, life: H_PORTAL.life };
+  if (P && P.b) {                                                // BOTH out: only the OLDER end moves - to where she is now - and she steps
+    const old = (P.a.t || 0) <= (P.b.t || 0) ? 'a' : 'b', keep = old === 'a' ? P.b : P.a;   //  through to the other end, which stays put
+    burst(P[old].x, P[old].y - 50, [hPortalColor(f), '#ffffff'], 12, 0, Math.PI, 300, { grav: 0 });   // (the old one closes)
+    P[old] = { x: f.x, y: f.y, t: time }; P.life = H_PORTAL.life;
+    f.portalCD = H_PORTAL.cd; f.portalHold = true; hTeleport(f, keep.x, keep.y);
+    return;
+  }
+  if (!P) {
+    f.hPortal = { a: { x: f.x, y: f.y, t: time }, b: null, life: H_PORTAL.life };
     burst(f.x, f.y - 50, [hPortalColor(f), '#ffffff'], 16, 0, Math.PI, 300, { grav: 0 }); sfx.parry();
     painTexts.push({ x: f.x, y: f.y - 140, t: 0.5, max: 0.5, text: 'PORTAL', big: false });
   } else {
-    P.b = { x: f.x, y: f.y }; P.life = H_PORTAL.life;
+    P.b = { x: f.x, y: f.y, t: time }; P.life = H_PORTAL.life;
     f.portalCD = H_PORTAL.cd; f.portalHold = true; hTeleport(f, P.a.x, P.a.y);
   }
 }
