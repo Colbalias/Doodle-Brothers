@@ -8925,8 +8925,9 @@ const hSpd = f => f.look && f.look.rage ? 1 + 0.008 * (f.hForm || 0) : 1;   // (
 // (he takes the damage, but doesn't flinch or fly). Each soaked hit's charge comes back after 2 seconds. Ultimates and
 // throws aren't soaked.
 const H_FORM_ARMOR = { lss: 1, l3: 2, recharge: 2 };
-const hunterArmorMax = f => f.hForm === 3 ? H_FORM_ARMOR.l3 : f.hForm === 2 ? H_FORM_ARMOR.lss : 0;
-const hunterFormArmor = t => !!(t && t.look && t.look.rage && !t.minion && hunterArmorMax(t) > 0 && (t.hArmor || 0) > 0);
+const COLTEN_ARMOR = { hits: 2, refill: 2 };   // COLTEN, TRANSFORMED: 2 hits of hyper armor - once both are used up, they come back 2s later
+const hunterArmorMax = f => f.char === 'COLTEN' ? (f.transformed && !f.minion ? COLTEN_ARMOR.hits : 0) : f.hForm === 3 ? H_FORM_ARMOR.l3 : f.hForm === 2 ? H_FORM_ARMOR.lss : 0;
+const hunterFormArmor = t => !!(t && t.look && (t.look.rage || t.char === 'COLTEN') && !t.minion && hunterArmorMax(t) > 0 && (t.hArmor || 0) > 0);
 const HUNTER_FORMS = [
   { name: 'BASE', short: '', power: 1, size: 0 },
   { name: 'SUPER SAIYAN',             short: 'SUPER SAIYAN',  power: 1.08, size: 0,    hair: '#ffd23f', aura: '#ffd23f' },
@@ -9951,7 +9952,7 @@ const CHARACTERS = {
       glasses: true,            // rectangle reading glasses
       greatsword: true,         // the huge sword (drawn in his front hand, angle from the pose's "sw")
       weapon: 'sword',          // his own weapon (Colby's is the scythe) - see WEAPONS
-      auraArmor: true,          // transformed: glowing aura armor (ultra armor + less knockback)
+      auraArmor: false,         // (his old aura armor - replaced by the 2-hit HYPER ARMOR while transformed: see COLTEN_ARMOR)
       escanorForm: true,        // TRANSFORMED he gets HUGE and bare-chested (still his hair, glasses and armoured legs) - see escLook
       transformAura: '#7dffb0',
       // PROUD stance: chest out, standing tall, the greatsword held up in front of him, blade pointing to the
@@ -10389,7 +10390,8 @@ CHARACTERS.LANCE.throwKinds = { forward: 'masho', back: 'masho', up: 'godBind', 
 CHARACTERS.COLBY.transformName = 'GOD SPEED';
 // (PRIMARY LOTUS is no longer an ultimate - it's Colby's COMEBACK: the first time he's knocked out, once a match - see startLotusComeback)
 CHARACTERS.COLBY.transformStats = { power: 1.1, speed: 1.3 };     // the lightning adds the damage - God Speed is about SPEED
-CHARACTERS.COLBALIAS.transformStats = { power: 1.3, speed: 1.22 };   // SAGE MODE: hits harder and moves faster than a normal transform (+ the auto dodge - see SAGE)
+CHARACTERS.COLBALIAS.transformStats = { power: 1.3, speed: 1.22 };
+CHARACTERS.COLTEN.transformStats = { power: 1.45, speed: 1.1 };      // COLTEN TRANSFORMED: much more damage AND knockback (knockback scales with power) - only while it lasts   // SAGE MODE: hits harder and moves faster than a normal transform (+ the auto dodge - see SAGE)
 CHARACTERS.COLBY.look.transformAura = '#7fd8ff';
 CHARACTERS.COLBY.look.godSpeed = true;
 // SCYTHELESS SIDE J - HWOARANG'S FLYING KICKS: three flying spinning kicks, each one carrying him FORWARD off his feet.
@@ -10903,7 +10905,126 @@ CHARACTERS.COLBALIAS.altUlt = {
   finalWind: handSign, finalStrike: handSign,      // (his pose on the first frame, before the sequence takes over)
   final: { dmg: 6, base: 760, growth: 7.5, angle: 0 },
 };
-CHARACTERS.COLTEN.ult = {
+
+// ---------------- COLTEN'S ULTIMATE: THE SUN (Escanor's Cruel Sun) ----------------
+// He rises SLOWLY into the air, one hand raised, and a little sun forms over it - growing bigger and bigger and bigger for
+// the whole of the clip (sounds/battle/colten-sun.mp3 = 3:27 - 3:43 of the song, + a tail) - then he COMPRESSES it down into
+// a blinding little star and THROWS it: it hits the ground and the WHOLE floor explodes. The music fades out as it lands.
+// He has HYPER ARMOR while he charges it (he takes damage, nothing moves him). When it's over, he's back to normal.
+const SUN = { throwAt: 16.0, compress: 15.2, rise: 150, riseT: 12, rMax: 150, rMin: 8, fall: 0.55, speed: 1500, end: 18.6, fadeOut: 2.4, vol: 1.0,
+              hit: { dmg: 26, base: 640, growth: 7.5, angle: 72 }, airSafe: 280,
+              core: '#fffbe0', mid: '#ffd23f', outer: '#ff8a1a', edge: '#ff3a0a' };
+const SUN_POSE = {
+  raise: pose({ lean: -0.15, bob: -2, legA: [0.35, 0.5], legB: [-0.3, 0.7], armA: [3.05, 0.05], armB: [-0.6, -0.5] }),        // hand up to the sun
+  strain: pose({ lean: -0.25, bob: -4, legA: [0.5, 0.8], legB: [-0.4, 0.9], armA: [3.0, 0.15], armB: [2.7, 0.25] }),         // both hands - compressing it
+  throwP: pose({ lean: 0.6, bob: -6, legA: [0.2, 0.9], legB: [-0.9, 0.5], armA: [1.2, 0.05], armB: [-1.4, -0.4] }),          // hurled down at them
+};
+let sunSongEl = null;
+function playSunSong(f) {
+  stopSunSong(f);
+  if (!soundOn) return null;
+  let el; try { el = new Audio('sounds/battle/colten-sun.mp3'); } catch (e) { return null; }
+  el.preload = 'auto'; el.volume = clamp(SUN.vol * settings.master * settings.music * 1.6, 0, 1);
+  el.play().catch(() => {});
+  const h = { el, at: performance.now() }; f.sunSong = h;
+  return h;
+}
+function stopSunSong(f) { if (f && f.sunSong) { try { f.sunSong.el.pause(); } catch (e) {} f.sunSong = null; } }
+const sunR = T => T < SUN.compress ? lerp(SUN.rMin, SUN.rMax, Math.pow(clamp(T / SUN.compress, 0, 1), 1.6))   // (slowly... then BIG)
+                : T < SUN.throwAt ? lerp(SUN.rMax, 30, easeOut((T - SUN.compress) / (SUN.throwAt - SUN.compress))) : 30;
+const sunAt = (f, T) => { const r = sunR(T); return { x: f.x + f.face * 6, y: f.y - 128 - r, r }; };   // (over his raised hand)
+function startCruelSun(f) {
+  f.action = { type: 'cruelSun', t: 0, songT: 0, x0: f.x, y0: f.y, ev: new Set() };
+  f.vx = f.vy = 0;
+  playSunSong(f);
+}
+function stepCruelSun(f, a, dt) {
+  a.songT += dt / uiRealRate();
+  if (f.sunSong && f.sunSong.el && !f.sunSong.el.paused && !netActive()) { const ct = f.sunSong.el.currentTime; if (ct > 0.05 && Math.abs(ct - a.songT) < 0.6) a.songT = ct; }   // (offline: locked to the song)
+  const T = a.songT, ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
+  // he rises slowly... and after the throw drifts back down
+  const up = T < SUN.throwAt ? SUN.rise * easeInOut(clamp(T / SUN.riseT, 0, 1)) : SUN.rise * (1 - easeInOut(clamp((T - SUN.throwAt - 0.6) / 1.6, 0, 1)));
+  f.x = a.x0; f.y = a.y0 - up; f.vx = f.vy = 0; f.ground = up < 1; f.onPlatform = null;
+  if (song_fade(f, T)) {}
+  const S = sunAt(f, T);
+  a.pose = T < SUN.compress ? SUN_POSE.raise : T < SUN.throwAt ? SUN_POSE.strain : SUN_POSE.throwP;
+  if (T < SUN.throwAt) {
+    const k = clamp(T / SUN.compress, 0, 1);
+    shake = Math.max(shake, 1 + 6 * k * k);
+    if (Math.random() < dt * (10 + 40 * k)) burst(S.x + (Math.random() - 0.5) * S.r, S.y + (Math.random() - 0.5) * S.r, [SUN.mid, SUN.outer, '#ffffff'], 1, 0, Math.PI, 120 + 200 * k, { grav: -40 });
+    if (k > 0.3 && Math.random() < dt * 10 * k) particles.push({ x: a.x0 + (Math.random() - 0.5) * 600, y: STAGE.y - 2, vx: 0, vy: -100 - Math.random() * 300, life: 0.8, max: 0.8, size: 2 + Math.random() * 3, color: Math.random() < 0.5 ? SUN.outer : SUN.mid, type: 'bit', grav: -100 });   // (the heat lifting off the ground)
+    if ((a.waveT = (a.waveT || 0) - dt) <= 0) { a.waveT = 1.2 - 0.9 * k; auraWaves.push({ x: S.x, y: S.y, t: 0, dur: 0.6, max: S.r * 1.6, color: SUN.outer }); }
+    if (T >= SUN.compress && ev('compress')) { sfx.parry(); ring(S.x, S.y); }
+    if (T >= SUN.compress) shake = Math.max(shake, 10);
+    return;
+  }
+  if (ev('throw')) {                                             // THROWN - at the ground under the nearest of them (or straight down)
+    const o = nearestFoe(f), tx = o && o.respawnTimer <= 0 ? clamp(o.x, STAGE.x + 40, STAGE.x + STAGE.w - 40) : a.x0 + f.face * 200, ty = STAGE.y;
+    const dx = tx - S.x, dy = ty - S.y, L = Math.hypot(dx, dy) || 1;
+    a.shot = { x: S.x, y: S.y, vx: dx / L * SUN.speed, vy: dy / L * SUN.speed, r: 30, t: 0 };
+    if (dx) f.face = dx > 0 ? 1 : -1;
+    sfx.whoosh(true); sfx.blast();
+  }
+  const sh = a.shot;
+  if (sh && !sh.done) {
+    sh.t += dt; sh.x += sh.vx * dt; sh.y += sh.vy * dt;
+    if (Math.random() < dt * 60) burst(sh.x, sh.y, [SUN.mid, SUN.outer, '#ffffff'], 2, Math.atan2(-sh.vy, -sh.vx), 0.5, 300, { grav: 0 });
+    if (sh.y >= STAGE.y - 4 || sh.t > 1.2) { sh.done = true; sunExplode(f, sh.x); }
+  }
+  if (T >= SUN.end) {                                            // over: back down - and back to normal
+    stopSunSong(f); f.action = { type: 'land', t: 0, dur: 0.3 }; f.y = a.y0;
+    if (f.transformed) { endTransform(f); f.ult = 0; }
+  }
+}
+// the music fades away as it's thrown
+function song_fade(f, T) {
+  const h = f.sunSong; if (!h || !h.el) return false;
+  const k = T < SUN.throwAt ? 1 : clamp(1 - (T - SUN.throwAt) / SUN.fadeOut, 0, 1);
+  h.el.volume = clamp(SUN.vol * settings.master * settings.music * 1.6 * k * (soundOn ? 1 : 0), 0, 1);
+  return true;
+}
+// THE WHOLE FLOOR EXPLODES: anyone on the ground (or low over it) anywhere on the stage is caught in it
+function sunExplode(f, x) {
+  const gy = STAGE.y;
+  impactFrame = Math.max(impactFrame, 0.22); impactAt = { x, y: gy - 60, ang: Math.PI / 2, all: true, focus: true, invert: true };
+  shake = 50; camPunch = 1; hitstop = Math.max(hitstop, 0.25); sfx.huge(); sfx.slam(); sfx.blast();
+  for (let k = 0; k <= 24; k++) {                                // a sea of fire across the whole floor
+    const fx = lerp(STAGE.x - 40, STAGE.x + STAGE.w + 40, k / 24);
+    burst(fx, gy - 10, [SUN.core, SUN.mid, SUN.outer, SUN.edge], 14, -Math.PI / 2, 1.2, 700 + Math.random() * 500, { grav: -200 });
+    if (k % 4 === 0) cracks.push({ x: fx, y: gy, life: 4, max: 4, seed: fx, size: 1.6 });
+  }
+  for (let k = 0; k < 4; k++) auraWaves.push({ x, y: gy - 40, t: -k * 0.08, dur: 0.7, max: 500 + k * 140, color: k % 2 ? '#ffffff' : SUN.outer });
+  ring(x, gy - 40); dust(x, gy, 60, 5);
+  for (const t of fighters) {
+    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.out) continue;
+    const onFloor = t.x > STAGE.x - 80 && t.x < STAGE.x + STAGE.w + 80 && t.y >= gy - SUN.airSafe && t.y <= gy + 120;
+    if (!onFloor) continue;
+    applyHit(t, { ...SUN.hit, ultFinal: true, xray: 'RIBS' }, Math.sign(t.x - x) || f.face, (f.ultPower || 1) * powerOf(f), t.x, t.y - 50, { fighter: f });
+  }
+}
+function drawCruelSun() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'cruelSun' || f.respawnTimer > 0) continue;
+    const T = a.songT, sh = a.shot;
+    const S = T < SUN.throwAt ? sunAt(f, T) : sh && !sh.done ? { x: sh.x, y: sh.y, r: sh.r } : null;
+    if (!S) continue;
+    const pulse = 1 + 0.04 * Math.sin(time * 18), r = S.r * pulse, hot = T >= SUN.compress;
+    ctx.save();
+    if (!sketch) {
+      const g = ctx.createRadialGradient(S.x, S.y, 0, S.x, S.y, r * 2.2);
+      g.addColorStop(0, 'rgba(255,240,180,0.55)'); g.addColorStop(1, 'rgba(255,120,20,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(S.x, S.y, r * 2.2, 0, Math.PI * 2); ctx.fill();   // its glow
+      ctx.fillStyle = SUN.edge;                                    // the flames licking off it
+      for (let k = 0; k < 14; k++) { const ang = k / 14 * Math.PI * 2 + time * 1.5, len = r * (1.18 + 0.12 * Math.sin(time * 9 + k * 2.3));
+        ctx.beginPath(); ctx.moveTo(S.x + Math.cos(ang - 0.15) * r, S.y + Math.sin(ang - 0.15) * r); ctx.lineTo(S.x + Math.cos(ang) * len, S.y + Math.sin(ang) * len); ctx.lineTo(S.x + Math.cos(ang + 0.15) * r, S.y + Math.sin(ang + 0.15) * r); ctx.fill(); }
+      const b = ctx.createRadialGradient(S.x - r * 0.25, S.y - r * 0.25, r * 0.1, S.x, S.y, r);
+      b.addColorStop(0, hot ? '#ffffff' : SUN.core); b.addColorStop(0.45, SUN.mid); b.addColorStop(0.85, SUN.outer); b.addColorStop(1, SUN.edge);
+      ctx.fillStyle = b; ctx.beginPath(); ctx.arc(S.x, S.y, r, 0, Math.PI * 2); ctx.fill();
+    } else { ctx.strokeStyle = '#333333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(S.x, S.y, r, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.restore();
+  }
+}
+CHARACTERS.COLTEN.ultOld = {
   name: "WARLORD'S JUDGMENT",
   greatsword: true,                         // 3 giant swings, all CRITICAL - see updateSwordUlt
   finalWind: COLTEN_GANON.sideGround.wind, finalStrike: COLTEN_GANON.sideGround.strike,
@@ -10911,6 +11032,7 @@ CHARACTERS.COLTEN.ult = {
   final: { dmg: 8, base: 640, growth: 8, angle: 38 },
 };
 CHARACTERS.COLTEN.transformName = 'WARLORD';
+CHARACTERS.COLTEN.ult = { name: 'THE SUN', cruelSun: true };     // (Warlord's Judgment is kept as ultOld)
 // Sevon: FIFTH FORM: FLAME TIGER - a lunge; whoever it catches takes a storm of flaming slashes from every side, then he
 // charges straight through them as a giant TIGER OF FIRE (see the flameFinal finisher in updateUlt)
 // (his SECOND ultimate: hold DOWN as you press ULT)
@@ -11381,7 +11503,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -11776,7 +11898,7 @@ function startBattleSong() {
 }
 // ONE ULT SONG AT A TIME: with ultimates and transformations all able to go off together, only the NEWEST one is heard -
 // every older one is CUT (muted, not stopped: it still plays out silently, so anything timed to it stays on time)
-const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd'];
+const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong'];
 let ultAudioSeq = 0;
 const ultAudioOrder = new WeakMap();                              // (handle -> when it started)
 function cutUltAudio(h) {
@@ -11801,7 +11923,7 @@ function ultAudioFocus() {
 function updateBattleMusic(dt) {
   const fighting = scene === 'fight' && !matchOver;
   ultAudioFocus();
-  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
+  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); stopSunSong(f); }   // (Lance's UI theme doesn't follow you out of the fight)
   if (fighting && !battleMusic.el && soundOn && menuMusic.unlocked) startBattleSong();   // a new fight: a new song
   const el = battleMusic.el;
   if (!el) return;
@@ -11829,6 +11951,7 @@ function updateBattleMusic(dt) {
       if (h.played >= TSUKU.len || (h.el && h.el.ended)) stopTsuSong(f);
     }
     if (f.leeSong && !(f.action && f.action.type === 'leeUlt')) stopLeeSong(f);
+    if (f.sunSong && !(f.action && f.action.type === 'cruelSun')) stopSunSong(f);   // Colten's sun: only while it plays
     if (f.grindSong && !(f.action && f.action.type === 'hGrindCut')) stopGrindSong(f);   // Hunter's Glacier Grind: only while it plays   // Colby's Primary Lotus: only while it plays
     if (f.sgSong) {                                              // Lance's Super Saiyan God song: fades out once the comeback's done
       const a = f.action, on = a && a.type === 'sgCut';
@@ -11848,7 +11971,7 @@ function updateBattleMusic(dt) {
   }
   // turned down under an ultimate's own music / voice lines, and while the game's paused
   const ultMusic = ult || fighters.some(f => (f.action && f.action.type === 'shipUlt') || f.uiSong);   // (+ Lance's Ultra Instinct theme)
-  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
+  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
   el.volume = clamp(BATTLE_MUSIC.vol * battleMusic.level * duck * settings.master * settings.music * 1.6, 0, 1);
   if (el.paused && want) el.play().catch(() => {});
 }
@@ -12313,7 +12436,7 @@ const parryRoll = t => t.controller !== 'dummy' ||
 // src = { fighter } for melee hits, { shot } for projectiles (used for perfect-block counters/reflects).
 function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (t.respawnTimer > 0) return false;
-  if (t.action && t.action.type === 'attack' && t.action.move && t.action.move.finalExp) {   // Lance's FINAL EXPLOSION: HYPER ARMOR - he takes the damage, nothing else
+  if (t.action && (t.action.type === 'cruelSun' || (t.action.type === 'attack' && t.action.move && t.action.move.finalExp))) {   // Lance's FINAL EXPLOSION / Colten's SUN: HYPER ARMOR - he takes the damage, nothing else
     t.damage += h.dmg * mult; t.hitFlash = 0.08; shake = Math.max(shake, 4);
     burst(hx, hy, ['#ffffff', '#ffe066'], 6, 0, Math.PI, 300, { grav: 0 }); sfx.block();
     return true;
@@ -13621,10 +13744,12 @@ function startUltimate(f, alt = false, up = false, side = false) {   // (side = 
   heelSay(f, 'roar');
   f.action = def.hunterMove ? hunterUltAction(f, def.hunterMove)             // Hunter: Eraser Cannon / Gigantic Roar
            : def.beamUlt ? { type: 'ultBeam', t: 0, phase: 'charge' }      // Lance: charge + full-screen Kamehameha
+           : def.cruelSun ? { type: 'cruelSun', t: 0, songT: 0, x0: f.x, y0: f.y, ev: new Set() }   // Colten: THE SUN
                          : { type: 'ultStart', t: 0, dur: def.rush ? 0.6 : def.godChidori ? 0.95 : 0.8, def };
   if (def.dragon) startFlameDragon(f);             // Sevon: the Flame Dragon
   if (def.ship) startShipUlt(f);                   // Aiden: the pirate ship
   if (def.leeLotus) startLeeLotus(f);              // Colby: Primary Lotus (Rock Lee vs Gaara)
+  if (def.cruelSun) playSunSong(f);                // Colten: THE SUN (its music)
   ultBanner = { t: 1.1, name: def.name || 'ULTIMATE', color: f.color, who: f };
   hitstop = Math.max(hitstop, 0.4);                // dramatic freeze as it starts
   impactFrame = 0.12; impactAt = { x: f.x, y: f.y - 50, ang: 0, all: true, focus: true, invert: true };
@@ -18897,6 +19022,7 @@ function stepAction(f, inp, dt) {
   if (a.type === 'timeStop') return stepTimeStop(f, a, dt);
   if (a.type === 'ultBeam') return stepUltBeam(f, a, dt, inp);
   if (a.type === 'flameDragon') return stepFlameDragon(f, a, dt);
+  if (a.type === 'cruelSun') return stepCruelSun(f, a, dt);       // Colten: THE SUN
   if (a.type === 'uiDash') return stepUiDash(f, a, dt);          // Lance: the Ultra Instinct dash
   if (a.type === 'kiCharge') return stepKiCharge(f, a, inp, dt);   // Lance: holding down K - the ki charge
   if (a.type === 'uiTransform') return stepUiTransform(f, a, dt);
@@ -19449,17 +19575,18 @@ function updateFighter(f, inp, dt) {
   if (f.look && f.look.demonMeter) updateGaze(f, dt);
   if (f.repWarnT > 0) f.repWarnT -= dt;
   if (f.sageCD > 0) f.sageCD = Math.max(0, f.sageCD - dt);       // (Sage Mode's auto dodge coming back)
-  if (f.look && f.look.rage && !f.minion) {                      // HUNTER'S FORM ARMOR: recharging (one charge every H_FORM_ARMOR.recharge seconds)
-    const mx = hunterArmorMax(f);
-    if ((f.hArmorForm || 0) !== (f.hForm || 0)) { f.hArmorForm = f.hForm || 0; f.hArmor = mx; f.hArmorT = 0; }   // (a new form: fully charged)
+  if (f.look && (f.look.rage || f.char === 'COLTEN') && !f.minion) {   // HUNTER'S FORM ARMOR (one charge every 2s) / COLTEN'S (both back 2s after they're used up)
+    const mx = hunterArmorMax(f), form = f.char === 'COLTEN' ? (f.transformed ? 1 : 0) : (f.hForm || 0);
+    if ((f.hArmorForm || 0) !== form) { f.hArmorForm = form; f.hArmor = mx; f.hArmorT = 0; }   // (a new form / transforming: fully charged; powering down: gone)
     if ((f.hArmor || 0) > mx) f.hArmor = mx;
-    if ((f.hArmor || 0) < mx) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= H_FORM_ARMOR.recharge) { f.hArmor = (f.hArmor || 0) + 1; f.hArmorT = 0; } }
+    if (f.char === 'COLTEN') { if (mx > 0 && (f.hArmor || 0) <= 0) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= COLTEN_ARMOR.refill) { f.hArmor = mx; f.hArmorT = 0; } } }
+    else if ((f.hArmor || 0) < mx) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= H_FORM_ARMOR.recharge) { f.hArmor = (f.hArmor || 0) + 1; f.hArmorT = 0; } }
   }            // Colbalias's gaze mark wears off
   f.tsCD = Math.max(0, (f.tsCD || 0) - dt);
   f.opening = Math.max(0, (f.opening || 0) - dt);               // the window to punish after a perfect block
   syncKame(f);
   if (f.kiSnd && !(f.action && f.action.type === 'kiCharge')) stopKiChargeSound(f);
-  const inUlt = f.action && ['ultStart', 'ultSeq', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type);
+  const inUlt = f.action && ['cruelSun', 'ultStart', 'ultSeq', 'ultBeam', 'flameDragon', 'uiTransform', 'ssj2Cut', 'hL3Cut', 'ss1Cut', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type);
   if (f.transformed) {                                            // transformed: the meter slowly drains
     if (f.look && f.look.doubleUlt) {                            // Colbalias: only the bar he transformed on drains (same ~14s as anyone's)
       const fl = f.tfFloor || 0;
@@ -19535,7 +19662,7 @@ function updateFighter(f, inp, dt) {
 
   // Gravity
   const a = f.action;
-  const floating = (f.flight && !(a && a.type === 'hitstun')) || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
+  const floating = (f.flight && !(a && a.type === 'hitstun')) || (a && a.type === 'cruelSun') || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
     (a.type === 'attack' && a.move.floatWhile && a.move.floatWhile(f, a)) ||
     a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
     (a.type === 'hitstun' && (a.impaled || (a.flat && a.t < a.flat))) ||
@@ -21709,6 +21836,7 @@ function getPose(p) { return withCarry(p, basePose(p)); }
 function basePose(p) {
   const a = p.action;
   if (a && a.odmPose) return { ...a.odmPose };                // Sevon on his ODM gear (reeling in / Levi spin)
+  if (a && a.type === 'cruelSun' && a.pose) return { ...a.pose };   // Colten: THE SUN
   if (a && (a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'ssj2Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'fxSac' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut') && a.pose) return { ...a.pose };   // Hunter powering up into Legendary 3
   if (a && a.type === 'beamClash') { const q = { ...a.pose }; q.lean += Math.sin(p.anim * 70) * 0.04; return q; }   // pushing his beam, shaking
   if (a && a.type === 'attack') {
@@ -24471,6 +24599,7 @@ function render() {
       if (ult && ult.def && ult.def.legion) drawLegionFront(ult);   // the clone rush: their eyes lighting up
       if (ult && ult.def && ult.def.raijin) drawRaijin(ult);        // Hailie's Flying Raijin: the kunai ring
       drawHailieFx();                                               // Hailie: the Rasengan in her hand
+      drawCruelSun();                                               // Colten: THE SUN
     }
     drawProjectiles();
     drawBeamClashes();                                // a BEAM CLASH: the flare where the two attacks meet
@@ -27395,7 +27524,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)
