@@ -27361,8 +27361,8 @@ const ARCADE_STOCKS = 3;
 // THE TITLE you're chasing: the arcade tournament is THE BIGGEST RICHARD: LEGENDS COLLIDE - win it and the belt is yours
 const ARCADE_TITLE = 'THE BIGGEST RICHARD', ARCADE_SUB = 'LEGENDS COLLIDE';
 let arcade = null;   // { phase: 'pick' | 'vs' | 'lose' | 'win', sel, diff, round, t, dev, saved, active, br }
-// ARCADE STARS: clear the bonus round on a difficulty = that difficulty's GOLD STAR, shown top-left of the home screen
-// (one per difficulty, kept on this computer). The win screen tells you when you've earned a new one.
+// ARCADE STARS (per fighter, shown in ARCADE only): win the tournament on a difficulty = that fighter's GOLD star for it;
+// beat the bonus boss too = it turns RED. Kept on this computer. The win screen tells you when you've earned a new one.
 const STARS_KEY = 'db-arcade-stars';
 let arcadeStars = (() => { try { const v = JSON.parse(localStorage.getItem(STARS_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })();
 // ...and EVERY CHARACTER has their own five: { COLBY: ['EASY', 'HARD'], ... } (the home-screen row = beaten with anyone)
@@ -27390,15 +27390,23 @@ function earnBossStar(diff, ch) {
   return true;
 }
 // a fighter's five little stars (gold = won the tournament on that difficulty with them; RED = beat the bonus boss too)
-function drawCharStars(ch, cx, cy, r, sk) {
-  const got = charStars(ch), boss = bossStars(ch), gap = r * 2.6;
+function drawCharStars(ch, cx, cy, r, sk, labels = true) {
+  const got = charStars(ch), boss = bossStars(ch), gap = r * 2.8;
   ARCADE_DIFFS.forEach((dn, k) => {
     const x = cx + (k - 2) * gap;
-    starPath(sctx, x, cy, r);
-    if (boss.includes(dn)) { sctx.fillStyle = '#ff2a2a'; sctx.fill(); sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? '#1d1b2a' : '#6a0808'; sctx.stroke(); }   // RED: beat the bonus boss too
-    else if (got.includes(dn)) { sctx.fillStyle = dn === 'IMPOSSIBLE' ? '#ffe680' : '#ffd23f'; sctx.fill(); sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? '#1d1b2a' : '#8a5a00'; sctx.stroke(); }
-    else { sctx.lineWidth = 1.2; sctx.strokeStyle = sk ? 'rgba(29,27,42,0.35)' : 'rgba(255,255,255,0.28)'; sctx.stroke(); }
+    drawOneStar(x, cy, r, boss.includes(dn) ? 'red' : got.includes(dn) ? 'gold' : null, sk);
+    if (labels) {                                               // (which difficulty each one is: E N H M I)
+      sctx.font = `bold ${Math.max(6, Math.round(r * 1.1))}px sans-serif`; sctx.textAlign = 'center';
+      sctx.fillStyle = sk ? 'rgba(29,27,42,0.6)' : 'rgba(255,255,255,0.55)'; sctx.fillText(dn[0], x, cy + r + Math.max(6, r * 1.2));
+    }
   });
+}
+// one star: 'gold' = won the tournament on that difficulty, 'red' = beat the bonus boss too, null = not yet
+function drawOneStar(x, y, r, kind, sk) {
+  starPath(sctx, x, y, r);
+  if (kind === 'red') { sctx.fillStyle = '#ff2a2a'; sctx.fill(); sctx.lineWidth = Math.max(1.2, r * 0.18); sctx.strokeStyle = sk ? '#1d1b2a' : '#6a0808'; sctx.stroke(); }
+  else if (kind === 'gold') { sctx.fillStyle = '#ffd23f'; sctx.fill(); sctx.lineWidth = Math.max(1.2, r * 0.18); sctx.strokeStyle = sk ? '#1d1b2a' : '#8a5a00'; sctx.stroke(); }
+  else { sctx.lineWidth = Math.max(1.2, r * 0.15); sctx.strokeStyle = sk ? 'rgba(29,27,42,0.35)' : 'rgba(255,255,255,0.28)'; sctx.stroke(); }
 }
 // a 5-point star
 function starPath(c, x, y, r) {
@@ -27662,8 +27670,12 @@ function drawArcade() {
         const r = arcadeDiffRect(k), on = k === A.diff;
         if (sk) { if (on) { sctx.fillStyle = 'rgba(232,67,58,0.35)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 40, INK, on ? 3 : 1.5); }
         else slantRect(r.x, r.y, r.w, r.h, 8, on ? (dn === 'IMPOSSIBLE' ? '#7a00a8' : '#d62a22') : 'rgba(20,16,18,0.85)');
-        sctx.font = F(dn.length > 8 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(dn, r.x + r.w / 2, r.y + 29);
+        sctx.font = F(dn.length > 8 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(dn, r.x + r.w / 2 - 6, r.y + 29);
+        const chs = picks[A.sel];                                   // (this fighter's star for this difficulty)
+        drawOneStar(r.x + r.w - 13, r.y + 13, 8, bossStars(chs).includes(dn) ? 'red' : charStars(chs).includes(dn) ? 'gold' : null, sk);
       });
+      sctx.font = F(13); sctx.fillStyle = dim; sctx.textAlign = 'center';
+      sctx.fillText(charName(picks[A.sel]) + "'S STARS:  GOLD = WON " + ARCADE_TITLE + " ON IT   -   RED = BEAT THE BONUS BOSS TOO", W / 2, 642);
       sctx.font = F(15); sctx.fillStyle = dim;
       sctx.fillText('LEFT / RIGHT = FIGHTER   -   UP / DOWN = DIFFICULTY   -   J / ENTER = START   -   K / ESC = BACK', W / 2, H - 16);
     } else if (A.phase === 'vs') {
@@ -27706,7 +27718,7 @@ function drawArcade() {
         sctx.textAlign = 'left'; sctx.font = F(26, true); sctx.fillStyle = A.newStar ? '#ffd23f' : ink;
         const who = charName(picks[A.sel]);
         const bossTxt = A.bonusLost ? '' : A.newBoss ? '  -  IT TURNS RED!' : '  (already red)';
-        sctx.fillText((A.newStar ? 'NEW ' + who + ' STAR - ' + dn + '!' : who + ' already has the ' + dn + ' star') + bossTxt, sx + 46, sy + 4);
+        sctx.fillText((A.newStar || A.newBoss ? 'NEW ' + who + ' ' + dn + ' ' + (red ? 'RED' : 'GOLD') + ' STAR!' : who + ' already has the ' + dn + ' ' + (red ? 'red' : 'gold') + ' star') + (A.newStar && A.newBoss ? '' : bossTxt), sx + 46, sy + 4);
         sctx.font = F(17); sctx.fillStyle = dim;
         sctx.fillText(charStars(picks[A.sel]).length + ' OF ' + ARCADE_DIFFS.length + ' STARS WITH ' + who + '  -  see them on the arcade fighter pick', sx + 46, sy + 32);
         drawCharStars(picks[A.sel], sx + 46 + 70, sy + 58, 9, sk);
@@ -27947,7 +27959,7 @@ const menuTheme = () => artStyle === 'SKETCHBOOK' ? 'sketch' : artStyle === 'PIX
 function drawHome() {
   const th = menuTheme();
   if (th === 'sketch') drawHomeSketch(); else if (th === 'pixel') drawHomePX(); else drawHomeCG();
-  drawArcadeStars(th);                                             // the arcade stars, top-left
+  // (arcade stars are shown in ARCADE only - per fighter, on the fighter pick)
   const st = updateStatusText();                                   // the update status, bottom-left
   if (st) withMenuDrawing(() => {
     const ready = appUpdate().state === 'ready', blink = Math.floor(menuTime * 2) % 2 === 0;
