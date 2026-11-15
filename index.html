@@ -23003,7 +23003,13 @@ function drawFigure(fig, opts = {}) {
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armA, f, main, EDGE); drawHunterBracer(shoulder, pz.armA, f, opts); }   // (the near arm's delt + bracer, on top of it)
-  if (look.hellcat && !grip) { const H = swordHold(shoulder, pz, f), a = Math.atan2(H.uy, H.ux); drawKunaiShape(H.hand.x + H.ux * 4, H.hand.y + H.uy * 4, a, 1.15, opts.tint); }   // HAILIE: her kunai, always in her front hand
+  if (look.hellcat && !grip) {                                   // HAILIE: her kunai, always in her front hand - in a REVERSE GRIP:
+    const H = swordHold(shoulder, pz, f), ux = H.ux, uy = H.uy;     //  the blade comes out the bottom of her fist and lies back along her
+    let px = -uy, py = ux; if (py < 0 || (Math.abs(py) < 0.2 && px * f > 0)) { px = -px; py = -py; }   //  forearm (pointing down / back), the ring
+    let dx = px * 0.75 - ux * 0.65, dy = py * 0.75 - uy * 0.65; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;   //  poking out over her thumb
+    drawKunaiShape(H.hand.x + dx * 4, H.hand.y + dy * 4, Math.atan2(dy, dx), 1.1, opts.tint);
+    ctx.fillStyle = opts.tint || main; ctx.beginPath(); ctx.arc(H.hand.x, H.hand.y, 3.6, 0, Math.PI * 2); ctx.fill();   // (her fist closed round the grip)
+  }
   if (look.greatsword && !grip && !fig.noScythe) (look.katana ? drawKatana : drawGreatsword)(shoulder, pz, f, opts);   // the greatsword (Sevon: katana), in his front hand
   if (look.sledge && !grip) drawSledge(shoulder, pz, f, opts, look);      // HUNTER: the sledgehammer
   if (look.auraArmor && fig.transformed && !opts.tint && !sketch) drawAuraArmor(hip, shoulder, head, f);
