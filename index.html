@@ -9638,18 +9638,25 @@ function hHit(f, t, h, hx, hy) { return applyHit(t, h, Math.sign(t.x - f.x) || f
 //      then a grab that throws them at her nearest portal). Up K: thrown straight up, and she teleports to it.
 // a kunai: a leaf-shaped steel blade, a cord-wrapped grip and the ring on the end (x, y = the grip's middle; ang = where the tip points)
 function drawKunaiShape(x, y, ang, sc = 1, tint) {
+  // (like the real thing: a long, dark grey-blue diamond blade with a ridge down the middle, a grip wrapped in WHITE cloth,
+  //  and a dark ring on the end)
   ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(sc, sc);
-  ctx.fillStyle = tint || (sketch ? '#ffffff' : '#c8ccd6');                                   // the blade
-  ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(10, -4.2, 21, 0); ctx.quadraticCurveTo(10, 4.2, 4, 0); ctx.fill();
-  if (!tint) { ctx.strokeStyle = sketch ? '#333333' : '#6c7280'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(20, 0); ctx.stroke(); ctx.stroke(); }
-  ctx.fillStyle = tint || (sketch ? '#333333' : HL.black); ctx.fillRect(-7, -1.6, 11, 3.2);   // the wrapped grip
-  ctx.strokeStyle = tint || (sketch ? '#333333' : '#9aa0ab'); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(-9.5, 0, 2.5, 0, Math.PI * 2); ctx.stroke();   // the ring
+  const dark = tint || (sketch ? '#333333' : '#3a4352'), lite = tint || (sketch ? '#ffffff' : '#6f7b8e');
+  ctx.fillStyle = dark;                                                                        // the blade: wide at the base, long point
+  ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(9, -5); ctx.lineTo(27, 0); ctx.lineTo(9, 5); ctx.closePath(); ctx.fill();
+  if (!tint) {
+    ctx.fillStyle = lite; ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(9, -5); ctx.lineTo(27, 0); ctx.closePath(); ctx.fill();   // the lit half
+    ctx.strokeStyle = sketch ? '#333333' : '#1e242e'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(26, 0); ctx.stroke();   // the ridge
+  }
+  ctx.fillStyle = tint || (sketch ? '#ffffff' : '#f2efe6'); ctx.fillRect(-9, -2.4, 12, 4.8);       // the white-wrapped grip
+  if (!tint) { ctx.strokeStyle = sketch ? '#333333' : '#b8b2a2'; ctx.lineWidth = 0.7; for (let k = -8; k < 3; k += 2.2) { ctx.beginPath(); ctx.moveTo(k, -2.4); ctx.lineTo(k + 1.6, 2.4); ctx.stroke(); } }   // its wraps
+  ctx.strokeStyle = dark; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(-12.5, 0, 3.4, 0, Math.PI * 2); ctx.stroke();   // the ring
   ctx.restore();
 }
 function drawKunaiShot(s) {
   const ang = s.stuck ? ((s.side || 1) > 0 ? 0.25 : Math.PI - 0.25) : Math.atan2(s.vy, s.vx);
   if (!s.stuck && !sketch) { ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - Math.cos(ang) * 40, s.y - Math.sin(ang) * 40); ctx.stroke(); ctx.restore(); }   // (a streak behind it)
-  drawKunaiShape(s.x - Math.cos(ang) * 8, s.y - Math.sin(ang) * 8, ang, 1.3);
+  drawKunaiShape(s.x - Math.cos(ang) * 14, s.y - Math.sin(ang) * 14, ang, 1.4);
 }
 function hailieKunai(f) { return projectiles.find(q => q.kunai && q.owner === f && !q.up); }
 function hailieThrowKunai(f, up) {
@@ -22996,7 +23003,7 @@ function drawFigure(fig, opts = {}) {
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armA, f, main, EDGE); drawHunterBracer(shoulder, pz.armA, f, opts); }   // (the near arm's delt + bracer, on top of it)
-  if (look.hellcat && !grip) { const H = swordHold(shoulder, pz, f), a = Math.atan2(H.uy, H.ux); drawKunaiShape(H.hand.x + H.ux * 3, H.hand.y + H.uy * 3, a, 1, opts.tint); }   // HAILIE: her kunai, always in her front hand
+  if (look.hellcat && !grip) { const H = swordHold(shoulder, pz, f), a = Math.atan2(H.uy, H.ux); drawKunaiShape(H.hand.x + H.ux * 4, H.hand.y + H.uy * 4, a, 1.15, opts.tint); }   // HAILIE: her kunai, always in her front hand
   if (look.greatsword && !grip && !fig.noScythe) (look.katana ? drawKatana : drawGreatsword)(shoulder, pz, f, opts);   // the greatsword (Sevon: katana), in his front hand
   if (look.sledge && !grip) drawSledge(shoulder, pz, f, opts, look);      // HUNTER: the sledgehammer
   if (look.auraArmor && fig.transformed && !opts.tint && !sketch) drawAuraArmor(hip, shoulder, head, f);
