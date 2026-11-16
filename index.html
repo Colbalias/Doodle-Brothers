@@ -12112,6 +12112,7 @@ function setCharacter(f, charName, alt = 0) {
   f.look = lookFor(charName, f.alt);                          // (the ALT SKIN, if they picked it)
   f.w = 26 * (f.look.scale || 1); f.h = 90 * (f.look.scale || 1);   // bigger characters = bigger hurtbox
   f.transformed = false; f.baseStats = null; f.kaioken = false; f.tc = false; f.noScythe = false; f.ui = false; f.lanceForm = 0; f.formBase = null; stopUiSong(f);
+  f.tfUsedStock = false;
   f.rage = 0; f.hForm = 0; f.rageKO = false; f.l2Seen = false; f.l2Pending = false; f.l3Pending = false;                  // (Hunter: rage + forms start over)
   f.weapon = (c.look && c.look.weapon) || null;                // Colby / Colten start with their own weapon
   f.gateSword = false; f.spareSwordT = 0;
@@ -12524,8 +12525,8 @@ const ARCADE_BOSS_DIFF = {
   EASY:       { ai: 'NORMAL', taken: 0.95, kb: 0.95, dealt: 1.05, speed: 1.0,  clones: 0, stocks: 0 },
   NORMAL:     { ai: 'HARD',   taken: 0.85, kb: 0.86, dealt: 1.15, speed: 1.04, clones: 1, stocks: 0 },
   HARD:       { ai: 'MASTER', taken: 0.74, kb: 0.78, dealt: 1.28, speed: 1.08, clones: 1, stocks: 0 },
-  MASTER:     { ai: 'BOSS',   taken: 0.56, kb: 0.6,  dealt: 1.5,  speed: 1.15, clones: 2, stocks: 1 },
-  IMPOSSIBLE: { ai: 'BOSS',   taken: 0.42, kb: 0.48, dealt: 1.75, speed: 1.22, clones: 3, stocks: 2 },
+  MASTER:     { ai: 'BOSS',   taken: 0.56, kb: 0.6,  dealt: 1.5,  speed: 1.15, clones: 2, stocks: 0 },   // (no extra lives on any difficulty - same stocks as you)
+  IMPOSSIBLE: { ai: 'BOSS',   taken: 0.42, kb: 0.48, dealt: 1.75, speed: 1.22, clones: 3, stocks: 0 },
 };
 const ARCADE_BOSS = { ...ARCADE_BOSS_DIFF.HARD };   // (set for each boss fight - see arcadeStartRound)
 const bossFight = () => !!(arcade && arcade.active && fighters.some(f => f.arcadeBoss));
@@ -14528,6 +14529,9 @@ function stepClash(f, a, dt, inp) {
 // =====================================================================
 const ULT_MAX = 100, ULT_PASSIVE = 0.5;   // passive: 0.5 per second = 1% every 2 seconds
 const ULT_GAIN = 1;
+// PER-CHARACTER ULT METER: gain = how fast it fills (x normal); oncePerStock = only ONE transformation per stock (the meter
+// stays empty after it till he loses a stock)
+const CHAR_ULT = { HUNTER: { gain: 0.45, oncePerStock: true } };
 // AFTER AN ULTIMATE: for ULT_NERF.time seconds (counted once he's out of his transformation) every bit of ult meter he gains
 // is halved - so ultimates can't come round again straight away (see the update() wrapper)
 const ULT_NERF = { time: 15, gain: 0.5 };                         // meter gained per 1% of damage taken (lower = ultimates come less often)
@@ -16103,6 +16107,7 @@ function drawGodSpeedArcs(p) {
 }
 function startTransform(f) {
   f.transformed = true; f.ultBuf = 0;
+  if (CHAR_ULT[f.char] && CHAR_ULT[f.char].oncePerStock) f.tfUsedStock = true;   // (Hunter: that's his one transformation this stock)
   if (f.char === 'HAILIE') f.phaseDodges = 3;                     // (Hailie: three automatic phase-outs)
   // COLBALIAS: TWO BARS - he transforms on ONE bar (the top one): it drains like a normal meter, and the bar under it is kept
   if (f.look && f.look.doubleUlt) { f.tfFloor = (f.ult || 0) >= ULT_MAX ? ULT_MAX / 2 : 0; f.dodgeCount = 0; f.airDodges = AIR_DODGES; }   // (Colbalias: every Z vanish back as he transforms)
@@ -17967,6 +17972,7 @@ function drawSsj2Arcs(p) {
   if (realRandom() < 0.06) bolt(p.x, p.y - 55, realRandom() * Math.PI * 2, 60 + realRandom() * 30, 0.06, '#ffffff');
 }
 function endTransform(f, ko = false) {
+  if (ko) f.tfUsedStock = false;                                  // (a new stock: HUNTER can transform again)
   // LANCE'S FORMS: Super Saiyan / Super Saiyan 2 STAY on (buffs and all) when the meter runs out - only Ultra Instinct
   // ending (or a KO) drops him all the way back to base, to climb the ladder again
   if (ko && f.ssg) { f.ssg = false; setLanceForm(f, 0); stopSsgSong(f); }   // (KO'd in SUPER SAIYAN GOD: all the way back to BASE)
@@ -21123,15 +21129,15 @@ function aiShipParry(f, ai, level) {
   let plan = a.aiPlan.get(f);
   if (!plan) {                                                   // (decided once per slam)
     const r = Math.random(), pp = SHIP_AI.parry[level] ?? 0.45;
-    plan = r < pp ? { kind: 'parry', at: 0.07 + Math.random() * 0.12 }
+    plan = r < pp ? { kind: 'parry', at: 0.1 + Math.random() * 0.14 }
          : (!caged && Math.random() < (SHIP_AI.jump[level] ?? 0.6)) ? { kind: 'jump', at: 0.22 + Math.random() * 0.1 } : { kind: 'none' };
     a.aiPlan.set(f, plan);
   }
   const act = f.action, free = !act || ['land', 'shield'].includes(act.type) || f.shielding;
-  if (plan.kind === 'parry' && f.ground) {
-    ai.tapAtk = ai.tapSpc = ai.tapGrab = ai.tapJump = false; ai.dir = 0; ai.up = ai.down = false; ai.jumpHold = 0;
-    if (tti <= plan.at) { ai.block = true; if (!f.shielding && free) ai.tapBlock = true; }   // SHIELD UP - just as it comes down
-    else { ai.block = false; ai.tapBlock = false; }                                          // (wait for it...)
+  if (plan.kind === 'parry' && (f.ground || f.y >= STAGE.y - 120)) {   // (on the floor - or about to land on it)
+    ai.tapAtk = ai.tapSpc = ai.tapGrab = ai.tapJump = false; ai.dir = 0; ai.up = ai.down = false; ai.jumpHold = 0; ai.holdBtn = null;   // stand still...
+    if (tti <= plan.at) { ai.block = true; ai.tapBlock = !f.shielding; }   // ...SHIELD UP just as it comes down (held: it rises the instant any landing lag ends)
+    else { ai.block = false; ai.tapBlock = false; }                        // (wait for it...)
   } else if (plan.kind === 'jump' && f.ground && tti <= plan.at && free) {
     ai.tapJump = true; ai.jumpHold = 0.3; ai.block = false; ai.tapBlock = false;
   }
@@ -21938,6 +21944,12 @@ function update(dt) {
     const g = (v.ult || 0) - (meter0.get(v) ?? (v.ult || 0));
     if (g > 0) v.ult -= g * (1 - ULT_NERF.gain);
     if (!v.transformed && !ultRunning()) v.ultNerfT = Math.max(0, v.ultNerfT - dt);
+  }
+  for (const v of fighters) {                               // PER-CHARACTER METER: slower gain (Hunter) - and none at all once his one transformation this stock is spent
+    const U = CHAR_ULT[v.char]; if (!U || v.minion || v.transformed) continue;
+    const g = (v.ult || 0) - (meter0.get(v) ?? (v.ult || 0));
+    if (U.oncePerStock && v.tfUsedStock) { v.ult = 0; continue; }
+    if (g > 0) v.ult -= g * (1 - U.gain);
   }
   for (const [v, d0, h] of held) {
     if (v.damage > d0) v.damage = d0 + (v.damage - d0) * GRAB_DMG.all * (GRAB_DMG[h.char] || 1);
@@ -26555,7 +26567,7 @@ function startMatch() {
     Object.assign(f, { ultBuf: 0, atkBuf: 0, spcBuf: 0, jumpBuf: 0, grabBuf: 0, dodgeBuf: 0, dirBuf: 0, tauntBuf: 0, flyBuf: 0,
                        atkTapT: 9, spcTapT: 9, jumpTapT: 9, ultPower: 1, ultNerfT: 0, cFlick: null, lastInp: null, stompCD: 0,
                        comboTimer: 0, comboKey: null, opening: 0, squat: 0, flip: 0, slide: 0,
-                       riseTop: 0, circle: null, drawZ: 0, odm: null, odmHook: null, odmLedge: null, shipSong: null });
+                       riseTop: 0, circle: null, drawZ: 0, odm: null, odmHook: null, odmLedge: null, shipSong: null, tfUsedStock: false });
     delete f.ai; delete f.odmGas;
   }
   applyStage(gameOptions.stage >= 0 ? gameOptions.stage : (voteStage ?? 0)); voteStage = null;   // (VOTE: the stage that won the vote)
