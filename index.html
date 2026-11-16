@@ -668,11 +668,10 @@ const STAGE_LIST = [
   // platforms, nowhere to hide - stay on the tiles.
   { name: 'MARTIAL ARENA', tourney: true, platforms: [], scale: 0.92 },
 ];
-const TOURNEY = { step: 26 };   // (how high the ring stands off the grass; the grass is the ring-out line)
+const TOURNEY = { step: 260, rim: 26 };  // (step: how far down the grass is - the ring-out line, set deep so a knock off the edge can still be recovered from; rim: the ring's own thin stone edge)
 const grassY = () => STAGE.y + TOURNEY.step;
 // out on the grass, off the ring = RING OUT
-const ringedOut = f => !!(stageDef && stageDef.tourney && f.respawnTimer <= 0 && !f.out && f.y >= grassY() - 1 &&
-  (f.x < STAGE.x - 2 || f.x > STAGE.x + STAGE.w + 2));
+const ringedOut = f => !!(stageDef && stageDef.tourney && f.respawnTimer <= 0 && !f.out && f.y >= grassY() - 1);   // (the grass is well below the ring: reach it anywhere and you're out)
 const RING = { w: 760, cageH: 400, raise: 64 };                // raise: how far the mat sits up off the arena floor
 const ringL = () => 50 + (1180 - RING.w) / 2, ringR = () => ringL() + RING.w;   // (centred on the normal stage)
 const ringTop = () => STAGE.y - RING.raise;
@@ -7982,7 +7981,7 @@ const SEVON_MOVES = {
   // way he's facing, drawing the katana as he goes. The longer the charge, the further (and harder) he goes: a tap is a
   // short hop forward, full charge crosses most of the stage. The first one he runs into gets cut and the dash stops there.
   // (On the floor he stops at the ledge; in the air he keeps his height and goes the full way.)
-  sideGround: { name: 'Flame Draw', startup: 0.1, active: 0.24, endlag: 0.3, landLag: 0.16, charge: true, quickDraw: true, noClash: true,
+  sideGround: { name: 'Flame Draw', startup: 0.05, active: 0.16, endlag: 0.17, landLag: 0.1, charge: true, quickDraw: true, noClash: true,
     hitboxes: [{ x: 44, y: -58, r: 40, dmg: 9, base: 400, growth: 6, angle: 32, group: 0 },
                { x: 92, y: -58, r: 36, dmg: 9, base: 400, growth: 6, angle: 32, group: 0 },
                { x: 4,  y: -58, r: 34, dmg: 9, base: 400, growth: 6, angle: 32, group: 0 }],   // (one hit; covers his whole body as he flies)
@@ -8290,7 +8289,7 @@ function drawBatarang(s) {
 for (const k of ['jab', 'jab2', 'jab3', 'sideGround', 'upGround', 'downGround', 'dashAttack', 'nair', 'fair', 'bair', 'uair', 'dair', 'sideRanged', 'upRanged']) SEVON_MOVES[k].flow = true;
 // AIR SIDE J = FLAME DRAW too: charge it IN THE AIR (he hangs there, hand on the hilt) and let go to blast straight across,
 // keeping his height
-SEVON_MOVES.fair = { ...SEVON_MOVES.sideGround, name: 'Flame Draw (Air)', landLag: 0.16,
+SEVON_MOVES.fair = { ...SEVON_MOVES.sideGround, name: 'Flame Draw (Air)', landLag: 0.1,
   floatWhile: (f, a) => a.phase === 'startup' || a.phase === 'charge' || (a.phase === 'active' && !a.struck) };
 
 // ---------------- TOTAL CONCENTRATION (Sevon, down K) ----------------
@@ -8359,18 +8358,21 @@ const ODM = { hookSpeed: 2700, hookLife: 0.45, hookR: 18, dur: 2.5, maxDist: 105
               spinHit: { dmg: 2.2, base: 40, growth: 0, angle: 40, noStop: true },
               spinFinal: { dmg: 6, base: 480, growth: 6.2, angle: 45 },
               steel: '#c9ced8' };
-const ODM_LEDGE = { reach: 820, hold: 3, sag: 60, reel: 2600 };
+const ODM_LEDGE = { reach: 980, hold: 3, sag: 60, reel: 2600 };
 // GAS: two canisters on his hips. Every ODM hook he fires IN THE AIR uses one up - two goes, then nothing till he's back
 // on the ground (or on a ledge), when they fill again. (The hook that grabs the LEDGE to save him is free.)
 const ODM_GAS = { max: 2 };
 // TOTAL CONCENTRATION sets the cable ALIGHT: whoever it's hooked into slowly BURNS while it holds (and for a moment after)
 const ODM_BURN = { every: 0.45, dmg: 0.7, after: 2.0 };   // falling below the ledge: the hook grabs the LEDGE (then K = reel up onto it)
+// off the stage BELOW the ledge (out past it or right under the stage), on a stage that has ledges
+const odmLedgeSave = f => !stageDef.pit && !stageDef.tourney && !wideFloor() && !f.ground && f.y > STAGE.y + 10;
 function fireOdmHook(f) {
   if (f.minion || f.odmHook || f.odm || f.odmLedge) return;
-  if (!stageDef.pit && !f.ground && f.vy >= 0 && f.y > STAGE.y + 10) {          // below the ledge and falling: go for the LEDGE
-    const side = f.x < STAGE.x + STAGE.w / 2 ? -1 : 1, ex = side < 0 ? STAGE.x : STAGE.x + STAGE.w;
+  if (odmLedgeSave(f)) {                                         // below the ledge: ALWAYS go for the NEAREST LEDGE (it saves him)
+    const dl = Math.hypot(STAGE.x - f.x, STAGE.y - f.y), dr = Math.hypot(STAGE.x + STAGE.w - f.x, STAGE.y - f.y);
+    const side = dl <= dr ? -1 : 1, ex = side < 0 ? STAGE.x : STAGE.x + STAGE.w;
     const sx = f.x + (Math.sign(ex - f.x) || 1) * 16, sy = f.y - 52;
-    if (Math.hypot(ex - sx, STAGE.y - sy) < ODM_LEDGE.reach && (f.x - ex) * side > -60) {
+    if (Math.hypot(ex - sx, STAGE.y - sy) < ODM_LEDGE.reach) {
       const ang = Math.atan2(STAGE.y - sy, ex - sx);
       f.face = Math.sign(ex - f.x) || f.face;
       f.odmHook = { x: sx, y: sy, vx: Math.cos(ang) * ODM.hookSpeed, vy: Math.sin(ang) * ODM.hookSpeed, life: ODM.hookLife, ledge: side, ex };
@@ -8498,12 +8500,14 @@ function stepOdm(f, a, dt, inp) {
   if (a.type === 'odmLedge') {                                      // REELED UP to the ledge... and onto it
     const LG = f.odmLedge;
     if (!LG) { f.action = null; return; }
-    const hx = LG.ex + LG.side * (f.w / 2 + 3), hy = STAGE.y + hurtH(f) - 14;
+    let hx = LG.ex + LG.side * (f.w / 2 + 3), hy = STAGE.y + hurtH(f) - 14;
+    const under = (f.x - LG.ex) * LG.side < f.w / 2 && f.y > STAGE.y + 20;
+    if (under) hy = f.y;                                            // (under the stage: out past the edge first...)
     const dx = hx - f.x, dy = hy - f.y, d = Math.hypot(dx, dy) || 1;
     f.vx = dx / d * ODM_LEDGE.reel; f.vy = dy / d * ODM_LEDGE.reel; f.face = -LG.side;
     a.odmPose = pose({ lean: 0.3, bob: 0, legA: [0.5, 0.9], legB: [-0.2, 0.7], armA: [2.6, 0.2], armB: [2.4, 0.3], sw: 2.2 });
     if (Math.random() < dt * 50) burst(f.x, f.y - 46, ['#ffffff', '#d8dde6'], 1, Math.PI / 2, 0.5, 220, { grav: 0 });
-    if (d < 34 || a.t > 0.5) {
+    if ((!under && d < 34) || a.t > 0.9) {
       f.odmLedge = null;
       if (fighters.some(o => o !== f && o.action && o.action.type === 'ledge' && o.action.side === LG.side)) { f.action = null; f.vx = f.vy = 0; return; }   // (someone's on it)
       const fresh = !f.ledgeUsed; f.ledgeUsed = true;
@@ -9831,7 +9835,7 @@ function hunterMouth(f) { const S = hScale(f); return { x: f.x + f.face * 9 * S,
 //  telling her when to phase out. Extremely light (easy to launch) but she hits HARD. One more jump than anyone, a touch higher.
 // =====================================================================
 const HL = { red: '#d4202a', black: '#141414', gold: '#e8b23a', orange: '#ff7a1a', visor: '#7fd8ff' };
-const H_KUNAI = { speed: 1650, life: 0.6, r: 9, stick: 6, upSpeed: 1750, upLife: 0.3 };
+const H_KUNAI = { speed: 1650, life: 0.6, r: 9, stick: 6, upSpeed: 1750, upLife: 0.3, max: 2, holdT: 0.14 };   // (max: kunai stuck in someone at once; holdT: hold side K this long = throw another)
 const H_RASEN = { full: 1.1, rush: 980, rushT: 0.36, blue: ['#7fd8ff', '#ffffff', '#3aa0ff'] };
 const H_PORTAL = { r: 38, life: 15, cd: 1.0 };   // (cd: through a portal = 1s before you can take one again - no portal-looping yourself off the stage)
 const H_PHASE = { dur: 4, dbl: 0.3 };
@@ -9878,6 +9882,40 @@ function hailieThrowKunai(f, up) {
               hit: new Set(), pierce: false, trail: [], grav: 0, trailLen: 6, stuck: null };
   projectiles.push(k); sfx.whoosh(false);
   return k;
+}
+// UP K: THREE KUNAI - one straight up, one angled up to each side. Any that hit someone STICK (several can stack, on several
+// people) - and once they've all landed she teleport-strikes EVERY target in turn. None hit: she teleports up to the middle one.
+const H_TRIO = { spread: 0.5 };
+function hailieThrowTrio(f) {
+  const grp = { kunai: [], done: 0, owner: f };
+  for (const d of [0, -1, 1]) {
+    const ang = d * H_TRIO.spread, k = hailieThrowKunai(f, true);
+    k.vx = Math.sin(ang) * H_KUNAI.upSpeed; k.vy = -Math.cos(ang) * H_KUNAI.upSpeed; k.x = f.x + d * 14;
+    k.grp = grp; k.mid = d === 0; grp.kunai.push(k);
+  }
+}
+// a kunai of the trio has finished (stuck in someone, or flown its course) - once all three have, act on it
+function hailieTrioDone(k) {
+  const g = k.grp; if (!g || k.trioDone) return; k.trioDone = true; g.done++;
+  if (!k.stuck && k.mid) g.midPos = { x: k.x, y: k.y };
+  if (g.done < g.kunai.length) return;
+  const o = g.owner; if (!o || !fighters.includes(o) || o.respawnTimer > 0) return;
+  const targets = [...new Set(g.kunai.filter(q => q.stuck).map(q => q.stuck))];
+  if (o.upSpecialUsed && !o.ground) { for (const q of g.kunai) { const i = projectiles.indexOf(q); if (i >= 0) projectiles.splice(i, 1); } return; }   // (once per trip in the air)
+  o.upSpecialUsed = true;
+  if (targets.length) { o.hChain = targets; o.hChainKunai = g.kunai; hailieChainNext(o); return; }
+  const m = g.midPos || { x: o.x, y: o.y - 300 };
+  hTeleport(o, m.x, m.y + 96); o.vy = -320;                      // missed everyone: up to the middle one (her recovery)
+}
+// TELEPORT-STRIKE the next target on the list (the rest follow as each strike finishes - see updatePortals)
+function hailieChainNext(o) {
+  while (o.hChain && o.hChain.length) {
+    const t = o.hChain.shift();
+    for (const q of (o.hChainKunai || [])) if (q.stuck === t) { const i = projectiles.indexOf(q); if (i >= 0) projectiles.splice(i, 1); }
+    if (!fighters.includes(t) || t.respawnTimer > 0 || t.out || t.dead) continue;
+    hailieStrike(o, t); return true;
+  }
+  o.hChain = null; o.hChainKunai = null; return false;
 }
 function hTeleport(f, x, y) {
   ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: hPortalColor(f) });
@@ -9960,6 +9998,11 @@ function hailiePortal(f) {
   }
 }
 function updatePortals(dt) {
+  for (const g of fighters) if (g.hChain && g.hChain.length) {    // HAILIE's multi-target teleport strikes: the next one as each finishes
+    const a = g.action;
+    if (g.respawnTimer > 0 || (a && ['hitstun', 'grabbed', 'thrown', 'whipped', 'timeStop', 'ultVictim'].includes(a.type))) { g.hChain = null; continue; }
+    if (!a || a.type === 'land' || (a.key === 'hStrike' && a.phase === 'end')) hailieChainNext(g);
+  }
   for (const g of fighters) if (g.portalCD > 0) g.portalCD -= dt;
   for (const q of projectiles) if (q.portalCD > 0) q.portalCD -= dt;
   for (const o of fighters) {
@@ -10064,15 +10107,41 @@ const HAILIE_MOVES = {
       }
       return false;
     } },
-  // UP J (ground): a spinning 360 with the knife
-  upGround: { name: 'Spin Slash', startup: 0.06, active: 0.18, endlag: 0.2, mirrorSpin: 0.045,
-    hitboxes: [{ x: 36, y: -54, r: 36, dmg: 8, base: 380, growth: 5, angle: 75 }, { x: -36, y: -54, r: 36, dmg: 8, base: 380, growth: 5, angle: 105 }],
+  // UP J (ground): SPIN SLASH - a spinning cyclone of flat SIDE SLASHES with the knife held straight out: three cuts that keep
+  // them in it (both sides), then a last big one that launches them up
+  upGround: { name: 'Spin Slash', startup: 0.06, active: 0.42, endlag: 0.2, mirrorSpin: 0.045,
+    hitboxes: [0, 1, 2].flatMap(i => [{ x: 40, y: -56, r: 40, dmg: 3, base: 90, growth: 0, angle: 80, noStop: true, from: i * 0.1, to: i * 0.1 + 0.08, group: i },
+                                       { x: -40, y: -56, r: 40, dmg: 3, base: 90, growth: 0, angle: 100, noStop: true, from: i * 0.1, to: i * 0.1 + 0.08, group: i }])
+      .concat([{ x: 42, y: -60, r: 46, dmg: 9, base: 470, growth: 6.4, angle: 78, from: 0.32, to: 0.42, group: 3 },
+               { x: -42, y: -60, r: 46, dmg: 9, base: 470, growth: 6.4, angle: 102, from: 0.32, to: 0.42, group: 3 }]),
     wind: pose({ lean: 0.15, bob: -10, legA: [0.8, 0.9], legB: [-0.6, 0.4], armA: [-1.2, -0.4], armB: [0.6, -1.4] }),
-    strike: pose({ lean: 0, bob: -4, legA: [0.6, 0.3], legB: [-0.6, 0.3], armA: [1.6, 0], armB: [-1.6, 0] }) },
-  downGround: { name: 'Low Sweep', startup: 0.07, active: 0.12, endlag: 0.22,
-    hitboxes: [{ x: 40, y: -10, r: 26, dmg: 8, base: 340, growth: 5, angle: 30 }, { x: -40, y: -10, r: 26, dmg: 8, base: 340, growth: 5, angle: 150 }],
-    wind: pose({ bob: -16, lean: 0.3, legA: [0.9, 1.4], legB: [0.5, 1.2], armA: [0.5, -1.4], armB: [0.2, -1.6] }),
-    strike: pose({ bob: -28, lean: 0.1, legA: [1.5, 0.05], legB: [-1.5, 0.3], armA: [1.6, 0], armB: [-1.6, 0] }) },
+    strike: pose({ lean: 0.1, bob: -6, legA: [0.7, 0.4], legB: [-0.7, 0.3], armA: [1.57, 0], armB: [-1.4, -0.3] }),   // knife arm straight out to the SIDE
+    step(f, a, dt) {
+      if (a.phase !== 'active') return false;
+      const k = Math.floor(a.t / 0.1);
+      if (k !== a.lastCut) {                                       // a fresh flat slash each turn round
+        a.lastCut = k; const side = k % 2 ? -1 : 1;
+        slashLine(f.x + side * 44, f.y - 58, side > 0 ? 0.08 : Math.PI - 0.08, 190, 0.14); sfx.whoosh(false);
+      }
+      if (Math.random() < dt * 40) ghosts.push({ fig: figureOf(f), life: 0.12, max: 0.12, color: HL.red });
+      return false;
+    } },
+  // DOWN J (ground): BACK-AND-FORTH - still facing forward, a reverse-grip BACK SLASH behind her... straight into a quick
+  // FORWARD SLASH in front (the back cut sends them past her, into the front one)
+  downGround: { name: 'Back-and-Forth', startup: 0.06, active: 0.22, endlag: 0.2,
+    hitboxes: [{ x: -44, y: -40, r: 32, dmg: 5, base: 240, growth: 1.5, angle: 60, from: 0, to: 0.09, group: 0 },
+               { x: 46, y: -46, r: 34, dmg: 8, base: 380, growth: 5.4, angle: 38, from: 0.11, to: 0.22, group: 1 }],
+    wind: pose({ bob: -10, lean: 0.2, legA: [0.9, 0.8], legB: [-0.6, 0.4], armA: [0.8, -0.3], armB: [0.4, -1.5] }),
+    strike: pose({ bob: -12, lean: 0.45, legA: [1.0, 0.6], legB: [-0.8, 0.2], armA: [1.6, 0.05], armB: [-0.8, -0.6] }),
+    step(f, a, dt) {
+      if (a.phase !== 'active') { a.poseOverride = null; return false; }
+      const back = a.t < 0.1;
+      a.poseOverride = back ? pose({ bob: -10, lean: -0.15, legA: [0.8, 0.6], legB: [-0.7, 0.3], armA: [-1.75, 0.15], armB: [0.6, -1.4] })   // the knife swept BEHIND her
+                            : pose({ bob: -12, lean: 0.5, legA: [1.05, 0.6], legB: [-0.85, 0.2], armA: [1.6, 0.05], armB: [-0.9, -0.6] });   // ...and through in front
+      if (back && !a.cut1) { a.cut1 = true; slashLine(f.x - f.face * 46, f.y - 42, f.face > 0 ? Math.PI - 0.3 : 0.3, 150, 0.12); sfx.whoosh(false); }
+      if (!back && !a.cut2) { a.cut2 = true; slashLine(f.x + f.face * 48, f.y - 48, f.face > 0 ? 0.25 : Math.PI - 0.25, 170, 0.12); sfx.whoosh(true); }
+      return false;
+    } },
   // AIR J: a full FLIP with the knife round her
   nair: { name: 'Flip Slash', startup: 0.05, active: 0.18, endlag: 0.14, landLag: 0.08, flip: true,
     hitboxes: [{ x: 0, y: -50, r: 48, dmg: 7, base: 330, growth: 4.5, angle: 45 }],
@@ -10129,13 +10198,34 @@ const HAILIE_MOVES = {
       if (a.held < 0.16) { a.mode = 'rush'; a.rt = 0; f.rasen = Math.max(f.rasen || 0, 0.15); sfx.whoosh(true); return true; }   // a TAP: run in with it
       a.phase = 'end'; a.t = 0; return true;                      // let go after charging: she keeps it in her hand
     } },
+  // SIDE K: throw a kunai / TELEPORT to it. TWO can be stuck in someone at once - so she can teleport-strike twice in a row:
+  //   nothing out = THROW      one still flying = teleport to it      two stuck = teleport (the oldest first)
+  //   ONE stuck: TAP = teleport strike, HOLD = throw a second one
   sideRanged: { name: 'Kunai', startup: 0.05, active: 0.04, endlag: 0.14, landLag: 0.06, noClash: true, hitboxes: [],
     wind: H_POSE.throwW, strike: H_POSE.throwS,
-    fire(f) { const k = hailieKunai(f); if (k) { hailieKunaiTp(f, k); return; } hailieThrowKunai(f, false); } },
+    fire(f, mult, c, a) {
+      const out = projectiles.filter(q => q.kunai && q.owner === f && !q.up), stuck = out.filter(q => q.stuck), flying = out.filter(q => !q.stuck);
+      if (!out.length) { hailieThrowKunai(f, false); return; }
+      if (flying.length) { hailieKunaiTp(f, flying[0]); return; }
+      if (stuck.length >= H_KUNAI.max) { hailieKunaiTp(f, stuck[0]); return; }
+      a.decide = 0;                                               // one stuck: tap (teleport) or hold (throw another)?
+    },
+    step(f, a, dt, inp) {
+      if (a.decide === undefined || a.phase !== 'active') return false;
+      a.decide += dt;
+      if (!inp.spcHeld) {                                          // let go: TELEPORT STRIKE
+        const k = projectiles.find(q => q.kunai && q.owner === f && !q.up && q.stuck); a.decide = undefined;
+        if (k) { hailieKunaiTp(f, k); return true; }
+        hailieThrowKunai(f, false); return false;
+      }
+      if (a.decide >= H_KUNAI.holdT) { a.decide = undefined; hailieThrowKunai(f, false); a.poseOverride = H_POSE.throwS; return false; }   // still holding: a SECOND kunai
+      a.t = Math.min(a.t, a.move.active * 0.5);                    // (waits on the button)
+      return true;
+    } },
   upRanged: { name: 'Kunai Rise', startup: 0.06, active: 0.05, endlag: 0.16, landLag: 0.1, noClash: true, hitboxes: [],
     wind: pose({ lean: 0, bob: -10, legA: [0.7, 0.9], legB: [-0.5, 0.4], armA: [0.4, -1.6], armB: [0.6, -1.6] }),
     strike: pose({ lean: -0.1, bob: -2, legA: [0.5, 0.4], legB: [-0.5, 0.3], armA: [3.0, 0.05], armB: [-0.6, -1.2] }),
-    fire(f, mult, c, a) { hailieThrowKunai(f, true); a.air = !f.ground; } },
+    fire(f, mult, c, a) { hailieThrowTrio(f); a.air = !f.ground; } },
   downRanged: { name: 'Portal', startup: 0.08, active: 0.04, endlag: 0.16, landLag: 0.08, noClash: true, hitboxes: [],
     wind: pose({ lean: 0.1, bob: -12, legA: [0.8, 0.9], legB: [-0.6, 0.4], armA: [1.0, -1.2], armB: [0.8, -1.4] }),
     strike: pose({ lean: 0.2, bob: -14, legA: [0.9, 0.9], legB: [-0.7, 0.4], armA: [1.6, 0.05], armB: [1.4, 0.1] }),
@@ -10645,7 +10735,9 @@ CHARACTERS.LANCE.upUlt = { name: 'FINAL EXPLOSION', hunterMove: LANCE_FINAL_EXPL
 // Transformation names (shown on the banner when you transform)
 CHARACTERS.LANCE.transformName = 'SUPER SAIYAN';
 CHARACTERS.LANCE.transformStats = { power: 1.1, speed: 1.18 };   // Super Saiyan: +10% power (not +20%), +18% speed (not +10%)
-CHARACTERS.LANCE.throwKinds = { forward: 'masho', back: 'masho', up: 'godBind', down: 'beamCannon' };   // (see LANCE'S GRABS)
+CHARACTERS.LANCE.throwKinds = { forward: 'masho', back: 'masho', up: 'godBind', down: 'beamCannon' };
+// HAILIE'S UP THROW: straight up above her, to a steady height whatever their % - right into the middle kunai of her UP K (a combo)
+CHARACTERS.HAILIE.throwStats = { ...(CHARACTERS.HAILIE.throwStats || {}), up: { dmg: 6, base: 560, growth: 1.2, angle: 90 } };   // (see LANCE'S GRABS)
 // Colby: GOD SPEED (Killua's Nen, Hunter x Hunter) - a crackling electric aura, he moves and attacks much faster,
 // EVERY hit he lands adds extra lightning damage, and his bare-handed K string blinks round them (see GOD_SPEED)
 CHARACTERS.COLBY.transformName = 'GOD SPEED';
@@ -12486,6 +12578,14 @@ function ultAudioFocus() {
     live.push(h);
     if (n > topN) { topN = n; top = h; }
   }
+  // PINNED: Sevon's NINTH FORM line IS his ultimate's clock (the dragon rushes on "...RENGOKU!") - while it's running nothing
+  // newer can cut it; the newcomer is the one muted instead (and if it had been cut already, it comes back)
+  for (const f of fighterPool) {
+    const h = f.ninthSnd;
+    if (!h || typeof h !== 'object' || h.done || !(f.action && f.action.type === 'flameDragon' && f.action.phase !== 'follow')) continue;
+    top = h;
+    if (h.cut && h.g && actx) { h.cut = false; const t = actx.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setValueAtTime(Math.max(0.0001, h.g.gain.value), t); h.g.gain.linearRampToValueAtTime(1.0, t + 0.15); }
+  }
   for (const h of live) if (h !== top && !h.cut) cutUltAudio(h);
 }
 function updateBattleMusic(dt) {
@@ -13724,6 +13824,83 @@ const BROLY = {
 THROW_ANIM.broly = { rel: BROLY.lift + BROLY.slams * BROLY.swing, dur: BROLY.lift + BROLY.slams * BROLY.swing + 0.28 };
 // Aiden's throws (see AIDEN above)
 THROW_ANIM.giantSwing = { dur: 0.95, rel: 0.74 };
+// HAILIE'S DOWN THROW: THE PORTAL LOOP. Two portals open in a column - one on the floor in front of her, one straight above
+// it - and she SLAMS them down into the bottom one... out of the top one... into the bottom one... falling forever, faster
+// and faster (perpetual motion), streaking between them at mach 10 - until she leaps up beside the column and SPINNING
+// ROUNDHOUSE KICKS them out of it.
+const PORTAL_LOOP = { open: 0.22, kickAt: 1.12, dur: 1.5, height: 250, ahead: 95, v0: 900, v1: 4200, lapDmg: 0.8,
+                      kick: { dmg: 10, base: 640, growth: 7.2, angle: 28 } };
+THROW_ANIM.portalLoop = { dur: PORTAL_LOOP.dur, rel: PORTAL_LOOP.kickAt };
+function stepPortalLoop(f, a, dt) {
+  const L = PORTAL_LOOP, v = a.victim, F = a.face0;
+  if (a.cx === undefined) {                                       // where the column goes (kept on the stage)
+    a.cx = clamp(f.x + F * L.ahead, STAGE.x + 40, STAGE.x + STAGE.w - 40); a.yb = f.ground ? f.y : Math.min(f.y + 40, STAGE.y); a.yt = a.yb - L.height;
+    a.fy = a.yt; a.laps = 0; a.y0 = f.y;
+    burst(a.cx, a.yb - 6, [hPortalColor(f), '#ffffff'], 16, -Math.PI / 2, 0.8, 380, { grav: 0 }); burst(a.cx, a.yt - 6, [hPortalColor(f), '#ffffff'], 16, Math.PI / 2, 0.8, 380, { grav: 0 }); sfx.parry();
+  }
+  f.vx = approach(f.vx, 0, FRICTION * dt);
+  const T = a.t;
+  if (!a.released) {
+    if (T < L.open) {                                             // the portals open; she hoists them up...
+      const k = T / L.open;
+      v.x = lerp(f.x + F * 36, a.cx, k); v.y = lerp(f.y - 10, a.yb - 140, k); v.vx = v.vy = 0;
+      a.pose = H_POSE.throwW;
+    } else {                                                      // ...SLAMMED in: falling through the loop, faster and faster
+      if (!a.slammed) { a.slammed = true; a.fy = a.yb - 140; shake = Math.max(shake, 8); sfx.whoosh(true); }
+      const k = clamp((T - L.open) / (L.kickAt - L.open), 0, 1), sp = lerp(L.v0, L.v1, k * k);
+      a.fy += sp * dt;
+      while (a.fy > a.yb) {                                       // through the bottom one... out of the top one
+        a.fy -= L.height; a.laps++;
+        v.damage += L.lapDmg * powerOf(f); v.hitFlash = 0.05;
+        burst(a.cx, a.yt, [hPortalColor(f), '#ffffff'], 5, Math.PI / 2, 0.6, 300, { grav: 0 });
+        if (a.laps % 2 === 0) sfx.whoosh(false);
+      }
+      v.x = a.cx; v.y = a.fy; v.vx = 0; v.vy = sp; v.drawZ = 0;
+      if (Math.random() < dt * 90) ghosts.push({ fig: figureOf(v), life: 0.08, max: 0.08, color: hPortalColor(f) });   // the streak
+      a.pose = H_POSE.idle;
+      if (T > L.kickAt - 0.24) {                                  // she LEAPS up beside the column...
+        const kk = clamp((T - (L.kickAt - 0.24)) / 0.24, 0, 1);
+        f.x = lerp(f.x, a.cx - F * 52, 0.25); f.y = lerp(a.y0, (a.yb + a.yt) / 2 + 40, easeOut(kk)); f.vy = 0; f.ground = false; f.onPlatform = null;
+        a.pose = { ...pose({ lean: -0.25, bob: -8, legA: [1.55, 0.05], legB: [-0.5, 1.2], armA: [-1.0, -0.4], armB: [0.8, -1.2] }), turnX: Math.cos(kk * Math.PI * 2) };   // ...spinning
+      }
+    }
+    if (T >= L.kickAt) {                                          // THE SPINNING ROUNDHOUSE: out of the loop
+      a.released = true; v.drawZ = 0; v.action = null;
+      v.x = a.cx; v.y = (a.yb + a.yt) / 2 + 40; f.face = F;
+      knock(v, L.kick, F, powerOf(f), v.x, v.y - 50);
+      if (v.action && v.action.type === 'hitstun' && !v.action.crit) v.action.dur += THROW_HITSTUN_BONUS;
+      slashLine(v.x, v.y - 50, F > 0 ? 0.15 : Math.PI - 0.15, 220, 0.16);
+      burst(v.x, v.y - 50, [hPortalColor(f), '#ffffff', HL.gold], 30, F > 0 ? 0 : Math.PI, 0.7, 800, { grav: 0 }); ring(v.x, v.y - 50);
+      impactFrame = Math.max(impactFrame, 0.07); impactAt = { x: v.x, y: v.y - 50, ang: 0, all: false, focus: true };
+      shake = Math.max(shake, 16); hitstop = Math.max(hitstop, 0.12); sfx.launch(1); sfx.hit(1);
+      painTexts.push({ x: v.x, y: v.y - 150, t: 0.7, max: 0.7, text: a.laps + ' LAPS!', big: false });
+      a.kickPose = true;
+    }
+  } else {                                                        // after the kick: she drops back down, the portals close
+    a.pose = pose({ lean: -0.1, bob: -6, legA: [0.9, 0.9], legB: [-0.4, 0.6], armA: [-0.6, -0.4], armB: [0.6, -1.2] });
+    f.vy = Math.max(f.vy, 200);
+  }
+}
+// (drawing, in front) the two portals of the loop: an opening on the floor, one straight above it
+function drawPortalLoops() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'throw' || a.kind !== 'portalLoop' || a.cx === undefined) continue;
+    const L = PORTAL_LOOP, open = clamp(a.t / L.open, 0, 1) * (a.released ? clamp(1 - (a.t - L.kickAt) / (L.dur - L.kickAt), 0, 1) : 1);
+    if (open <= 0) continue;
+    const col = hPortalColor(f), spin = time * 9;
+    for (const y of [a.yb - 4, a.yt]) {
+      ctx.save();
+      if (!sketch) { const g = ctx.createRadialGradient(a.cx, y, 4, a.cx, y, 70 * open); g.addColorStop(0, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(255,60,30,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a.cx, y, 70 * open, 26 * open, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.strokeStyle = sketch ? '#333333' : col; ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(a.cx, y, 46 * open, 13 * open, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = sketch ? '#ffffff' : '#140608'; ctx.beginPath(); ctx.ellipse(a.cx, y, 40 * open, 10 * open, 0, 0, Math.PI * 2); ctx.fill();   // the hole
+      if (!sketch) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; for (let k = 0; k < 3; k++) { const an = spin + k * 2.1; ctx.beginPath(); ctx.ellipse(a.cx, y, 40 * open, 10 * open, 0, an, an + 0.9); ctx.stroke(); } }
+      ctx.restore();
+    }
+    if (!a.released && a.slammed && !sketch) {                    // the speed streak between them
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,200,180,0.18)'; ctx.fillRect(a.cx - 16, a.yt, 32, a.yb - a.yt); ctx.restore();
+    }
+  }
+}
 THROW_ANIM.quadPress  = { dur: 0.62, rel: 0.44 };
 THROW_ANIM.elbowDrop  = { dur: 1.05, rel: 0.95 };
 THROWS.giantSwing = { dmg: 11, base: 480, growth: 7.8, angle: 150 };
@@ -13870,7 +14047,9 @@ function drawCracks() {
 }
 
 function doThrow(f, v, kind) {
-  if (f.char === 'HAILIE' && kind === 'down') {                   // HAILIE: DOWN THROW = straight at her nearest portal (or the ground)
+  if (f.char === 'HAILIE' && kind === 'down') kind = 'portalLoop';   // HAILIE: DOWN THROW = the PORTAL LOOP (see stepPortalLoop)
+  if (f.char === 'HAILIE' && (kind === 'forward' || kind === 'back')) {   // HAILIE: SIDE THROWS = the PORTAL HURL - straight at her nearest portal (no portal out: slammed into the ground)
+    if (kind === 'back') f.face = -f.face;
     f.action = { type: 'land', t: 0, dur: 0.22 }; v.action = null; hailiePortalThrow(f, v); return;
   }
   if (kind === 'down' && CHARACTERS[f.char].downThrow === 'broly') kind = 'broly';   // Lance's down throw
@@ -13915,6 +14094,7 @@ function throwPath(kind, k) {
 
 function stepThrow(f, a, dt) {
   if (a.kind === 'broly') return stepBrolyThrow(f, a, dt);
+  if (a.kind === 'portalLoop') return stepPortalLoop(f, a, dt);   // Hailie's down throw
   if (a.kind === 'elbowDrop') return stepElbowDrop(f, a, dt);
   if (a.kind === 'piledriver') return stepPiledriver(f, a, dt);
   if (a.kind === 'rko') return stepRKO(f, a, dt);
@@ -18848,6 +19028,7 @@ function updateProjectiles(dt, only = null) {
   if (!only) beamClashScan();                                      // (two ki attacks meeting head on: BEAM CLASH)
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const s = projectiles[i];
+    if (!s) continue;                                              // (something earlier this frame removed several - e.g. Hailie's kunai trio)
     if (only && s.kind !== only) continue;
     ultHitCtx = ultProjectile(s);                                  // (ultimate shots get through a transformation)
     if (s.clash) { if (beamClashLive(s.clash)) continue; s.clash = null; }   // (locked in a beam clash: the struggle moves it)
@@ -18862,7 +19043,8 @@ function updateProjectiles(dt, only = null) {
       if (s.stuck) {
         const t = s.stuck; s.life -= dt;
         if (!fighters.includes(t) || t.respawnTimer > 0 || t.out || s.life <= 0) { projectiles.splice(i, 1); continue; }
-        s.x = t.x - (s.side || 1) * 6; s.y = t.y - 62; s.trail.length = 0;
+        s.x = t.x - (s.side || 1) * 6; s.y = t.y - 62 + (s.slot || 0) * 18; s.trail.length = 0;   // (a second one sits a little lower)
+        if (s.grp) { hailieTrioDone(s); continue; }               // (up K's trio: stays stuck till all three have landed - see hailieTrioDone)
         if (s.up) { projectiles.splice(i, 1); if (!o.upSpecialUsed || o.ground) { o.upSpecialUsed = true; hailieStrike(o, t); } continue; }   // (up K: it auto-teleports her in)
         continue;
       }
@@ -18873,11 +19055,12 @@ function updateProjectiles(dt, only = null) {
         if (t === o || allies(o, t) || t.respawnTimer > 0 || isIntangible(t)) continue;
         if (circleHitsFighter(s.x, s.y, s.r, t)) { if (applyHit(t, s, Math.sign(s.vx) || o.face, s.mult, s.x, s.y, { shot: s })) { stuck = t; } break; }
       }
-      if (stuck && !s.reflected) { s.stuck = stuck; s.life = H_KUNAI.stick; s.side = Math.sign(s.vx) || o.face; burst(s.x, s.y, [HL.gold, '#ffffff'], 8, 0, Math.PI, 300, { grav: 0 }); painTexts.push({ x: stuck.x, y: stuck.y - 130, t: 0.5, max: 0.5, text: 'MARKED', big: false }); continue; }
+      if (stuck && !s.reflected) { s.slot = projectiles.filter(q => q !== s && q.kunai && q.stuck === stuck).length; s.stuck = stuck; s.life = H_KUNAI.stick; s.side = Math.sign(s.vx) || o.face; burst(s.x, s.y, [HL.gold, '#ffffff'], 8, 0, Math.PI, 300, { grav: 0 }); painTexts.push({ x: stuck.x, y: stuck.y - 130, t: 0.5, max: 0.5, text: 'MARKED', big: false }); continue; }
       if (s.reflected) { s.reflected = false; s.kunai = false; continue; }      // (perfect-blocked: just a knife flying back)
       if (s.life <= 0 || s.x < BLAST.left || s.x > BLAST.right || s.y < BLAST.top) {
         projectiles.splice(i, 1);
-        if (s.up && o.respawnTimer <= 0) { if (!o.upSpecialUsed || o.ground) { o.upSpecialUsed = true; hTeleport(o, s.x, s.y + 96); o.vy = -320; } }   // UP K: she teleports up to it (her recovery)
+        if (s.grp) hailieTrioDone(s);                             // (up K's trio)
+        else if (s.up && o.respawnTimer <= 0) { if (!o.upSpecialUsed || o.ground) { o.upSpecialUsed = true; hTeleport(o, s.x, s.y + 96); o.vy = -320; } }   // UP K: she teleports up to it (her recovery)
       }
       continue;
     }
@@ -19090,7 +19273,7 @@ function nextChainKey(f, kind) {
 function chooseMove(f, inp, btn) {
   if (btn === 'atk') {
     if (f.ground) {
-      if (f.running && f.moveset.dashAttack && !inp.up && !inp.down) return 'dashAttack';   // RUNNING ATTACK
+      if (f.running && f.moveset.dashAttack && !inp.up && !inp.down && !(f.moveset.sideGround && f.moveset.sideGround.quickDraw)) return 'dashAttack';   // RUNNING ATTACK (not Sevon: running + J is still his FLAME DRAW)
       if (inp.up) return 'upGround';
       if (inp.down) return 'downGround';
       if (inp.dir) { f.face = inp.dir; return 'sideGround'; }
@@ -20951,6 +21134,15 @@ function aidenLariatReflex(f, ai, level) {
   inc.s.aidenRoll = f;
   if (Math.random() < (AIDEN_LARIAT_AI[level] ?? 0.65)) { ai.tapAtk = ai.tapGrab = ai.tapBlock = false; ai.block = false; ai.up = ai.down = false; ai.dir = 0; ai.tapSpc = true; }
 }
+// CPU SEVON: knocked off below the ledge - ODM hook the nearest ledge, then reel up onto it
+function aiSevonOdm(f, ai) {
+  if (!f.look || !f.look.odm || f.minion || !odmLedgeSave(f)) return;
+  const a = f.action;
+  if (a && a.type !== 'land') return;
+  if (f.odmLedge || (!f.odmHook && Math.hypot((f.x < STAGE.x + STAGE.w / 2 ? STAGE.x : STAGE.x + STAGE.w) - f.x, STAGE.y - f.y) < ODM_LEDGE.reach - 40)) {
+    ai.tapSpc = true; ai.tapAtk = false; ai.dir = 0; ai.up = ai.down = false;
+  }
+}
 function aiInput(f, level) {
   const L = AI_LEVELS[level];
   const ai = f.ai || (f.ai = { t: 0, dir: 0, up: false, down: false, block: false,
@@ -21001,6 +21193,7 @@ function aiInput(f, level) {
   aiFetchWeapon(f, ai);                                       // going to get the thrown weapon: walk / drop / climb to it
   aiTimeStop(f, ai, o, level);                                // Colby: TIME STOP when it's full - then COMBO them while they're frozen
   aiHailiePortals(f, ai, o, level);                           // Hailie: portals for RECOVERY, AMBUSHES and escapes
+  aiSevonOdm(f, ai);                                          // Sevon: ODM hook the ledge to get home
   aiHailiePhase(f, ai, o, level);                             // Hailie: INCORPOREAL - let it whiff, slip behind them, strike
   aiTfVanish(f, ai, o, level);                                // in a TRANSFORMATION: Z vanish out of trouble - or right next to them for its blast                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
 
@@ -22268,7 +22461,8 @@ function drawTourneyBackground() {
   ctx.fillStyle = 'rgba(255,255,255,0.85)';                                // clouds
   for (const [x, y, r] of [[160, 90, 34], [210, 80, 44], [260, 95, 30], [900, 60, 38], [960, 50, 50], [1020, 68, 32]]) { ctx.beginPath(); ctx.arc(x - (cam.x - W / 2) * 0.05, y, r, 0, Math.PI * 2); ctx.fill(); }
   const px = -(cam.x - W / 2) * 0.15;
-  ctx.fillStyle = '#5fb04f'; ctx.fillRect(-OX, 380, SW, 200);                // the far lawn
+  { const lg = ctx.createLinearGradient(0, 380, 0, grassY()); lg.addColorStop(0, '#5fb04f'); lg.addColorStop(1, '#3f8f38');   // the far lawn - all the way down to the
+    ctx.fillStyle = lg; ctx.fillRect(-OX, 380, SW, Math.max(200, grassY() - 380 + 20)); }                             //  ring-out grass, well below the ring
   for (const x of [-40, 120, 1110, 1290]) {                                   // palms
     const bx = x + px * 0.6; ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(bx, 390); ctx.quadraticCurveTo(bx + 10, 300, bx + 4, 250); ctx.stroke();
     ctx.fillStyle = '#2f8a3a'; for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; ctx.beginPath(); ctx.ellipse(bx + 4 + Math.cos(a) * 26, 250 + Math.sin(a) * 10, 34, 9, a, 0, Math.PI * 2); ctx.fill(); }
@@ -22722,11 +22916,14 @@ function drawTourneyStage() {
   grass.addColorStop(0, '#4fae45'); grass.addColorStop(1, '#2f7d2c');
   ctx.fillStyle = grass; ctx.fillRect(BLAST.left - 600, gy, BLAST.right - BLAST.left + 1200, 900);
   ctx.fillStyle = 'rgba(255,255,255,0.06)'; for (let x = Math.floor((BLAST.left - 600) / 80) * 80; x < BLAST.right + 600; x += 160) ctx.fillRect(x, gy, 80, 900);   // mowing stripes
-  ctx.fillStyle = '#2a4fa0'; ctx.fillRect(s.x - 6, s.y + 8, s.w + 12, TOURNEY.step - 8 + 4);   // the rim (front face)
+  { const by = s.y + TOURNEY.rim;                                                      // (the ring sits on the lawn as it always did - the ring-out grass is further down, in front)
+    const sh = ctx.createLinearGradient(0, by, 0, by + 22); sh.addColorStop(0, 'rgba(0,0,0,0.28)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh; ctx.fillRect(s.x - 10, by, s.w + 20, 22); }                      // its shadow on the lawn
+  ctx.fillStyle = '#2a4fa0'; ctx.fillRect(s.x - 6, s.y + 8, s.w + 12, TOURNEY.rim - 8 + 4);   // the rim (front face)
   ctx.fillStyle = '#d7dde3'; ctx.fillRect(s.x, s.y, s.w, 10);                        // the tile surface
-  ctx.fillStyle = '#c3ccd5'; ctx.fillRect(s.x, s.y + 10, s.w, TOURNEY.step - 12);
+  ctx.fillStyle = '#c3ccd5'; ctx.fillRect(s.x, s.y + 10, s.w, TOURNEY.rim - 12);
   ctx.strokeStyle = 'rgba(80,95,115,0.55)'; ctx.lineWidth = 1.5;                       // the tile grid
-  for (let x = s.x; x <= s.x + s.w + 1; x += s.w / 16) { ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x, s.y + TOURNEY.step - 2); ctx.stroke(); }
+  for (let x = s.x; x <= s.x + s.w + 1; x += s.w / 16) { ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x, s.y + TOURNEY.rim - 2); ctx.stroke(); }
   ctx.beginPath(); ctx.moveTo(s.x, s.y + 10); ctx.lineTo(s.x + s.w, s.y + 10); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(s.x, s.y, s.w, 2);            // (the lit edge)
   for (const st of stains) { ctx.globalAlpha = Math.min(1, st.life); ctx.fillStyle = st.color; ctx.fillRect(snap(st.x), st.y, PX() * st.w * 1.5, PX()); }
@@ -23030,7 +23227,7 @@ function basePose(p) {
     }
     return pose({ lean: 0.4, bob: -14, legA: [0.95, 1.1], legB: [-0.8, 0.3], armA: [0.6, 0] });   // follow-through
   }
-  if (a && a.type === 'throw' && ['elbowDrop', 'piledriver', 'rko', 'neckRun', 'neckRunBack', 'harvest', 'thunderKnee', 'skySpin', 'suplexStomp', 'volleySpike', 'masho', 'beamCannon', 'godBind'].includes(a.kind)) return { ...(a.pose || pose({})) };
+  if (a && a.type === 'throw' && ['portalLoop', 'elbowDrop', 'piledriver', 'rko', 'neckRun', 'neckRunBack', 'harvest', 'thunderKnee', 'skySpin', 'suplexStomp', 'volleySpike', 'masho', 'beamCannon', 'godBind'].includes(a.kind)) return { ...(a.pose || pose({})) };
   if (a && a.type === 'throw' && a.kind === 'giantSwing') {
     if (a.released) return pose({ lean: -0.2, bob: -6, legA: [0.6, 0.5], legB: [-0.6, 0.3], armA: [-1.7, 0], armB: [-1.5, -0.2], armC: [-1.4, 0.1], armD: [-1.2, 0] });
     return { ...pose({ lean: -0.35, bob: -10, legA: [0.7, 0.6], legB: [-0.6, 0.4], grip: gripOn(p, a.victim, 0) }), raw: true };   // leaning back, spinning
@@ -25652,6 +25849,7 @@ function render() {
       if (ult && ult.def && ult.def.raijin) drawRaijin(ult);        // Hailie's Flying Raijin: the kunai ring
       drawHailieFx();                                               // Hailie: the Rasengan in her hand
       drawJajanFx();                                                // Colby: Jajanken's Nen (stance glow, Rock's orb, Scissors' blade)
+      drawPortalLoops();                                            // Hailie's down throw: the two stacked portals
       drawCruelSun();                                               // Colten: THE SUN
     }
     drawProjectiles();
@@ -27180,8 +27378,8 @@ const MOVESETS = {
     { title: 'GROUND J', rows: [
       ['J, J, J', 'Knife Drop > Side Slash > Rising Slash', 'A down strike, a side slash and an up slash - every hit carries her forward, and the last pops them up the SAME little bit at any percent, so she can always follow it.'],
       ['SIDE J', 'Phase Dash', 'She streaks across the stage in wide slashing arcs (Mythra style).'],
-      ['UP J', 'Spin Slash', 'A spinning 360 with the knife.'],
-      ['DOWN J', 'Low Sweep', 'A low slash out to both sides.'],
+      ['UP J', 'Spin Slash', 'A spinning cyclone of flat side slashes - three cuts on both sides that keep them in it, then a big one that launches them up.'],
+      ['DOWN J', 'Back-and-Forth', 'Still facing forward: a reverse-grip slash BEHIND her, then a quick slash in front.'],
       ['RUN + J', 'Slide Cut', 'A sliding cut that pops them up.'] ] },
     { title: 'AIR J', rows: [
       ['AIR J', 'Flip Slash', 'A full flip with the knife cutting all the way round her.'],
@@ -27191,12 +27389,13 @@ const MOVESETS = {
       ['AIR DOWN J', 'Edge Drop', 'A slash from her side straight down - it spikes.'] ] },
     { title: 'K', rows: [
       ['K (HOLD)', 'Rasengan', 'Hold to charge it (full: keep holding it). Let go and she keeps it in her hand - even through a Z vanish. TAP K: she runs in and drives it into them.'],
-      ['SIDE K', 'Kunai', 'Throws a kunai - it STICKS in whoever it hits. Side K again: teleport to it. Stuck in someone: she teleports in with a stab, then a grab that throws them at her nearest portal (with a Rasengan in hand: the Rasengan instead).'],
-      ['UP K', 'Kunai Rise', 'Throws a kunai straight up and teleports to it (her recovery) - if it hits someone, she teleports in on them.'],
+      ['SIDE K', 'Kunai', 'Throws a kunai - it STICKS in whoever it hits. Side K again: teleport to it. Stuck in someone: she teleports in with a stab, then a grab that throws them at her nearest portal (with a Rasengan in hand: the Rasengan instead). TWO can be stuck in someone at once: with one stuck, HOLD side K to throw a second (tap = teleport) - then teleport-strike twice in a row.'],
+      ['UP K', 'Kunai Rise', 'THREE kunai: straight up and angled up to each side. Any that hit STICK (several can stack, on several people) and she teleport-strikes EVERY target in turn. None hit: she teleports up to the middle one (her recovery).'],
       ['DOWN K, DOWN K', 'Portal', 'Opens one end where she stands - down K again opens the other end where she is and she steps through. Anyone who touches an end comes out the other, and so do shots - even ultimate ones. (Each colour has its own portals.)'] ] },
     { title: 'DEFENCE + THROWS', rows: [
       ['BLOCK, BLOCK', 'Incorporeal', 'Double-tap block: she phases out for 4 seconds - nothing can touch her, but attacking pulls her straight back in. Block again to end it early.'],
-      ['DOWN THROW', 'Portal Toss', 'Throws them straight at her nearest portal - no portal out: down into the ground.'] ] },
+      ['FORWARD / BACK THROW', 'Portal Hurl', 'Throws them straight at her nearest portal (they come out the other end) - no portal out: slammed into the ground.'],
+      ['DOWN THROW', 'Portal Loop', 'Two portals open, one stacked over the other, and she slams them in: they fall through them forever, faster and faster - until she spinning-roundhouse kicks them out.'] ] },
     { title: 'TRANSFORM + ULTIMATE (I)', rows: [
       ['I (FULL METER)', 'THE VOICES', 'Harder, faster - and three AUTOMATIC phase-outs when a hit is coming.'],
       ['I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'] ] } ] },
@@ -27590,17 +27789,18 @@ function drawMovesets() {
                         : 'LEFT / RIGHT = CHARACTER   -   UP / DOWN / MOUSE WHEEL = SCROLL   -   ESC = BACK   -   KEYS SHOWN FOR YOUR KEYBOARD', W / 2, H - 14);
   });
 }
-// ---------------- ARCADE MODE: a 16-fighter TOURNAMENT, then a BONUS ROUND against the boss Colbalias ----------------
-// Pick your fighter and a difficulty. You're dropped into a random spot in a 16-fighter single-elimination bracket of
+// ---------------- ARCADE MODE: a 32-fighter TOURNAMENT, then a BONUS ROUND against the boss Colbalias ----------------
+// Pick your fighter and a difficulty. You're dropped into a random spot in a 32-fighter single-elimination bracket of
 // random opponents (a fresh draw every run). Win your match and you go through; every OTHER match in that round is
 // fought out in the background, so who you meet next is whoever won theirs. Win the FINAL and you're champion - then
 // the BONUS ROUND: the arcade-only BOSS Colbalias on HELLFIRE (one more shadow clone allowed out at once, and an extra
 // clone joining every exchange of his Shadow Clone Rush). Lose any tournament match and it all starts over - new draw.
-const ARCADE_SIZE = 16;
-const ARCADE_ROUND_NAMES = ['ROUND OF 16', 'QUARTERFINAL', 'SEMIFINAL', 'FINAL', 'BONUS ROUND'];
-const ARCADE_FINAL = 3, ARCADE_BONUS = 4;                     // (round indexes: the final, then the bonus round)
+const ARCADE_SIZE = 32;
+const ARCADE_ROUND_NAMES = ['ROUND OF 32', 'ROUND OF 16', 'QUARTERFINAL', 'SEMIFINAL', 'FINAL', 'BONUS ROUND'];
+const ARCADE_FINAL = 4, ARCADE_BONUS = 5;                     // (round indexes: the final, then the bonus round)
 const ARCADE_DIFFS = ['EASY', 'NORMAL', 'HARD', 'MASTER', 'IMPOSSIBLE'];
 const ARCADE_STOCKS = 3;
+const ARCADE_NO_REPEAT = 0.97;                                 // (the chance a same-character rematch next round gets swapped out)
 // THE TITLE you're chasing: the arcade tournament is THE BIGGEST RICHARD: LEGENDS COLLIDE - win it and the belt is yours
 const ARCADE_TITLE = 'THE BIGGEST RICHARD', ARCADE_SUB = 'LEGENDS COLLIDE';
 let arcade = null;   // { phase: 'pick' | 'vs' | 'lose' | 'win', sel, diff, round, t, dev, saved, active, br }
@@ -27680,8 +27880,8 @@ function openArcade(dev) {
   arcade = { phase: 'pick', sel: 0, diff: 1, round: 0, t: 0, dev: dev || 'keyboard', active: false, saved: null, br: null };
   scene = 'arcade';
 }
-// A NEW BRACKET: you + 15 random fighters, shuffled into the 16 slots. br.rounds[r] = who's still in at round r
-// (rounds[0] = all 16, rounds[1] = the 8 who won their first match... rounds[4] = the champion).
+// A NEW BRACKET: you + 31 random fighters, shuffled into the 32 slots. br.rounds[r] = who's still in at round r
+// (rounds[0] = all 32, rounds[1] = the 16 who won their first match... rounds[5] = the champion).
 function arcadeNewBracket(A) {
   const pool = arcadePicks(), me = pool[A.sel] || pool[0];
   const field = [{ c: me, me: true }];
@@ -27704,6 +27904,15 @@ function arcadeAdvance(A) {
     const a = R[i], b = R[i + 1];
     next.push(a.me ? a : b.me ? b : (realRandom() < 0.5 ? a : b));
   }
+  // NO REMATCH OF THE SAME FIGHTER TWICE IN A ROW (almost never): if whoever comes through to face you next is the same
+  // character you just beat, the OTHER one from their match goes through instead - and if both of them were that
+  // character, the one coming through is someone else
+  const last = R[arcadeMeIdx(A, A.round) ^ 1].c, mi = next.findIndex(e => e.me), ni = mi ^ 1;
+  if (next[ni] && next[ni].c === last && realRandom() < ARCADE_NO_REPEAT) {
+    const a = R[ni * 2], b = R[ni * 2 + 1], other = next[ni] === a ? b : a;
+    if (other && other.c !== last) next[ni] = other;
+    else { const pool = arcadePicks().filter(c => c !== 'COLBALIAS' && c !== last); if (pool.length) next[ni].c = pool[Math.floor(realRandom() * pool.length)]; }
+  }
   A.br.rounds[A.round + 1] = next;
 }
 // (your normal couch setup is put away while you play arcade, and put back when you leave)
@@ -27722,7 +27931,7 @@ function arcadeQuit() {
   removeAllMinions(); paused = false; matchOver = null;
   scene = 'home'; home.phase = 'menu'; menuSfx('back');
 }
-function arcadeBegin(A, dev) {                                  // (from the pick screen: a fresh bracket, round of 16)
+function arcadeBegin(A, dev) {                                  // (from the pick screen: a fresh bracket, round of 32)
   A.dev = dev; arcadeSave(); A.active = true; arcadeNewBracket(A); A.phase = 'vs'; A.t = 0; menuSfx('go');
 }
 function arcadeStartRound() {
@@ -27819,14 +28028,14 @@ function drawArcade() {
       sctx.restore();
     };
     const title = (str, y, size, col) => { sctx.textAlign = 'center'; sctx.font = F(size, true); sctx.fillStyle = sk ? 'rgba(29,27,42,0.9)' : '#000'; sctx.fillText(str, W / 2 + 4, y + 4); sctx.fillStyle = col || (sk ? MARKERS[0] : '#ffffff'); sctx.fillText(str, W / 2, y); };
-    // THE BRACKET: 8 fighters down each side, every round's winners moving in toward the middle, the two finalists
+    // THE BRACKET: 16 fighters down each side, every round's winners moving in toward the middle, the two finalists
     // meeting in the centre - and the champion's box (+ the bonus round) above them.
     // top = y of the first box, sp = the gap between the first-round boxes
     const bracket = (top, sp) => {
-      const br = A.br, bw = 116, bh = Math.min(22, sp - 2), colX = [36, 186, 336, 486];
+      const br = A.br, bw = 104, bh = Math.min(22, sp - 2), colX = [10, 130, 250, 370, 490], half = ARCADE_SIZE / 2;
       const R = r => (br && br.rounds[r]) || null;
-      const yOf = (r, i) => { const n = 8 >> r, k = i % n, span = (1 << r); return top + (k * span + (span - 1) / 2) * sp; };   // (each box sits midway between the two it came from)
-      const xOf = (r, i) => { const n = 8 >> r; return i < n ? colX[r] : W - colX[r] - bw; };
+      const yOf = (r, i) => { const n = half >> r, k = i % n, span = (1 << r); return top + (k * span + (span - 1) / 2) * sp; };   // (each box sits midway between the two it came from)
+      const xOf = (r, i) => { const n = half >> r; return i < n ? colX[r] : W - colX[r] - bw; };
       const cur = A.round, live = A.phase === 'vs' || A.phase === 'pick';
       // the connector lines first
       sctx.lineWidth = 2; sctx.lineCap = 'round';
@@ -27841,8 +28050,8 @@ function drawArcade() {
           sctx.beginPath(); sctx.moveTo(ex, y); sctx.lineTo(mx, y); sctx.lineTo(mx, ny); sctx.lineTo(tx, ny); sctx.stroke();
         }
       }
-      { const ly = yOf(3, 0) + bh / 2, champ = R(4);                // the two finalists, joined in the middle
-        sctx.strokeStyle = champ ? gold : faint; sctx.beginPath(); sctx.moveTo(colX[3] + bw, ly); sctx.lineTo(W - colX[3] - bw, ly); sctx.stroke();
+      { const ly = yOf(ARCADE_FINAL, 0) + bh / 2, champ = R(ARCADE_FINAL + 1);   // the two finalists, joined in the middle
+        sctx.strokeStyle = champ ? gold : faint; sctx.beginPath(); sctx.moveTo(colX[ARCADE_FINAL] + bw, ly); sctx.lineTo(W - colX[ARCADE_FINAL] - bw, ly); sctx.stroke();
         sctx.beginPath(); sctx.moveTo(W / 2, ly); sctx.lineTo(W / 2, ly - sp * 2.2); sctx.stroke(); }
       // the boxes
       const drawBox = (x, y, e, opts = {}) => {
@@ -27874,9 +28083,9 @@ function drawArcade() {
       }
       // round names over the columns
       sctx.textAlign = 'center'; sctx.font = F(10, true); sctx.fillStyle = dim;
-      ['ROUND OF 16', 'QUARTERS', 'SEMIS', 'FINAL'].forEach((nm, r) => { sctx.fillText(nm, colX[r] + bw / 2, top - 8); sctx.fillText(nm, W - colX[r] - bw / 2, top - 8); });
+      ['ROUND OF 32', 'ROUND OF 16', 'QUARTERS', 'SEMIS', 'FINAL'].forEach((nm, r) => { sctx.fillText(nm, colX[r] + bw / 2, top - 8); sctx.fillText(nm, W - colX[r] - bw / 2, top - 8); });
       // the CHAMPION's box + the trophy, and the BONUS ROUND beside it
-      const cy = yOf(3, 0) - sp * 2.2 - bh, cx = W / 2 - bw / 2, champ = R(4) && R(4)[0];
+      const cy = yOf(ARCADE_FINAL, 0) - sp * 2.2 - bh, cx = W / 2 - bw / 2, champ = R(ARCADE_FINAL + 1) && R(ARCADE_FINAL + 1)[0];
       drawBox(cx, cy, champ, { now: false });
       sctx.textAlign = 'center'; sctx.font = F(10, true); sctx.fillStyle = champ ? gold : dim; sctx.fillText(ARCADE_TITLE, W / 2, cy - 6);
       { const tx = W / 2, ty = cy - 40;
@@ -27893,8 +28102,8 @@ function drawArcade() {
     if (A.phase === 'pick') {
       belt(W / 2, 52, 1.05);
       sctx.font = F(15); sctx.fillStyle = dim; sctx.textAlign = 'center';
-      sctx.fillText('16 legends. ONE belt. Win 4 in a row to be crowned ' + ARCADE_TITLE + ' - then defend it against the BONUS BOSS.', W / 2, 104);
-      bracket(150, 17);
+      sctx.fillText('32 legends. ONE belt. Win 5 in a row to be crowned ' + ARCADE_TITLE + ' - then defend it against the BONUS BOSS.', W / 2, 104);
+      bracket(146, 16);
       const ch = picks[A.sel];
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(ch, W / 2, 440, 1.8, sk ? INK : (CHARACTERS[ch].look.body || '#fff'), menuTime);
@@ -27927,7 +28136,7 @@ function drawArcade() {
       title(ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 62, boss ? 54 : 46, boss ? '#ff2a2a' : null);
       { const left = ARCADE_FINAL + 1 - A.round; sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = boss ? '#ff6a6a' : gold;
         sctx.fillText(boss ? 'DEFEND THE BELT - BEAT THE BONUS BOSS FOR A RED STAR' : left === 1 ? 'ONE WIN FROM BEING ' + ARCADE_TITLE : left + ' WINS FROM ' + ARCADE_TITLE, W / 2, 88); }
-      bracket(150, 24);
+      bracket(124, 15);
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(me, W / 2 - 260, 640, 1.55, sk ? INK : (CHARACTERS[me].look.body || '#fff'), menuTime, 1);
       drawPortrait(foe, W / 2 + 260, 640, 1.55, sk ? INK : (CHARACTERS[foe].look.body || '#fff'), menuTime, -1);
@@ -27941,8 +28150,8 @@ function drawArcade() {
     } else if (A.phase === 'lose') {
       title('KNOCKED OUT', 92, 72, '#ff2a2a');
       sctx.textAlign = 'center'; sctx.font = F(22); sctx.fillStyle = ink;
-      sctx.fillText('Out in the ' + ARCADE_ROUND_NAMES[A.round].toLowerCase() + ' to ' + charName(A.lostTo || '') + ' - ' + ARCADE_TITLE + ' slips away. A new tournament starts from the round of 16.', W / 2, 136);
-      bracket(190, 24);
+      sctx.fillText('Out in the ' + ARCADE_ROUND_NAMES[A.round].toLowerCase() + ' to ' + charName(A.lostTo || '') + ' - ' + ARCADE_TITLE + ' slips away. A new tournament starts from the round of 32.', W / 2, 136);
+      bracket(176, 16);
       sctx.font = F(20); sctx.fillStyle = dim;
       if (A.t > 0.6) sctx.fillText('J / ENTER = NEW TOURNAMENT   -   K / ESC = QUIT', W / 2, H - 30);
     } else if (A.phase === 'win') {
@@ -27952,7 +28161,7 @@ function drawArcade() {
       sctx.fillText(A.bonusLost ? 'The belt is yours - but the BONUS BOSS was too much. Beat it to turn your star RED!'
                                 : 'The belt is yours AND the BONUS BOSS is beaten on ' + ARCADE_DIFFS[A.diff] + '.', W / 2, 108);
       belt(W / 2, 440, 1.25);
-      bracket(160, 22);
+      bracket(150, 14);
       // THE STAR: earned (new) / already had it - and how many of the five they've got
       {
         const dn = ARCADE_DIFFS[A.diff], pulse = 1 + 0.08 * Math.sin(A.t * 6), sx = W / 2 - 300, sy = 560;
