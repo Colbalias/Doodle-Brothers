@@ -21105,6 +21105,37 @@ function tfAoE(f) {                                               // the blast t
   if (C.len - T < 1.5) return { r: 220 * k * 0.8 };
   return null;
 }
+// CPU vs AIDEN'S PIRATE SHIP SLAM: anyone under where it'll land reads it once - PERFECT BLOCK it (shield thrown up just
+// before it lands - shipImpact then rolls whether they timed it), JUMP clear of it, or... get caught. Shut in his cage,
+// jumping won't help - so it's the shield or nothing.
+const SHIP_AI = { parry: { EASY: 0.2, NORMAL: 0.45, HARD: 0.7, MASTER: 0.85, IMPOSSIBLE: 1, BOSS: 1, FERAL: 0.1 },
+                  jump:  { EASY: 0.35, NORMAL: 0.6, HARD: 0.85, MASTER: 0.95, IMPOSSIBLE: 1, BOSS: 1, FERAL: 0.4 } };
+function aiShipParry(f, ai, level) {
+  if (f.minion || f.respawnTimer > 0) return;
+  const h = fighters.find(q => q !== f && !allies(f, q) && q.action && q.action.type === 'shipUlt');
+  if (!h) return;
+  const a = h.action, d = a.dir, tti = SHIP.slamEnd - a.t;
+  if (tti <= -0.05 || a.t < SHIP.pullEnd) return;
+  const caged = !!(cage && cage.owner === h && cage.members.includes(f));
+  const x0 = Math.min(a.x - d * 40, a.x + d * (SHIP.L + 60)), x1 = Math.max(a.x - d * 40, a.x + d * (SHIP.L + 60));
+  if (!caged && (f.x < x0 - 30 || f.x > x1 + 30)) return;
+  if (a.aiPlan === undefined) a.aiPlan = new Map();
+  let plan = a.aiPlan.get(f);
+  if (!plan) {                                                   // (decided once per slam)
+    const r = Math.random(), pp = SHIP_AI.parry[level] ?? 0.45;
+    plan = r < pp ? { kind: 'parry', at: 0.07 + Math.random() * 0.12 }
+         : (!caged && Math.random() < (SHIP_AI.jump[level] ?? 0.6)) ? { kind: 'jump', at: 0.22 + Math.random() * 0.1 } : { kind: 'none' };
+    a.aiPlan.set(f, plan);
+  }
+  const act = f.action, free = !act || ['land', 'shield'].includes(act.type) || f.shielding;
+  if (plan.kind === 'parry' && f.ground) {
+    ai.tapAtk = ai.tapSpc = ai.tapGrab = ai.tapJump = false; ai.dir = 0; ai.up = ai.down = false; ai.jumpHold = 0;
+    if (tti <= plan.at) { ai.block = true; if (!f.shielding && free) ai.tapBlock = true; }   // SHIELD UP - just as it comes down
+    else { ai.block = false; ai.tapBlock = false; }                                          // (wait for it...)
+  } else if (plan.kind === 'jump' && f.ground && tti <= plan.at && free) {
+    ai.tapJump = true; ai.jumpHold = 0.3; ai.block = false; ai.tapBlock = false;
+  }
+}
 function aiTfVanish(f, ai, o, level) {
   if (ninthSummon(f) && !f.minion && o && o.respawnTimer <= 0) {   // SEVON'S NINTH FORM: blink in closer to them while he breathes in
     ai.tfvCD = Math.max(0, (ai.tfvCD || 0) - STEP);
@@ -21205,7 +21236,8 @@ function aiInput(f, level) {
   aiHailiePortals(f, ai, o, level);                           // Hailie: portals for RECOVERY, AMBUSHES and escapes
   aiSevonOdm(f, ai);                                          // Sevon: ODM hook the ledge to get home
   aiHailiePhase(f, ai, o, level);                             // Hailie: INCORPOREAL - let it whiff, slip behind them, strike
-  aiTfVanish(f, ai, o, level);                                // in a TRANSFORMATION: Z vanish out of trouble - or right next to them for its blast                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
+  aiTfVanish(f, ai, o, level);
+  aiShipParry(f, ai, level);                                  // Aiden's PIRATE SHIP SLAM coming down: perfect block it (or jump)                                // in a TRANSFORMATION: Z vanish out of trouble - or right next to them for its blast                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
 
   // PARRY REFLEX (every frame, not just when it "thinks"): an attack is about to land on us - now and then snap the
   // shield up at just the right moment for a PERFECT BLOCK (better CPUs more often). Staggered from one of our own
@@ -27902,7 +27934,13 @@ function arcadeNewBracket(A) {
   for (let i = 1; i < ARCADE_SIZE; i++) field.push({ c: foes[Math.floor(realRandom() * foes.length)], me: false });
   for (let i = field.length - 1; i > 0; i--) { const j = Math.floor(realRandom() * (i + 1)); [field[i], field[j]] = [field[j], field[i]]; }
   A.br = { rounds: [field] };
-  A.round = 0; A.bonusLost = false; A.lostTo = null;
+  A.round = 0; A.bonusLost = false; A.lostTo = null; A.following = null;
+}
+// the fighter the run is following: your pick - or, WATCHING, whoever knocked them out (and on from there)
+function arcadeMeChar(A) {
+  if (!A.watch || !A.br) return arcadePicks()[A.sel];
+  const R = A.br.rounds[Math.min(A.round, ARCADE_FINAL + 1)] || A.br.rounds[A.br.rounds.length - 1], e = R && R.find(q => q.me);
+  return e ? e.c : arcadePicks()[A.sel];
 }
 const arcadeMeIdx = (A, r) => A.br.rounds[r] ? A.br.rounds[r].findIndex(e => e.me) : -1;
 function arcadeFoe(A) {
@@ -27950,7 +27988,7 @@ function arcadeBegin(A, dev) {                                  // (from the pic
 function arcadeStartRound() {
   const A = arcade, foe = arcadeFoe(A), boss = A.round >= ARCADE_BONUS;
   const me = players[0], cpu = players[1];
-  Object.assign(me, A.watch ? { off: false, cpu: true, dev: null, char: arcadePicks()[A.sel], level: 'AI ' + ARCADE_DIFFS[A.diff], team: 0, name: 'CPU' }   // (WATCH CPU: yours is a CPU too)
+  Object.assign(me, A.watch ? { off: false, cpu: true, dev: null, char: arcadeMeChar(A), level: 'AI ' + ARCADE_DIFFS[A.diff], team: 0, name: 'CPU' }   // (WATCH CPU: yours is a CPU too)
                             : { off: false, cpu: false, dev: A.dev, char: arcadePicks()[A.sel], team: 0, name: 'YOU' });
   Object.assign(cpu, { off: false, cpu: true, dev: null, char: foe, level: 'AI ' + ARCADE_DIFFS[A.diff], team: 1, name: 'CPU' });
   for (let i = 2; i < players.length; i++) players[i].off = true;
@@ -27974,6 +28012,11 @@ function arcadeMatchOver(won) {
     A.newStar = !A.watch && earnArcadeStar(ARCADE_DIFFS[A.diff], arcadePicks()[A.sel]);   // (the star: for winning the tournament - never while just WATCHING)
     A.newBoss = !A.watch && won ? earnBossStar(ARCADE_DIFFS[A.diff], arcadePicks()[A.sel]) : false;   // (+ the BOSS STAR for beating Colbalias)
     A.phase = 'win'; menuSfx(won ? 'go' : 'back');
+  } else if (!won && A.watch) {                                 // WATCHING: your pick's out - the tournament goes on, following whoever beat them
+    const R = A.br.rounds[A.round], i = arcadeMeIdx(A, A.round), w = R[i ^ 1];
+    if (!A.following) A.pickOut = { c: R[i].c, round: A.round };
+    R[i].me = false; w.me = true; A.following = w.c;
+    arcadeAdvance(A); A.round++; A.phase = 'vs'; menuSfx('go');
   } else if (!won) { A.lostTo = arcadeFoe(A); A.phase = 'lose'; menuSfx('back'); }
   else { arcadeAdvance(A); A.round++; A.phase = 'vs'; menuSfx('go'); }
   A.t = 0; scene = 'arcade';
@@ -28162,7 +28205,7 @@ function drawArcade() {
       sctx.font = F(15); sctx.fillStyle = dim;
       sctx.fillText('LEFT / RIGHT = FIGHTER   -   UP / DOWN = DIFFICULTY   -   TAB / Y = WATCH CPU   -   J / ENTER = START   -   K / ESC = BACK', W / 2, H - 16);
     } else if (A.phase === 'vs') {
-      const foe = arcadeFoe(A), boss = A.round >= ARCADE_BONUS, me = picks[A.sel];
+      const foe = arcadeFoe(A), boss = A.round >= ARCADE_BONUS, me = arcadeMeChar(A);
       sctx.textAlign = 'center'; sctx.font = F(19, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_TITLE + ': ' + ARCADE_SUB, W / 2, 22);
       title(ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 62, boss ? 54 : 46, boss ? '#ff2a2a' : null);
       { const left = ARCADE_FINAL + 1 - A.round; sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = boss ? '#ff6a6a' : gold;
@@ -28177,7 +28220,8 @@ function drawArcade() {
       sctx.font = F(70, true); sctx.fillStyle = boss ? '#ff2a2a' : accent; sctx.fillText('VS', W / 2, 600);
       sctx.font = F(15); sctx.fillStyle = dim;
       sctx.fillText(ARCADE_DIFFS[A.diff] + '  -  ' + ARCADE_STOCKS + ' STOCKS' + (boss ? '  -  HELLFIRE  -  THE BOSS, ' + ARCADE_DIFFS[A.diff] + ': ' + (ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].clones ? '+' + ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].clones + ' CLONES' : 'NO EXTRA CLONES') + (ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].stocks ? ', +' + ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]].stocks + ' STOCKS' : '') : ''), W / 2, 682);
-      if (A.watch) { sctx.font = F(18, true); sctx.fillStyle = '#5aa8ff'; sctx.fillText('WATCH CPU - NO STARS   -   ESC = LEAVE', W / 2, 710); }
+      if (A.watch) { sctx.font = F(18, true); sctx.fillStyle = '#5aa8ff';
+        sctx.fillText(A.following ? charName(A.pickOut.c) + ' IS OUT - NOW FOLLOWING ' + charName(me) + '   -   ESC = LEAVE' : 'WATCH CPU - NO STARS   -   ESC = LEAVE', W / 2, 710); }
       else if (A.t > 0.4) { sctx.font = F(20, true); sctx.fillStyle = Math.sin(menuTime * 5) > 0 ? accent : ink; sctx.fillText('PRESS J / ENTER WHEN YOU ARE READY', W / 2, 710); }   // (it waits for you)
     } else if (A.phase === 'lose') {
       title('KNOCKED OUT', 92, 72, '#ff2a2a');
@@ -28189,7 +28233,7 @@ function drawArcade() {
       else if (A.t > 0.6) sctx.fillText('J / ENTER = NEW TOURNAMENT   -   K / ESC = QUIT', W / 2, H - 30);
     } else if (A.phase === 'win') {
       sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_SUB + ' - CHAMPION', W / 2, 22);
-      title(charName(picks[A.sel]) + ' IS ' + ARCADE_TITLE + '!', 70, 46, '#ffd23f');
+      title(charName(arcadeMeChar(A)) + ' IS ' + ARCADE_TITLE + '!', 70, 46, '#ffd23f');
       sctx.textAlign = 'center'; sctx.font = F(20); sctx.fillStyle = ink;
       sctx.fillText(A.bonusLost ? 'The belt is yours - but the BONUS BOSS was too much. Beat it to turn your star RED!'
                                 : 'The belt is yours AND the BONUS BOSS is beaten on ' + ARCADE_DIFFS[A.diff] + '.', W / 2, 108);
@@ -28210,7 +28254,7 @@ function drawArcade() {
         drawCharStars(picks[A.sel], sx + 46 + 70, sy + 58, 9, sk);
       }
       const keep = sketch; if (sk) sketch = true;
-      drawPortrait(picks[A.sel], W / 2 + 420, 680, 2.0, sk ? INK : (CHARACTERS[picks[A.sel]].look.body || '#fff'), menuTime);
+      { const wc = arcadeMeChar(A); drawPortrait(wc, W / 2 + 420, 680, 2.0, sk ? INK : (CHARACTERS[wc].look.body || '#fff'), menuTime); }
       sketch = keep;
       sctx.textAlign = 'center';
       if (A.watch) { sctx.font = F(18); sctx.fillStyle = dim; sctx.fillText('A NEW TOURNAMENT STARTS IN A MOMENT   -   ESC = LEAVE', W / 2, H - 16); }
