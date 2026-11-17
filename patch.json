@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.81",
+    "version":  "0.7.82",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "d3f5beb67fe8cc9ddfef377e0b625c949e86adc7e34356b8f613e30a2e5ef888",
-                                     "size":  2146541
+                                     "hash":  "2e1842e8a9b5ccb69223f2eeb7a75c9d639c467ab333946f19c50d780c8a65f8",
+                                     "size":  2149074
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",

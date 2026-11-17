@@ -12610,15 +12610,17 @@ function nextBattleSong() {
 const BOSS_SONG = { file: 'master-of-puppets.mp3', from: 0 };   // (Metallica - Master of Puppets)
 // THE ARCADE BOSS (Colbalias) is tuned to the DIFFICULTY - the red star has to be earned. ai = his CPU level, taken / kb = the
 // damage and knockback he takes, dealt = the damage he does, speed = run/air speed, clones = extra clones out at once,
-// stocks = extra lives. Below IMPOSSIBLE he plays at YOUR difficulty's CPU level, a little tougher each step up - only
-// IMPOSSIBLE gets the maxed-out BOSS. CLONES: always +1 = 3 out at once in base, 4 transformed (or with a full DEMON meter's
+// stocks = extra lives. CLONES: always +1 = 3 out at once in base, 4 transformed (or with a full DEMON meter's
 // extra clone), 5 with the demon clone on top of the transformation.
+// THE BOSS IS THE SAME COLBALIAS ON EVERY DIFFICULTY: one natural BOSS buff over his roster self (ARCADE_BOSS_BUFF) - the only
+// thing the difficulty changes is how good the CPU playing him is (its AI level).
+const ARCADE_BOSS_BUFF = { taken: 0.82, kb: 0.84, dealt: 1.15, speed: 1.06, clones: 1, stocks: 0 };
 const ARCADE_BOSS_DIFF = {
-  EASY:       { ai: 'EASY',   taken: 1.0,  kb: 1.0,  dealt: 1.0,  speed: 1.0,  clones: 1, stocks: 0 },
-  NORMAL:     { ai: 'NORMAL', taken: 0.93, kb: 0.93, dealt: 1.06, speed: 1.02, clones: 1, stocks: 0 },
-  HARD:       { ai: 'HARD',   taken: 0.86, kb: 0.87, dealt: 1.12, speed: 1.05, clones: 1, stocks: 0 },
-  MASTER:     { ai: 'MASTER', taken: 0.78, kb: 0.8,  dealt: 1.22, speed: 1.08, clones: 1, stocks: 0 },   // (no extra lives on any difficulty - same stocks as you)
-  IMPOSSIBLE: { ai: 'BOSS',   taken: 0.42, kb: 0.48, dealt: 1.75, speed: 1.22, clones: 1, stocks: 0 },
+  EASY:       { ...ARCADE_BOSS_BUFF, ai: 'EASY' },
+  NORMAL:     { ...ARCADE_BOSS_BUFF, ai: 'NORMAL' },
+  HARD:       { ...ARCADE_BOSS_BUFF, ai: 'HARD' },
+  MASTER:     { ...ARCADE_BOSS_BUFF, ai: 'MASTER' },
+  IMPOSSIBLE: { ...ARCADE_BOSS_BUFF, ai: 'BOSS' },
 };
 const ARCADE_BOSS = { ...ARCADE_BOSS_DIFF.HARD };   // (set for each boss fight - see arcadeStartRound)
 const bossFight = () => !!(arcade && arcade.active && fighters.some(f => f.arcadeBoss));
@@ -28465,6 +28467,25 @@ const MINIGAMES = [
 const HB = { speed0: 650, upMine: 1.05, upHis: 1.03, cap: 2600, parry: 0.12, r: 16, turn: 2.2, firstWait: 1.0, overT: 1.6,
              spotX: 140, spotY: 70, board: 20, key: 'db-hunterball-board' };
 let hb = null;   // { phase: 'pick' | 'result', sel, dev, active, score, ball, best, board, ... }
+// THE ONLINE TOP 20 (a Supabase table: hunterball_scores - name, score, char). Fill in url + key (the project's PUBLIC "anon"
+// key) to switch it on; left empty, the board is just this computer's. If it can't be reached, it falls back to the local one.
+const HB_ONLINE = { url: '', key: '', table: 'hunterball_scores' };
+const hbOnline = { state: HB_ONLINE.url && HB_ONLINE.key ? 'loading' : 'off', list: [] };
+const hbHeaders = () => ({ apikey: HB_ONLINE.key, Authorization: 'Bearer ' + HB_ONLINE.key, 'Content-Type': 'application/json' });
+function hbFetchBoard() {
+  if (!HB_ONLINE.url || !HB_ONLINE.key) { hbOnline.state = 'off'; return Promise.resolve(); }
+  if (hbOnline.state !== 'ok') hbOnline.state = 'loading';
+  return fetch(HB_ONLINE.url.replace(/\/$/, '') + '/rest/v1/' + HB_ONLINE.table + '?select=name,score,char,created_at&order=score.desc,created_at.asc&limit=' + HB.board, { headers: hbHeaders() })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(rows => { hbOnline.list = (rows || []).map(e => ({ name: String(e.name || '?').slice(0, 12), score: e.score | 0, char: e.char, at: Date.parse(e.created_at) || 0 })); hbOnline.state = 'ok'; })
+    .catch(() => { hbOnline.state = 'error'; });
+}
+function hbSubmit(entry) {
+  if (!HB_ONLINE.url || !HB_ONLINE.key || !(entry.score > 0)) return Promise.resolve();
+  return fetch(HB_ONLINE.url.replace(/\/$/, '') + '/rest/v1/' + HB_ONLINE.table, { method: 'POST', headers: { ...hbHeaders(), Prefer: 'return=minimal' },
+    body: JSON.stringify({ name: entry.name, score: entry.score, char: entry.char || null }) })
+    .then(() => hbFetchBoard()).catch(() => { hbOnline.state = 'error'; });
+}
 function hbLoadBoard() { try { const v = JSON.parse(localStorage.getItem(HB.key) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
 function hbSaveBoard(b) { try { localStorage.setItem(HB.key, JSON.stringify(b)); } catch (e) {} }
 const hbName = () => { try { return (localStorage.getItem('stickman-brawl-name') || 'PLAYER').slice(0, 12); } catch (e) { return 'PLAYER'; } };
@@ -28472,6 +28493,7 @@ function openHunterBall(dev) {
   const picks = arcadePicks();
   hb = { phase: 'pick', sel: hb ? hb.sel : Math.max(0, picks.indexOf('COLBY')), dev: dev || 'keyboard', active: false, score: 0, board: hbLoadBoard(), t: 0 };
   scene = 'hunterball';
+  hbFetchBoard();                                                 // (the online top 20, if it's switched on)
 }
 function hbStart() {
   const A = hb, ch = arcadePicks()[A.sel];
@@ -28520,6 +28542,7 @@ function hbGameOver(why) {
   const board = hbLoadBoard(), prevBest = board.length ? board[0].score : 0, entry = { name: hbName(), score: hb.score, char: arcadePicks()[hb.sel], at: Date.now() };
   if (hb.score > 0) { board.push(entry); board.sort((a, b) => b.score - a.score || a.at - b.at); board.length = Math.min(board.length, HB.board); hbSaveBoard(board); }
   hb.board = board; hb.rank = board.indexOf(entry); hb.newBest = hb.score > 0 && hb.score > prevBest;
+  hb.entry = entry; hbSubmit(entry);                              // (and onto the ONLINE board, if it's on)
   sfx.ko ? sfx.ko() : sfx.slam();
 }
 function hbLeaveFight() {                                         // back out of the fight to the Hunter Ball screen
@@ -28625,15 +28648,17 @@ function drawHunterBallMenu() {
   const th = menuTheme(), px = th === 'pixel', sk = th === 'sketch';
   const F = (sz, bold) => px ? `${Math.max(8, Math.round(sz * 0.5))}px ${PX_FONT}` : sk ? `${sz}px ${DOODLE_FONT}` : `${bold ? 'italic ' : ''}${sz}px ${CG_FONT}`;
   const ink = sk ? INK : '#ffffff', dim = sk ? '#5a5470' : '#c9bfc4', green = sk ? '#2f8a3a' : '#86e63c', picks = arcadePicks();
-  const board = hb.board || [];
+  const online = hbOnline.state === 'ok', board = online ? hbOnline.list : (hb.board || []);
+  const boardTitle = online ? 'TOP ' + HB.board + ' - ONLINE' : 'TOP ' + HB.board + ' - THIS COMPUTER' + (hbOnline.state === 'loading' ? '  (loading online...)' : hbOnline.state === 'error' ? '  (online board unreachable)' : '');
+  const isMine = (e, i) => hb.phase === 'result' && (online ? !!hb.entry && e && e.name === hb.entry.name && e.score === hb.entry.score && board.findIndex(q => q.name === hb.entry.name && q.score === hb.entry.score) === i : i === hb.rank);
   withMenuDrawing(() => {
     if (sk) drawNotebook(); else if (px) { drawPXBackground(); blitPX(); } else drawCGBackground();
     const title = (str, y, size, col) => { sctx.textAlign = 'center'; sctx.font = F(size, true); sctx.fillStyle = sk ? 'rgba(29,27,42,0.9)' : '#000'; sctx.fillText(str, W / 2 + 4, y + 4); sctx.fillStyle = col; sctx.fillText(str, W / 2, y); };
     // THE BOARD (top 20, kept on this computer)
     const drawBoard = (x, y) => {
-      sctx.textAlign = 'center'; sctx.font = F(18, true); sctx.fillStyle = green; sctx.fillText('TOP ' + HB.board + ' - THIS COMPUTER', x, y);
+      sctx.textAlign = 'center'; sctx.font = F(18, true); sctx.fillStyle = green; sctx.fillText(boardTitle, x, y);
       for (let i = 0; i < HB.board; i++) {
-        const e = board[i], col = i < 10 ? 0 : 1, row = i % 10, ex = x - 290 + col * 330, ey = y + 26 + row * 21, mine = i === hb.rank && hb.phase === 'result';
+        const e = board[i], col = i < 10 ? 0 : 1, row = i % 10, ex = x - 290 + col * 330, ey = y + 26 + row * 21, mine = isMine(e, i);
         sctx.textAlign = 'left'; sctx.font = F(14, mine); sctx.fillStyle = mine ? '#ffd23f' : e ? ink : (sk ? 'rgba(29,27,42,0.3)' : 'rgba(255,255,255,0.22)');
         sctx.fillText((i + 1) + '.', ex, ey);
         sctx.fillText(e ? e.name + '  (' + charName(e.char) + ')' : '---', ex + 30, ey);
@@ -28659,7 +28684,9 @@ function drawHunterBallMenu() {
       title(hb.newBest ? 'NEW BEST!' : 'RALLY OVER', 80, 60, hb.newBest ? '#ffd23f' : green);
       sctx.textAlign = 'center'; sctx.font = F(40, true); sctx.fillStyle = ink; sctx.fillText(hb.score + (hb.score === 1 ? ' POINT' : ' POINTS'), W / 2, 136);
       sctx.font = F(16); sctx.fillStyle = dim;
-      sctx.fillText(hb.rank >= 0 ? 'That is #' + (hb.rank + 1) + ' on the board.' : hb.score > 0 ? 'Not quite enough for the top ' + HB.board + '.' : 'Tap block right as the ki blast reaches you!', W / 2, 166);
+      const oRank = online && hb.entry ? board.findIndex(q => q.name === hb.entry.name && q.score === hb.entry.score) : -1;
+      sctx.fillText(online && hb.score > 0 ? (oRank >= 0 ? 'That is #' + (oRank + 1) + ' in the WORLD!' : 'Not quite enough for the online top ' + HB.board + '.')
+                  : hb.rank >= 0 ? 'That is #' + (hb.rank + 1) + ' on the board.' : hb.score > 0 ? 'Not quite enough for the top ' + HB.board + '.' : 'Tap block right as the ki blast reaches you!', W / 2, 166);
       drawBoard(W / 2, 210);
       sctx.font = F(18); sctx.fillStyle = dim;
       if (hb.t > 0.5) sctx.fillText('J / ENTER = GO AGAIN   -   K / ESC = PICK A FIGHTER', W / 2, H - 24);
