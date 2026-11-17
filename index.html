@@ -10049,7 +10049,37 @@ function hailiePortal(f) {
     f.portalCD = H_PORTAL.cd; f.portalHold = true; hTeleport(f, P.a.x, P.a.y);
   }
 }
+// SOMEONE GOES THROUGH A PORTAL: the Wraith portal sound (sounds/battle/hailie-portal.mp3), and both ends FLARE - the one they
+// step into swells, flashes white and pulls them in (an after-image left behind); the one they come out of bursts open.
+const PORTAL_FX = { flash: 0.55, vol: 0.85, src: 'sounds/battle/hailie-portal.mp3' };
+let portalSfxEl = null;
+function playPortalSfx() {
+  if (!soundOn) return;
+  try {
+    if (!portalSfxEl) { portalSfxEl = new Audio(PORTAL_FX.src); portalSfxEl.preload = 'auto'; portalSfxEl.load(); }
+    const c = portalSfxEl.cloneNode(); c.volume = clamp(PORTAL_FX.vol * settings.master * settings.sfx, 0, 1); c.play().catch(() => {});
+  } catch (e) {}
+}
+try { portalSfxEl = new Audio(PORTAL_FX.src); portalSfxEl.preload = 'auto'; portalSfxEl.load(); } catch (e) {}   // (loaded up front - no gap before the first one)
+function portalTakenFx(o, g, A, B, entering) {
+  const col = hPortalColor(o);
+  if (entering) {                                                // IN: it swells and swallows them
+    A.flash = PORTAL_FX.flash; playPortalSfx();
+    ghosts.push({ fig: figureOf(g), life: 0.4, max: 0.4, color: col });
+    for (let k = 0; k < 24; k++) {                               // (energy pulled in from all round it)
+      const an = Math.random() * Math.PI * 2, d = 50 + Math.random() * 60, life = 0.25;
+      particles.push({ x: A.x + Math.cos(an) * d, y: A.y - 50 + Math.sin(an) * d * 1.6, vx: -Math.cos(an) * d / life, vy: -Math.sin(an) * d * 1.6 / life, life, max: life, size: 2 + Math.random() * 2, color: Math.random() < 0.5 ? col : '#ffffff', type: 'bit', grav: 0 });
+    }
+    ring(A.x, A.y - 50); auraWaves.push({ x: A.x, y: A.y - 50, t: 0, dur: 0.35, max: 90, color: col });
+  } else {                                                       // OUT: it bursts open and spits them out
+    B.flash = PORTAL_FX.flash;
+    burst(B.x, B.y - 50, [col, '#ffffff'], 30, 0, Math.PI, 520, { grav: 0 });
+    ring(B.x, B.y - 50); ring(B.x, B.y - 70); auraWaves.push({ x: B.x, y: B.y - 50, t: 0, dur: 0.4, max: 120, color: col });
+    shake = Math.max(shake, 5);
+  }
+}
 function updatePortals(dt) {
+  for (const o of fighters) if (o.hPortal) for (const e of [o.hPortal.a, o.hPortal.b]) if (e && e.flash > 0) e.flash = Math.max(0, e.flash - dt);   // (the flare fading)
   for (const g of fighters) if (g.hChain && g.hChain.length) {    // HAILIE's multi-target teleport strikes: the next one as each finishes
     const a = g.action;
     if (g.respawnTimer > 0 || (a && ['hitstun', 'grabbed', 'thrown', 'whipped', 'timeStop', 'ultVictim'].includes(a.type))) { g.hChain = null; continue; }
@@ -10070,9 +10100,9 @@ function updatePortals(dt) {
       for (const [A, B] of ends) {
         if (Math.hypot(g.x - A.x, (g.y - 45) - (A.y - 50)) > H_PORTAL.r + 8) continue;
         g.portalHold = true;
-        burst(A.x, A.y - 50, [hPortalColor(o), '#ffffff'], 10, 0, Math.PI, 320, { grav: 0 });
+        portalTakenFx(o, g, A, B, true);                          // the WHOOMP: the sound + both ends flaring
         g.x += B.x - A.x; g.y += B.y - A.y; g.onPlatform = null; g.ground = false; g.portalCD = H_PORTAL.cd;
-        burst(B.x, B.y - 50, [hPortalColor(o), '#ffffff'], 10, 0, Math.PI, 320, { grav: 0 }); sfx.vanish(0.5);
+        portalTakenFx(o, g, A, B, false);
         break;
       }
     }
@@ -10104,12 +10134,22 @@ function drawPortals() {
     const col = hPortalColor(o), fade = clamp(P.life / 1.2, 0, 1);
     for (const e of [P.a, P.b]) {
       if (!e) continue;
-      const cx = e.x, cy = e.y - 50, open = P.b ? 1 : 0.55, pulse = 1 + 0.06 * Math.sin(time * 6 + cx);
+      const fl = clamp((e.flash || 0) / PORTAL_FX.flash, 0, 1);       // (just taken: it FLARES - swells wide and flashes white)
+      const cx = e.x, cy = e.y - 50, open = (P.b ? 1 : 0.55) * (1 + 0.9 * fl), pulse = (1 + 0.06 * Math.sin(time * 6 + cx)) * (1 + 0.35 * fl);
       ctx.save(); ctx.globalAlpha = fade;
+      if (fl > 0 && !sketch) {                                      // the flare: a white-hot glow + a ring blowing outward
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const gr = ctx.createRadialGradient(cx, cy, 4, cx, cy, 90 * pulse); gr.addColorStop(0, `rgba(255,255,255,${0.85 * fl})`); gr.addColorStop(0.5, `rgba(255,255,255,${0.25 * fl})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(cx, cy, 70 * pulse, 100 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = col; ctx.lineWidth = 4 * fl; ctx.globalAlpha = fl;
+        ctx.beginPath(); ctx.ellipse(cx, cy, 20 + 70 * (1 - fl), 46 + 90 * (1 - fl), 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       ctx.fillStyle = 'rgba(10,0,20,0.75)'; ctx.beginPath(); ctx.ellipse(cx, cy, 20 * open * pulse, 46 * pulse, 0, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.shadowColor = col; ctx.shadowBlur = sketch ? 0 : 14; ctx.stroke(); ctx.shadowBlur = 0;
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.globalAlpha = fade * 0.6;
-      for (let k = 0; k < 3; k++) { const a0 = time * 3 + k * 2.1; ctx.beginPath(); ctx.ellipse(cx, cy, 12 * open, 32, 0, a0, a0 + 1.4); ctx.stroke(); }   // the swirl inside
+      for (let k = 0; k < 3; k++) { const a0 = time * (3 + 12 * fl) + k * 2.1; ctx.beginPath(); ctx.ellipse(cx, cy, 12 * open, 32 * (1 + 0.35 * fl), 0, a0, a0 + 1.4); ctx.stroke(); }   // the swirl inside (spinning fast as it's taken)
+      if (fl > 0) { ctx.globalAlpha = fade * fl * 0.8; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(cx, cy, 16 * open, 40 * pulse, 0, 0, Math.PI * 2); ctx.fill(); }   // (the white flash inside it)
       ctx.restore();
     }
   }

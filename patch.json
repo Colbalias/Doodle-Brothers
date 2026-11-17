@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.82",
+    "version":  "0.7.83",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "2e1842e8a9b5ccb69223f2eeb7a75c9d639c467ab333946f19c50d780c8a65f8",
-                                     "size":  2149074
+                                     "hash":  "7b1b22791b1e7b6a291398f749837fd4f24042e0cb36c9a2ce13339510321a55",
+                                     "size":  2152498
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -111,6 +111,10 @@
                                                                      "hash":  "4eed0285df623913c87549bf5cf98efa6bfda3207b68e312359cb6c75413003e",
                                                                      "size":  7563285
                                                                  },
+                  "sounds/battle/hailie-portal.mp3":  {
+                                                          "hash":  "82306d0a02df710bcb0b8f2a02919240fadf0739b4144895cbdba4f1bd691f90",
+                                                          "size":  77603
+                                                      },
                   "sounds/battle/heads-will-roll.mp3":  {
                                                             "hash":  "fc121da3565e8f7158ab48c98a15a4bd0be0249ef77b502b603563e4a0802eb0",
                                                             "size":  4877340
