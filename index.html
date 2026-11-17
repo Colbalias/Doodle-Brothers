@@ -7234,7 +7234,7 @@ function summonShadowClone(f) {
   if ((f.cloneCD || 0) > 0) { burst(f.x, f.y - 50, ['#3a0000', '#6e6e78'], 8, 0, Math.PI, 200, { grav: 0 }); return; }   // too soon: a puff of smoke
   let made = 0;
   for (let k = 0; k < 2; k++) {
-    const extra = cloneCount(f) >= cloneMax(f) && (f.demon || 0) >= 100 && !f.minion;   // (the meter's only spent when he actually goes past)
+    const extra = cloneCount(f) === cloneMax(f) && (f.demon || 0) >= 100 && !f.minion;   // (the meter's only spent when he actually goes past - and only ONE past his limit, ever)
     if ((cloneCount(f) >= cloneMax(f) && !extra) || !canAirDodge(f)) break;           // too many / no dots left
     if (extra) {                                              // DEMON CLONE: the extra one - the meter empties
       f.demon = 0;
@@ -9977,6 +9977,58 @@ function rasenHit(f, t) {
   if (c > 0.6) { painTexts.push({ x: t.x, y: t.y - 150, t: 0.8, max: 0.8, text: 'RASENGAN!', big: true }); impactFrame = Math.max(impactFrame, 0.07); impactAt = { x: t.x, y: t.y - 55, ang: 0, all: false, focus: true }; }
   sfx.blast(); sfx.hit(1);
 }
+// ---- HAILIE'S COMEBACK: knocked out WITH A FULL METER (once a match) - she never goes out: a PORTAL opens right beside whoever
+//      knocked her out (on the stage side of them) and she steps out of it with a FULLY CHARGED RASENGAN in her hand... and drives
+//      it into them (they're held for a moment as the portal opens - it can't miss), sending them toward the edge.
+const H_COMEBACK = { open: 0.38, drive: 0.2, behind: 110, freeze: 0.85, invuln: 1.6 };
+function startHailieComeback(f) {
+  f.hcbUsed = true; f.ult = 0; f.ultPower = 1;
+  const t = comebackFoe(f) || leeFoeFor(f, true);
+  Object.assign(f, { respawnTimer: 0, shielding: false, vx: 0, vy: 0 });
+  ultBanner = { t: 1.4, title: 'COMEBACK', name: 'RASENGAN', color: H_RASEN.blue[0], who: f };
+  if (!t) {                                                      // (nobody to go after: just back on the stage)
+    Object.assign(f, { x: clamp(f.x, stageL() + 150, stageR() - 150), y: STAGE.y, ground: true, onPlatform: null, action: null });
+    f.invuln = Math.max(f.invuln || 0, H_COMEBACK.invuln); return;
+  }
+  const toC = Math.sign((stageL() + stageR()) / 2 - t.x) || 1;   // (she comes out on the stage side of them - it sends them toward the edge)
+  const px = t.x + toC * H_COMEBACK.behind, py = t.y;
+  Object.assign(f, { x: px, y: py, ground: t.ground, onPlatform: t.onPlatform || null, face: -toC, rasen: 1 });
+  f.invuln = Math.max(f.invuln || 0, H_COMEBACK.invuln);
+  f.action = { type: 'hCome', t: 0, ph: 'open', tgt: t, px, py, toC };
+  if (!unstoppable(t)) { t.action = { type: 'hitstun', t: 0, dur: H_COMEBACK.freeze }; t.vx = t.vy = 0; t.shielding = false; }   // (held as the portal opens)
+  const col = hPortalColor(f);
+  burst(px, py - 50, [col, '#ffffff'], 40, 0, Math.PI, 600, { grav: 0 }); ring(px, py - 50); ring(px, py - 90);
+  impactFrame = Math.max(impactFrame, 0.1); impactAt = { x: px, y: py - 50, ang: 0, all: true, focus: true, invert: true };
+  shake = Math.max(shake, 14); sfx.parry(); sfx.vanish();
+  painTexts.push({ x: px, y: py - 160, t: 0.9, max: 0.9, text: 'THROUGH THE PORTAL!', big: true });
+}
+function stepHailieComeback(f, a, dt) {
+  const t = a.tgt, C = H_COMEBACK;
+  f.vx = f.vy = 0; f.rasen = 1;
+  if (a.ph === 'open') {                                         // out of the portal, the Rasengan roaring in her hand
+    f.x = a.px; f.y = a.py;
+    if (t && t.action && t.action.type === 'hitstun') { t.vx = t.vy = 0; }
+    if (Math.random() < dt * 50) burst(f.x - f.face * 18, f.y - 50, H_RASEN.blue, 2, 0, Math.PI, 260, { grav: 0 });
+    if ((a.wT = (a.wT || 0) - dt) <= 0) { a.wT = 0.1; auraWaves.push({ x: f.x, y: f.y - 50, t: 0, dur: 0.25, max: 70, color: H_RASEN.blue[0] }); }
+    if (a.t >= C.open) { a.ph = 'drive'; a.t = 0; sfx.whoosh(true); }
+    return;
+  }
+  if (a.ph === 'drive') {                                        // ...and DRIVES IT IN
+    if (!t || !fighters.includes(t) || t.respawnTimer > 0 || t.out) { f.action = null; return; }
+    const k = clamp(a.t / C.drive, 0, 1);
+    f.x = lerp(a.px, t.x + a.toC * 30, k * k); f.y = a.py; f.face = -a.toC;
+    if (Math.random() < dt * 60) ghosts.push({ fig: figureOf(f), life: 0.15, max: 0.15, color: H_RASEN.blue[0] });
+    if (k >= 1) {
+      ultHitCtx = true; f.rasen = 1; rasenHit(f, t); ultHitCtx = false;
+      impactFrame = Math.max(impactFrame, 0.16); impactAt = { x: t.x, y: t.y - 55, ang: 0, all: true, focus: true, invert: true };
+      shake = Math.max(shake, 26); camPunch = 1;
+      a.ph = 'end'; a.t = 0;
+    }
+    return;
+  }
+  f.rasen = 0;
+  if (a.t > 0.25) f.action = null;
+}
 // ---- PORTALS (down K): places one end where she stands; down K again opens the other end where she is NOW and she steps
 //      through to the first. Anyone who touches an end comes out the other - and so do shots (even ultimate ones). 15s.
 function hailiePortal(f) {
@@ -10887,7 +10939,7 @@ function thunderHeadbutt(f, s) {
 //   J      = ROCK      - a GIANT punch
 //   K      = PAPER     - his aura thrown out of his open palm: a projectile
 //   BLOCK  = SCISSORS  - a huge slash rising from below: great range, slices up high - and cuts through anything thrown at him
-const JAJAN = { maxCharge: 1.2, chargeBonus: 0.6, hops: 2, hopVx: 820, hopVy: -760, timeout: 5,   // (timeout: the stance lasts the whole chant)
+const JAJAN = { maxCharge: 1.2, chargeBonus: 0.6, hops: 2, hopVx: 820, hopVy: -760, timeout: Infinity,   // (timeout: none - he holds the stance as long as he likes, till he picks one)
                 gold: '#ffd23f', orange: '#ff8a1a' };
 const JJ_POSE = {
   stance: pose({ lean: 0.45, bob: -24, legA: [1.2, 1.4], legB: [-0.9, 0.4], armA: [-0.9, -1.6], armB: [0.6, -1.2] }),
@@ -10920,7 +10972,7 @@ function jjStart(f, key, mult) {
   const move = CHARACTERS.COLBY.bareMoves[key];
   f.action = { type: 'attack', key, move, btn: 'atk', phase: 'startup', t: 0, charge: 0, mult, hit: new Set(), air: !f.ground, started: time, startupMul: 1 };
 }
-CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active: 9, endlag: 0.12, landLag: 0.1, noClash: true, hitboxes: [],
+CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active: Infinity, endlag: 0.12, landLag: 0.1, noClash: true, hitboxes: [],
   wind: JJ_POSE.stance, strike: JJ_POSE.stance,
   fire(f, mult, c, a) { a.ct = 0; a.hops = 0; a.lastD = 0; painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'JAN... KEN...', big: false }); sfx.parry(); playJJ(f, false); },
   step(f, a, dt, inp) {
@@ -10954,11 +11006,49 @@ CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active:
     if (a.t > JAJAN.timeout) { a.phase = 'end'; a.t = 0; }
     return true;
   } };
+// ROCK CONNECTS: he HOLDS it - fist buried in them, both of them frozen there, the Nen pouring off the punch - for nearly a
+// second... then it all goes off at once: a huge golden explosion, and they're sent flying (harder than before)
+const JJ_ROCK = { hold: 0.85 };
 CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, active: 0.16, endlag: 0.32, landLag: 0.14, lunge: 1750, lungeFriction: 0.2, impactOnHit: true, noClash: true,
-  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 15, base: 760, growth: 8.6, angle: 38, group: 0 },
-             { x: 78, y: -58, r: 46, dmg: 15, base: 760, growth: 8.6, angle: 38, group: 0 }],   // (the NEN ORB round his fist: hits too, further out) - it LAUNCHES
+  hitboxes: [{ x: 54, y: -58, r: 36, dmg: 15, base: 920, growth: 10.4, angle: 38, group: 0 },
+             { x: 78, y: -58, r: 46, dmg: 15, base: 920, growth: 10.4, angle: 38, group: 0 }],   // (the NEN ORB round his fist: hits too, further out) - it LAUNCHES
   wind: JJ_POSE.stance, strike: JJ_POSE.rock,
-  fire(f) { const x = f.x + f.face * 56, y = f.y - 58; burst(x, y, [JAJAN.gold, JAJAN.orange, '#ffffff'], 30, f.face > 0 ? 0 : Math.PI, 0.7, 700, { grav: 0 }); ring(x, y); shake = Math.max(shake, 10); sfx.huge ? sfx.huge() : sfx.slam(); } };
+  fire(f) { const x = f.x + f.face * 56, y = f.y - 58; burst(x, y, [JAJAN.gold, JAJAN.orange, '#ffffff'], 30, f.face > 0 ? 0 : Math.PI, 0.7, 700, { grav: 0 }); ring(x, y); shake = Math.max(shake, 10); sfx.huge ? sfx.huge() : sfx.slam(); },
+  onHit(f, t, a, h, clean) {
+    if (a.hold || t.minion || t.respawnTimer > 0) return;
+    a.hold = { v: t, T: JJ_ROCK.hold, at: a.t, vx: t.vx, vy: t.vy, x: t.x, y: t.y };   // (the launch, kept for when it lets go)
+    t.vx = t.vy = 0;
+    if (t.action && t.action.type === 'hitstun') t.action.dur += JJ_ROCK.hold;
+    const x = f.x + f.face * 60, y = f.y - 58;
+    impactFrame = Math.max(impactFrame, 0.14); impactAt = { x, y, ang: 0, all: true, focus: true, invert: true };
+    shake = Math.max(shake, 18); camPunch = 1;
+    burst(x, y, [JAJAN.gold, '#ffffff'], 24, 0, Math.PI, 500, { grav: 0 }); ring(x, y);
+    painTexts.push({ x, y: y - 90, t: 0.9, max: 0.9, text: 'ROCK!!', big: true });
+  },
+  step(f, a, dt) {
+    const H = a.hold; if (!H || H.done) return false;
+    const v = H.v;
+    if (!fighters.includes(v) || v.respawnTimer > 0) { H.done = true; return false; }
+    H.T -= dt; a.t = H.at;                                       // (the punch stays frozen at the moment it connected)
+    f.vx = f.vy = 0;
+    v.x = H.x; v.y = H.y; v.vx = v.vy = 0; v.hitFlash = 0.05;    // (held right there on the fist)
+    const x = f.x + f.face * 60, y = f.y - 58;
+    shake = Math.max(shake, 4 + 6 * (1 - H.T / JJ_ROCK.hold));
+    if (Math.random() < dt * 60) burst(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30, [JAJAN.gold, JAJAN.orange, '#ffffff'], 2, 0, Math.PI, 300, { grav: 0 });   // the Nen crackling off the punch
+    if ((H.wT = (H.wT || 0) - dt) <= 0) { H.wT = 0.14; auraWaves.push({ x, y, t: 0, dur: 0.25, max: 60, color: JAJAN.gold }); }
+    if (H.T > 0) return true;
+    // ...AND IT GOES OFF
+    H.done = true; v.vx = H.vx; v.vy = H.vy;
+    impactFrame = Math.max(impactFrame, 0.2); impactAt = { x, y, ang: 0, all: true, focus: true, invert: true };
+    hitstop = Math.max(hitstop, 0.1); shake = Math.max(shake, 32); camPunch = 1;
+    burst(x, y, [JAJAN.gold, JAJAN.orange, '#ffffff', '#fff3a8'], 90, 0, Math.PI, 1300, { grav: 0 });
+    burst(x, y, [JAJAN.gold, '#ffffff'], 40, f.face > 0 ? 0 : Math.PI, 0.5, 1700, { grav: 0 });   // (the blast out the far side)
+    ring(x, y); ring(x, y - 20); ring(x, y + 20);
+    auraWaves.push({ x, y, t: 0, dur: 0.5, max: 320, color: JAJAN.gold }); auraWaves.push({ x, y, t: 0, dur: 0.7, max: 200, color: '#ffffff' });
+    if (f.ground) { dust(f.x + f.face * 40, f.y, 30, 3); cracks.push({ x: f.x + f.face * 50, y: f.y, life: 3, max: 3, seed: Math.random() * 1000, size: 1.6 }); }
+    sfx.huge ? sfx.huge() : sfx.slam(); sfx.clash(true); sfx.hit(1);
+    return true;
+  } };
 CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, active: 0.06, endlag: 0.26, landLag: 0.12, noClash: true, hitboxes: [],
   wind: JJ_POSE.paperWind, strike: JJ_POSE.paper,
   step(f, a, dt) {                                             // the open palm SENDS PROJECTILES BACK (from the push out, for a moment)
@@ -12520,13 +12610,15 @@ function nextBattleSong() {
 const BOSS_SONG = { file: 'master-of-puppets.mp3', from: 0 };   // (Metallica - Master of Puppets)
 // THE ARCADE BOSS (Colbalias) is tuned to the DIFFICULTY - the red star has to be earned. ai = his CPU level, taken / kb = the
 // damage and knockback he takes, dealt = the damage he does, speed = run/air speed, clones = extra clones out at once,
-// stocks = extra lives. MASTER and IMPOSSIBLE: absolutely insane.
+// stocks = extra lives. Below IMPOSSIBLE he plays at YOUR difficulty's CPU level, a little tougher each step up - only
+// IMPOSSIBLE gets the maxed-out BOSS. CLONES: always +1 = 3 out at once in base, 4 transformed (or with a full DEMON meter's
+// extra clone), 5 with the demon clone on top of the transformation.
 const ARCADE_BOSS_DIFF = {
-  EASY:       { ai: 'NORMAL', taken: 0.95, kb: 0.95, dealt: 1.05, speed: 1.0,  clones: 0, stocks: 0 },
-  NORMAL:     { ai: 'HARD',   taken: 0.85, kb: 0.86, dealt: 1.15, speed: 1.04, clones: 1, stocks: 0 },
-  HARD:       { ai: 'MASTER', taken: 0.74, kb: 0.78, dealt: 1.28, speed: 1.08, clones: 1, stocks: 0 },
-  MASTER:     { ai: 'BOSS',   taken: 0.56, kb: 0.6,  dealt: 1.5,  speed: 1.15, clones: 2, stocks: 0 },   // (no extra lives on any difficulty - same stocks as you)
-  IMPOSSIBLE: { ai: 'BOSS',   taken: 0.42, kb: 0.48, dealt: 1.75, speed: 1.22, clones: 3, stocks: 0 },
+  EASY:       { ai: 'EASY',   taken: 1.0,  kb: 1.0,  dealt: 1.0,  speed: 1.0,  clones: 1, stocks: 0 },
+  NORMAL:     { ai: 'NORMAL', taken: 0.93, kb: 0.93, dealt: 1.06, speed: 1.02, clones: 1, stocks: 0 },
+  HARD:       { ai: 'HARD',   taken: 0.86, kb: 0.87, dealt: 1.12, speed: 1.05, clones: 1, stocks: 0 },
+  MASTER:     { ai: 'MASTER', taken: 0.78, kb: 0.8,  dealt: 1.22, speed: 1.08, clones: 1, stocks: 0 },   // (no extra lives on any difficulty - same stocks as you)
+  IMPOSSIBLE: { ai: 'BOSS',   taken: 0.42, kb: 0.48, dealt: 1.75, speed: 1.22, clones: 1, stocks: 0 },
 };
 const ARCADE_BOSS = { ...ARCADE_BOSS_DIFF.HARD };   // (set for each boss fight - see arcadeStartRound)
 const bossFight = () => !!(arcade && arcade.active && fighters.some(f => f.arcadeBoss));
@@ -13144,7 +13236,7 @@ function circleHitsFighter(x, y, r, f) {
 // ---------------- Hits ----------------
 // (The AI only lands some of its perfect blocks, depending on difficulty - otherwise it would counter everything.)
 const parryRoll = t => t.controller !== 'dummy' ||
-  Math.random() < (t.arcadeBoss ? 1 : (t.look && t.look.demonMeter && !t.minion) ? 0.97 : ({ EASY: 0.1, NORMAL: 0.3, HARD: 0.55, MASTER: 0.7, IMPOSSIBLE: 0.97 }[(t.cpuLevel || DUMMY_MODES[dummyMode]).slice(3)] ?? 0.3));   // (Colbalias: his parry reflex already decided - see COLB_PARRY)
+  Math.random() < (t.arcadeBoss && ARCADE_BOSS.ai === 'BOSS' ? 1 : (t.look && t.look.demonMeter && !t.minion) ? 0.97 : ({ EASY: 0.1, NORMAL: 0.3, HARD: 0.55, MASTER: 0.7, IMPOSSIBLE: 0.97 }[(t.cpuLevel || DUMMY_MODES[dummyMode]).slice(3)] ?? 0.3));   // (Colbalias: his parry reflex already decided - see COLB_PARRY)
 // Returns true if the hit "connected" (hit or got blocked), false if it whiffed on a dodge.
 // src = { fighter } for melee hits, { shot } for projectiles (used for perfect-block counters/reflects).
 function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
@@ -16367,6 +16459,7 @@ function stepHunterL3Cut(f, a, dt) {
       if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
       if (Math.abs(o.x - f.x) > half + o.w / 2) continue;
       applyHit(o, { dmg: 7, base: 480, growth: 3.2, angle: 88 }, Math.sign(o.x - f.x) || f.face, 1, o.x, o.y - 50, { fighter: f });
+      o.pillarCaught = Object.assign(o.pillarCaught || {}, { x: f.x, half, t: 0.6 });   // (caught in it: Z = blink out of the column - see pillarEscape)
     }
   }
   // ...and it KEEPS HURTING for as long as it's up (33s - 44s): anyone in the column takes a blast every 0.3s, carried upward
@@ -16375,8 +16468,9 @@ function stepHunterL3Cut(f, a, dt) {
     const half = 150 * (S / HS);
     for (const o of fighters) {
       if (o === f || allies(f, o) || o.respawnTimer > 0 || o.halo > 0) continue;
-      if (Math.abs(o.x - f.x) > half + o.w / 2) continue;
+      if (Math.abs(o.x - f.x) > half + o.w / 2 || o.invuln > 0) continue;
       applyHit(o, { dmg: 3, base: 300, growth: 1.6, angle: 88 }, Math.sign(o.x - f.x) || f.face, 1, o.x, o.y - 50, { fighter: f });
+      o.pillarCaught = Object.assign(o.pillarCaught || {}, { x: f.x, half, t: 0.6 });
       burst(o.x, o.y - 50, ['#e6ff86', '#ffffff', '#86e63c'], 8, -Math.PI / 2, 0.6, 500, { grav: 0 });
     }
   }
@@ -19224,6 +19318,24 @@ function tfVanish(f, inp) {
   if (dx) f.face = dx > 0 ? 1 : -1;
   sfx.vanish();
 }
+// CAUGHT IN HUNTER'S LEGENDARY 3 PILLAR: a Z vanish (any time - hitstun or not) blinks you clean OUT of the column, off to
+// the side you're nearer (or the way you're holding), with a moment of invincibility. It costs a Z dot like any vanish.
+const PILLAR_ESCAPE = { clear: 110, invuln: 0.45 };
+function pillarEscape(f, inp) {
+  const P = f.pillarCaught; f.pillarCaught = null;
+  const side = inp.dir || Math.sign(f.x - P.x) || f.face;
+  f.dodgeCount = Math.min(airDodgeMax(f) + FATIGUE_MAX, f.dodgeCount + 1); f.dodgeRecover = DODGE_RECOVER;
+  ghosts.push({ fig: figureOf(f), life: 0.35, max: 0.35, color: '#ffffff' });
+  burst(f.x, f.y - 45, [f.energy, '#ffffff'], 14, 0, Math.PI, 420, { grav: 0 });
+  const nx = clamp(P.x + side * (P.half + PILLAR_ESCAPE.clear), BLAST.left + 120, BLAST.right - 120);
+  let ny = clamp(f.y, BLAST.top + 200, BLAST.bottom - 200);
+  if (nx > STAGE.x && nx < STAGE.x + STAGE.w && ny > STAGE.y) ny = STAGE.y;   // (never into the stage)
+  f.x = nx; f.y = ny; f.vx = side * 120; f.vy = 0;
+  f.ground = ny === STAGE.y && nx > STAGE.x && nx < STAGE.x + STAGE.w; f.onPlatform = null;
+  f.action = null; f.invuln = Math.max(f.invuln || 0, PILLAR_ESCAPE.invuln);
+  f.face = -side;
+  sfx.vanish();
+}
 // ANY TRANSFORMATION (anyone's - a new form, a power-up, a comeback form): their Z vanish dots are all refilled
 function tfRefillCheck(f) {
   const key = (f.transformed ? 1 : 0) + ':' + (f.lanceForm || 0) + ':' + (f.hForm || 0) + ':' + (f.ui ? 1 : 0) + ':' + (f.ssg ? 1 : 0) + ':' + (f.sage ? 1 : 0)
@@ -19872,7 +19984,8 @@ function stepAction(f, inp, dt) {
   if (a.type === 'leeUlt') return stepLeeLotus(f, a, dt);          // Colby: Primary Lotus
   if (a.type === 'hGrindCut') return stepHunterGrindCut(f, a, dt);  // Hunter: Glacier Grind (Broly demolishes Goku)
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
-  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
+  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else if (a.hailie) startHailieComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
+  if (a.type === 'hCome') return stepHailieComeback(f, a, dt);   // Hailie's comeback: out of the portal with a full Rasengan
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
   if (a.type === 'sunFrozen') {                                    // STOPPED by Colten's cut: held right there till the sun comes down
     const o = a.by;
@@ -20419,7 +20532,10 @@ function updateFighter(f, inp, dt) {
     }
   }
   if (f.flight) updateFlight(f, dt);
-  if ((rootedTf(f) || ninthSummon(f)) && inp.blockTap && canAirDodge(f)) tfVanish(f, inp);   // (Sevon's Ninth Form wind-up too)   // (transforming: a Z vanish blinks them somewhere better)
+  if (f.pillarCaught && (f.pillarCaught.t -= dt) <= 0) f.pillarCaught = null;
+  if (f.pillarCaught && inp.blockTap && canAirDodge(f) && !f.minion) { pillarEscape(f, inp); return; }   // HUNTER'S L3 PILLAR: Z blinks you out of it (even mid-hitstun)
+  const pillarUp = f.action && f.action.type === 'hL3Cut' && f.action.songT > H_L3_CUT.pillar[0] - 0.5 && f.action.songT < H_L3_CUT.pillar[1];   // (HUNTER in his pillar: ROOTED - it can't chase anyone down)
+  if ((rootedTf(f) || ninthSummon(f)) && !pillarUp && inp.blockTap && canAirDodge(f)) tfVanish(f, inp);   // (Sevon's Ninth Form wind-up too)   // (transforming: a Z vanish blinks them somewhere better)
   if (f.look && f.look.odm) updateOdm(f, dt);                     // Sevon: the ODM hook in flight + the cable
   f.flyCD = Math.max(0, (f.flyCD || 0) - dt);
   if (f.kiMark) { f.kiMark.time -= dt; kiMarkTarget(f); }         // Lance's ki mark wears off
@@ -20658,6 +20774,14 @@ function updateFighter(f, inp, dt) {
         f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0, lotus: true }; return;
       }
       startLotusComeback(f); return;
+    }
+    if (f.char === 'HAILIE' && !f.hcbUsed && cbReady) {          // HAILIE: through a portal with a FULL RASENGAN
+      f.ult = 0;
+      if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) {
+        f.hcbUsed = true; f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
+        f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0, hailie: true }; return;
+      }
+      startHailieComeback(f); return;
     }
     const st0 = gameOptions.stocks > 0 ? gameOptions.stocks : Infinity, lanceStock = !isFinite(f.stocks) || !isFinite(st0) || f.stocks === st0 - 1 || f.stocks === 1;
     if (f.char === 'LANCE' && !f.sgUsed && cbReady && lanceStock) {   // LANCE: SUPER SAIYAN GOD - only on his SECOND or LAST stock
@@ -21243,7 +21367,22 @@ function aiInput(f, level) {
   aiSevonOdm(f, ai);                                          // Sevon: ODM hook the ledge to get home
   aiHailiePhase(f, ai, o, level);                             // Hailie: INCORPOREAL - let it whiff, slip behind them, strike
   aiTfVanish(f, ai, o, level);
-  aiShipParry(f, ai, level);                                  // Aiden's PIRATE SHIP SLAM coming down: perfect block it (or jump)                                // in a TRANSFORMATION: Z vanish out of trouble - or right next to them for its blast                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
+  aiShipParry(f, ai, level);                                  // Aiden's PIRATE SHIP SLAM coming down: perfect block it (or jump)
+  if (!f.minion && !f.pillarCaught) {                         // Hunter's LEGENDARY 3 PILLAR is up (or about to be): KEEP OUT of its column
+    const hp = fighters.find(q => q !== f && !allies(f, q) && q.action && q.action.type === 'hL3Cut' && q.action.songT > H_L3_CUT.pillar[0] - 1.2 && q.action.songT < H_L3_CUT.pillar[1]);
+    if (hp) {
+      const half = 150 * (hScale(hp) / HS) + 140, dx = f.x - hp.x;
+      if (Math.abs(dx) < half) { ai.dir = Math.sign(dx) || 1; ai.tapAtk = ai.tapSpc = ai.tapGrab = false; ai.block = false; ai.holdBtn = null;
+        if (f.ground && Math.abs(dx) < half - 60 && Math.random() < STEP * 6) ai.tapJump = true; }
+      else if (Math.abs(dx) < half + 120 && Math.sign(ai.dir) === -Math.sign(dx)) { ai.dir = 0; ai.tapAtk = ai.tapSpc = false; }   // (and don't walk / dash back in)
+    }
+  }
+  if (f.pillarCaught && !f.minion && canAirDodge(f)) {        // caught in Hunter's LEGENDARY 3 PILLAR: Z vanish out of it
+    const P = f.pillarCaught;
+    if (P.aiAt === undefined) P.aiAt = Math.random() < ({ EASY: 0.5, NORMAL: 0.75, HARD: 0.9, MASTER: 0.97, IMPOSSIBLE: 1, BOSS: 1, FERAL: 0.4 }[level] ?? 0.75)
+                                      ? ({ EASY: 0.35, NORMAL: 0.2, HARD: 0.12, MASTER: 0.06, IMPOSSIBLE: 0.02, BOSS: 0.02 }[level] ?? 0.2) : 99;   // (how fast it reacts - or misses it this time)
+    if ((P.waited = (P.waited || 0) + STEP) >= P.aiAt) { ai.tapBlock = true; ai.block = false; ai.dir = Math.sign(f.x - P.x) || 1; ai.up = ai.down = false; ai.tapAtk = ai.tapSpc = ai.tapJump = false; }
+  }                                // in a TRANSFORMATION: Z vanish out of trouble - or right next to them for its blast                           // Aiden: shots coming = DARKEST LARIAT (they pass through it)                                 // Lance's FINAL KAMEHAMEHA coming: get out of its way
 
   // PARRY REFLEX (every frame, not just when it "thinks"): an attack is about to land on us - now and then snap the
   // shield up at just the right moment for a PERFECT BLOCK (better CPUs more often). Staggered from one of our own
@@ -21468,7 +21607,7 @@ function aiDecide(f, o, ai, L) {
     if (f.ground && adx < 160 && Math.abs(dy) < 60 && !(oa && (oa.type === 'hitstun' || oa.type === 'parried' || oa.type === 'dizzy')) &&
         !(f.opening > 0) && Math.random() < L.defend * 0.6) { f.face = toward; ai.dir = 0; return; }
     const n = cloneCount(f);
-    const canSummon = (f.cloneCD || 0) <= 0 && (n < cloneMax(f) || (f.demon || 0) >= 100) && f.dodgeCount <= airDodgeMax(f) - 2;   // (keeps 2 Z vanishes for getting home)
+    const canSummon = (f.cloneCD || 0) <= 0 && (n < cloneMax(f) || ((f.demon || 0) >= 100 && n === cloneMax(f))) && f.dodgeCount <= airDodgeMax(f) - 2;   // (keeps 2 Z vanishes for getting home)
     if (canSummon && adx < 900 && Math.abs(dy) < 260 && Math.random() < (adx < 180 ? 0.55 : 0.3)) {   // (SPAMS them)
       f.face = toward; ai.down = true; ai.tapSpc = true; return;
     }
@@ -21934,6 +22073,7 @@ function update(dt) {
   const held = [];
   for (const v of fighters) { const a = v.action; if (a && (a.type === 'thrown' || a.type === 'grabbed') && a.holder) held.push([v, v.damage, a.holder]); }
   updateSim(dt);
+  updateHunterBall(dt);                                     // (HUNTER BALL minigame: the ki blast rally)
   for (const v of fighters) if ((ulted0.has(v) || beingUlted(v)) && meter0.has(v) && (v.ult || 0) > meter0.get(v)) v.ult = meter0.get(v);
   for (const v of fighters) if (v.look && v.look.grows && !v.minion) {   // HUNTER: transformed = bigger still (drawn, hit and reach)
     v.sizeMul = 1 + (v.transformed ? HUNTER_SIZE.tf : 0) + (v.hForm ? (v.hairGrow !== undefined && v.hForm === 3 ? lerp(HUNTER_FORMS[2].size, HUNTER_FORMS[3].size, v.hairGrow) : HUNTER_FORMS[v.hForm].size) : 0);   // (+ his rage forms - Legendary 3 grows in during its cutscene)
@@ -25647,6 +25787,7 @@ function drawHUD() {
   if (demo && !ult && !gameOptions.cleanHud && SHOW_FIGHT_TEXT) text(demo.kind === 'clash' ? 'DEMO: CLASH  (slow motion)' : demo.kind === 'ult' ? 'DEMO: ULTIMATE' :
                          demo.kind === 'broly' ? 'DEMO: LANCE DOWN THROW - SPECIAL BEAM CANNON  (half speed)' : 'DEMO: PERFECT BLOCK + COUNTER  (slow motion)',
                  W / 2, 150, 12, '#ffffff', 'center');
+  drawHunterBallHUD();                                          // (HUNTER BALL: the rally count)
   if (hudToast) {
     hudToast.t -= 1 / 60;
     if (hudToast.t <= 0) hudToast = null;
@@ -25904,6 +26045,7 @@ function render() {
       drawHailieFx();                                               // Hailie: the Rasengan in her hand
       drawJajanFx();                                                // Colby: Jajanken's Nen (stance glow, Rock's orb, Scissors' blade)
       drawPortalLoops();                                            // Hailie's down throw: the two stacked portals
+      drawHunterBall();                                             // the HUNTER BALL minigame's ki blast
       drawCruelSun();                                               // Colten: THE SUN
     }
     drawProjectiles();
@@ -26539,6 +26681,7 @@ function checkMatchEnd() {
   }
 }
 function showResults() {
+  if (hb && hb.active) { matchOver = null; hbGameOver('ko'); hbLeaveFight(); return; }   // (HUNTER BALL: back to its own screen)
   if (arcade && arcade.active) {   // ARCADE: a WIN only if you're still standing and they're really out of lives (no star otherwise)
     const me = fighters[0], foe = fighters[1];
     const won = !!matchOver.winner && matchOver.winner === me && !me.out && me.stocks > 0 && !!foe && foe.out && !(foe.stocks > 0);
@@ -26587,7 +26730,7 @@ function startMatch() {
     f.color = matchTeams ? TEAM_COLORS[pl.team].main : FIGHTER_INIT[i].color;   // TEAMS: the team's colour
     f.binds = profileOf(pl.profile);                                              // this player's CONTROLS PRESET
     if (!pl.cpu) rememberDevPreset(pl.dev, pl.profile || 'DEFAULT');               // (so the MOVESETS page shows this device's buttons later)
-    f.kos = 0; f.ult = 0; f.disp = null; f.ss2Seen = false; f.ss1Seen = false; f.sgUsed = false; f.ssg = false; f.lotusUsed = false; stopSsgSong(f);   // (Lance: the Super Saiyan / Super Saiyan 2 cutscenes play again in a new match)
+    f.kos = 0; f.ult = 0; f.disp = null; f.ss2Seen = false; f.ss1Seen = false; f.sgUsed = false; f.ssg = false; f.lotusUsed = false; f.hcbUsed = false; stopSsgSong(f);   // (Lance: the Super Saiyan / Super Saiyan 2 cutscenes play again in a new match)
     f.stocks = gameOptions.stocks > 0 ? gameOptions.stocks : Infinity;   // lives
     f.cpuLevel = pl.cpu ? pl.level : null;                                // each CPU plays at its own level
     f.timeMeter = 0; f.tsCD = 0;
@@ -26627,7 +26770,8 @@ function claimFighter(dev) {
   menuSfx('pick');
 }
 function backToSelect() {
-  if (arcade && arcade.active) { arcadeQuit(); return; }   // (quitting a fight in ARCADE leaves the gauntlet)
+  if (arcade && arcade.active) { arcadeQuit(); return; }
+  if (hb && hb.active) { hbQuit(); return; }                     // (quitting HUNTER BALL: back to the minigames)   // (quitting a fight in ARCADE leaves the gauntlet)
   scene = 'select'; paused = false;
   removeAllMinions();
   for (const f of fighters) { stopKameCharge(f); stopShotCharge(f); }
@@ -27933,8 +28077,8 @@ function drawArcadeStars(th) {
   });
 }
 const arcadePicks = () => ROSTER.filter(c => c && c !== 'STICKMAN');   // (no Stickman in arcade mode - not to play, not to fight)
-function openArcade(dev) {
-  arcade = { phase: 'pick', sel: 0, diff: 1, round: 0, t: 0, dev: dev || 'keyboard', active: false, saved: null, br: null, watch: false };
+function openArcade(dev, practice = false) {   // (practice = MINIGAMES > BOSS PRACTICE: straight to the boss, no stars)
+  arcade = { phase: 'pick', sel: 0, diff: 1, round: 0, t: 0, dev: dev || 'keyboard', active: false, saved: null, br: null, watch: false, practice };
   scene = 'arcade';
 }
 // A NEW BRACKET: you + 31 random fighters, shuffled into the 32 slots. br.rounds[r] = who's still in at round r
@@ -27990,12 +28134,16 @@ function arcadeRestore() {
   for (const f of fighterPool) f.arcadeBoss = false;
 }
 function arcadeQuit() {
+  const practice = arcade && arcade.practice;
   arcadeRestore(); arcade = null;
   removeAllMinions(); paused = false; matchOver = null;
+  if (practice) { openMinigames(); menuSfx('back'); return; }      // (BOSS PRACTICE: back to the minigames)
   scene = 'home'; home.phase = 'menu'; menuSfx('back');
 }
+const arcadeLeavePick = A => { arcade = null; if (A.practice) { openMinigames(); menuSfx('back'); } else goHome(); };
 function arcadeBegin(A, dev) {                                  // (from the pick screen: a fresh bracket, round of 32)
   A.dev = dev; arcadeSave(); A.active = true; arcadeNewBracket(A); A.phase = 'vs'; A.t = 0; menuSfx('go');
+  if (A.practice) { A.watch = false; A.br = { rounds: [[{ c: arcadePicks()[A.sel], me: true }]] }; A.round = ARCADE_BONUS; }   // (BOSS PRACTICE: straight to the boss)
 }
 function arcadeStartRound() {
   const A = arcade, foe = arcadeFoe(A), boss = A.round >= ARCADE_BONUS;
@@ -28019,6 +28167,7 @@ function arcadeStartRound() {
 function arcadeMatchOver(won) {
   const A = arcade;
   removeAllMinions();
+  if (A.practice) { A.won = won; A.phase = 'practiceEnd'; A.t = 0; scene = 'arcade'; menuSfx(won ? 'go' : 'back'); return; }   // (BOSS PRACTICE: no stars - rematch or leave)
   if (A.round >= ARCADE_BONUS) {                                // the BONUS ROUND: you're champion either way - the star needs the win
     A.bonusLost = !won;
     A.newStar = !A.watch && earnArcadeStar(ARCADE_DIFFS[A.diff], arcadePicks()[A.sel]);   // (the star: for winning the tournament - never while just WATCHING)
@@ -28051,9 +28200,9 @@ function arcadeUpdate(dt) {
       if (d.tap.right) { A.sel = (A.sel + 1) % picks.length; menuSfx('move'); }
       if (d.tap.up) { A.diff = Math.max(0, A.diff - 1); menuSfx('move'); }
       if (d.tap.down) { A.diff = Math.min(ARCADE_DIFFS.length - 1, A.diff + 1); menuSfx('move'); }
-      if (d.tap.alt) { A.watch = !A.watch; menuSfx('move'); }     // TAB / Y = WATCH CPU on / off
+      if (d.tap.alt && !A.practice) { A.watch = !A.watch; menuSfx('move'); }     // TAB / Y = WATCH CPU on / off
       if (d.tap.ok || d.tap.start) { arcadeBegin(A, d.dev); return; }
-      if (d.tap.back || d.tap.esc) { arcade = null; goHome(); return; }
+      if (d.tap.back || d.tap.esc) { arcadeLeavePick(A); return; }
     } else if (A.phase === 'vs') {
       if ((d.tap.ok || d.tap.start) && A.t > 0.4) { arcadeStartRound(); return; }
       if (d.tap.esc) { arcadeQuit(); return; }
@@ -28062,14 +28211,17 @@ function arcadeUpdate(dt) {
       if (d.tap.back || d.tap.esc) { arcadeQuit(); return; }
     } else if (A.phase === 'win') {
       if ((d.tap.ok || d.tap.start || d.tap.back || d.tap.esc) && A.t > 1) { arcadeQuit(); return; }
+    } else if (A.phase === 'practiceEnd') {                          // BOSS PRACTICE over: go again, or back to the minigames
+      if ((d.tap.ok || d.tap.start) && A.t > 0.6) { A.phase = 'vs'; A.t = 0; menuSfx('go'); return; }
+      if ((d.tap.back || d.tap.esc) && A.t > 0.3) { arcadeQuit(); return; }
     }
   }
   if (mouse.click && A.phase === 'pick') {
     picks.forEach((c, k) => { if (inRect(mouse, arcadeTileRect(k))) { if (A.sel === k) arcadeBegin(A, 'keyboard'); else { A.sel = k; menuSfx('move'); } } });
     ARCADE_DIFFS.forEach((_, k) => { if (inRect(mouse, arcadeDiffRect(k))) { A.diff = k; menuSfx('move'); } });
-    if (inRect(mouse, ARCADE_WATCH_RECT)) { A.watch = !A.watch; menuSfx('move'); }
+    if (inRect(mouse, ARCADE_WATCH_RECT) && !A.practice) { A.watch = !A.watch; menuSfx('move'); }
   }
-  if (mouse.right && A.phase === 'pick') { arcade = null; goHome(); }
+  if (mouse.right && A.phase === 'pick') { arcadeLeavePick(A); }
   mouse.click = mouse.right = mouse.moved = false;
 }
 const arcadeTileRect = k => { const n = arcadePicks().length, w = 128, gap = 12, x0 = W / 2 - (n * w + (n - 1) * gap) / 2; return { x: x0 + k * (w + gap), y: 470, w, h: 64 }; };
@@ -28179,11 +28331,24 @@ function drawArcade() {
         sctx.textAlign = 'center'; sctx.font = F(10, true); sctx.fillStyle = sk ? MARKERS[0] : '#ff6a6a'; sctx.fillText('BONUS ROUND', bx + bw / 2, cy - 6); }
       sctx.textAlign = 'center';
     };
-    if (A.phase === 'pick') {
+    if (A.phase === 'pick' && A.practice) {                        // BOSS PRACTICE: the header + the boss waiting
+      title('BOSS PRACTICE', 70, 54, '#ff2a2a');
+      sctx.font = F(16); sctx.fillStyle = dim; sctx.textAlign = 'center';
+      sctx.fillText('Pick your fighter and ANY difficulty - then it is you vs. the arcade FINAL BOSS on Hellfire. No stars, just practice.', W / 2, 108);
+      const keepB = sketch; if (sk) sketch = true;
+      drawPortrait('COLBALIAS', W / 2 + 380, 400, 1.5, sk ? INK : (CHARACTERS.COLBALIAS.look.body || '#fff'), menuTime, -1);
+      sketch = keepB;
+      sctx.font = F(20, true); sctx.fillStyle = '#ff6a6a'; sctx.fillText('THE BOSS', W / 2 + 380, 420);
+      const bd = ARCADE_BOSS_DIFF[ARCADE_DIFFS[A.diff]];
+      sctx.font = F(13); sctx.fillStyle = dim;
+      sctx.fillText('AI ' + bd.ai + '  -  TAKES ' + Math.round(bd.taken * 100) + '% DMG  -  DEALS ' + Math.round(bd.dealt * 100) + '%', W / 2 + 380, 440);
+    } else if (A.phase === 'pick') {
       belt(W / 2, 52, 1.05);
       sctx.font = F(15); sctx.fillStyle = dim; sctx.textAlign = 'center';
       sctx.fillText('32 legends. ONE belt. Win 5 in a row to be crowned ' + ARCADE_TITLE + ' - then defend it against the BONUS BOSS.', W / 2, 104);
       bracket(146, 16);
+    }
+    if (A.phase === 'pick') {
       const ch = picks[A.sel];
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(ch, W / 2, 440, 1.8, sk ? INK : (CHARACTERS[ch].look.body || '#fff'), menuTime);
@@ -28206,23 +28371,24 @@ function drawArcade() {
         const chs = picks[A.sel];                                   // (this fighter's star for this difficulty)
         drawOneStar(r.x + r.w - 13, r.y + 13, 8, bossStars(chs).includes(dn) ? 'red' : charStars(chs).includes(dn) ? 'gold' : null, sk);
       });
-      { const r = ARCADE_WATCH_RECT, on = !!A.watch;                // the WATCH CPU toggle
+      if (!A.practice) { const r = ARCADE_WATCH_RECT, on = !!A.watch;                // the WATCH CPU toggle
         if (sk) { if (on) { sctx.fillStyle = 'rgba(80,160,255,0.35)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, 77, INK, on ? 3 : 1.5); }
         else slantRect(r.x, r.y, r.w, r.h, 8, on ? '#1f6fd6' : 'rgba(20,16,18,0.85)');
         sctx.textAlign = 'center'; sctx.font = F(15, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim;
         sctx.fillText('WATCH CPU: ' + (on ? 'ON' : 'OFF'), r.x + r.w / 2, r.y + 22);
         sctx.font = F(10); sctx.fillText(on ? 'NO STARS - JUST WATCH' : 'TAB / Y', r.x + r.w / 2, r.y + 37); }
       sctx.font = F(13); sctx.fillStyle = dim; sctx.textAlign = 'center';
-      sctx.fillText(charName(picks[A.sel]) + "'S STARS:  GOLD = WON " + ARCADE_TITLE + " ON IT   -   RED = BEAT THE BONUS BOSS TOO", W / 2, 642);
+      sctx.fillText(A.practice ? 'PRACTICE: NO STARS ARE EARNED OR LOST HERE' : charName(picks[A.sel]) + "'S STARS:  GOLD = WON " + ARCADE_TITLE + " ON IT   -   RED = BEAT THE BONUS BOSS TOO", W / 2, 642);
       sctx.font = F(15); sctx.fillStyle = dim;
-      sctx.fillText('LEFT / RIGHT = FIGHTER   -   UP / DOWN = DIFFICULTY   -   TAB / Y = WATCH CPU   -   J / ENTER = START   -   K / ESC = BACK', W / 2, H - 16);
+      sctx.fillText(A.practice ? 'LEFT / RIGHT = FIGHTER   -   UP / DOWN = DIFFICULTY   -   J / ENTER = FIGHT   -   K / ESC = BACK'
+                               : 'LEFT / RIGHT = FIGHTER   -   UP / DOWN = DIFFICULTY   -   TAB / Y = WATCH CPU   -   J / ENTER = START   -   K / ESC = BACK', W / 2, H - 16);
     } else if (A.phase === 'vs') {
       const foe = arcadeFoe(A), boss = A.round >= ARCADE_BONUS, me = arcadeMeChar(A);
-      sctx.textAlign = 'center'; sctx.font = F(19, true); sctx.fillStyle = gold; sctx.fillText(ARCADE_TITLE + ': ' + ARCADE_SUB, W / 2, 22);
-      title(ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 62, boss ? 54 : 46, boss ? '#ff2a2a' : null);
+      sctx.textAlign = 'center'; sctx.font = F(19, true); sctx.fillStyle = gold; sctx.fillText(A.practice ? 'MINIGAMES' : ARCADE_TITLE + ': ' + ARCADE_SUB, W / 2, 22);
+      title(A.practice ? 'BOSS PRACTICE' : ARCADE_ROUND_NAMES[Math.min(A.round, ARCADE_BONUS)], 62, boss ? 54 : 46, boss ? '#ff2a2a' : null);
       { const left = ARCADE_FINAL + 1 - A.round; sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = boss ? '#ff6a6a' : gold;
-        sctx.fillText(boss ? 'DEFEND THE BELT - BEAT THE BONUS BOSS FOR A RED STAR' : left === 1 ? 'ONE WIN FROM BEING ' + ARCADE_TITLE : left + ' WINS FROM ' + ARCADE_TITLE, W / 2, 88); }
-      bracket(124, 15);
+        sctx.fillText(A.practice ? 'THE ARCADE FINAL BOSS - PRACTICE, NO STARS' : boss ? 'DEFEND THE BELT - BEAT THE BONUS BOSS FOR A RED STAR' : left === 1 ? 'ONE WIN FROM BEING ' + ARCADE_TITLE : left + ' WINS FROM ' + ARCADE_TITLE, W / 2, 88); }
+      if (!A.practice) bracket(124, 15);
       const keep = sketch; if (sk) sketch = true;
       drawPortrait(me, W / 2 - 260, 640, 1.55, sk ? INK : (CHARACTERS[me].look.body || '#fff'), menuTime, 1);
       drawPortrait(foe, W / 2 + 260, 640, 1.55, sk ? INK : (CHARACTERS[foe].look.body || '#fff'), menuTime, -1);
@@ -28235,6 +28401,17 @@ function drawArcade() {
       if (A.watch) { sctx.font = F(18, true); sctx.fillStyle = '#5aa8ff';
         sctx.fillText(A.following ? charName(A.pickOut.c) + ' IS OUT - NOW FOLLOWING ' + charName(me) + '   -   ESC = LEAVE' : 'WATCH CPU - NO STARS   -   ESC = LEAVE', W / 2, 710); }
       else if (A.t > 0.4) { sctx.font = F(20, true); sctx.fillStyle = Math.sin(menuTime * 5) > 0 ? accent : ink; sctx.fillText('PRESS J / ENTER WHEN YOU ARE READY', W / 2, 710); }   // (it waits for you)
+    } else if (A.phase === 'practiceEnd') {                        // BOSS PRACTICE: how it went
+      const me = arcadeMeChar(A);
+      title(A.won ? 'BOSS DEFEATED!' : 'THE BOSS WINS', 150, 72, A.won ? '#ffd23f' : '#ff2a2a');
+      sctx.textAlign = 'center'; sctx.font = F(22); sctx.fillStyle = ink;
+      sctx.fillText(charName(me) + (A.won ? ' beat the final boss on ' : ' fell to the final boss on ') + ARCADE_DIFFS[A.diff] + '.  (Practice - no stars.)', W / 2, 200);
+      const keepE = sketch; if (sk) sketch = true;
+      drawPortrait(me, W / 2 - 220, 560, 1.7, sk ? INK : (CHARACTERS[me].look.body || '#fff'), menuTime, 1);
+      drawPortrait('COLBALIAS', W / 2 + 220, 560, 1.7, sk ? INK : (CHARACTERS.COLBALIAS.look.body || '#fff'), menuTime, -1);
+      sketch = keepE;
+      sctx.font = F(20); sctx.fillStyle = dim;
+      if (A.t > 0.6) sctx.fillText('J / ENTER = REMATCH   -   K / ESC = BACK TO MINIGAMES', W / 2, H - 30);
     } else if (A.phase === 'lose') {
       title('KNOCKED OUT', 92, 72, '#ff2a2a');
       sctx.textAlign = 'center'; sctx.font = F(22); sctx.fillStyle = ink;
@@ -28274,8 +28451,289 @@ function drawArcade() {
     }
   });
 }
-const homeItems = () => (appUpdate().state === 'ready' ? ['UPDATE NOW'] : []).concat(['PLAY', 'ARCADE', 'SANDBOX', 'ONLINE', 'MOVESETS', 'CONTROLS', 'OPTIONS']).concat(window.appInfo ? ['QUIT'] : []);
-const homeItemRect = k => { const n = homeItems().length, step = n > 8 ? 41 : n > 7 ? 47 : n > 6 ? 54 : 64; return { x: W / 2 - 170, y: (n > 8 ? 322 : 334) + k * step, w: 340, h: step - 10 }; };   // (tighter the more items there are)   // (tighter when there are 7 items)
+// ---------------- MINIGAMES: a menu of side modes (room for lots more - it's a grid that scrolls) ----------------
+const MINIGAMES = [
+  { id: 'bossPractice', name: 'BOSS PRACTICE', desc: 'Fight the arcade FINAL BOSS - Colbalias on Hellfire - on any difficulty. No stars, just practice.', color: '#ff2a2a',
+    open(dev) { openArcade(dev, true); } },
+  { id: 'hunterBall', name: 'HUNTER BALL', desc: 'Hunter fires ki blasts at you - PERFECT BLOCK them back. Every perfect block is a point. How long can you keep the rally going?', color: '#3fae2a',
+    open(dev) { openHunterBall(dev); } },
+];
+// ---------------- HUNTER BALL ----------------
+// Hunter hovers just off the stage and fires a KI BLAST at you. PERFECT BLOCK it (tap block just as it gets to you) and it
+// flies straight back at him - he knocks it right back, a little faster every time. Every perfect block = 1 point. Get hit
+// (or let it past you, or just HOLD block) and the rally's over. Your best score + a TOP 20 board are kept on this computer.
+const HB = { speed0: 650, upMine: 1.05, upHis: 1.03, cap: 2600, parry: 0.12, r: 16, turn: 2.2, firstWait: 1.0, overT: 1.6,
+             spotX: 140, spotY: 70, board: 20, key: 'db-hunterball-board' };
+let hb = null;   // { phase: 'pick' | 'result', sel, dev, active, score, ball, best, board, ... }
+function hbLoadBoard() { try { const v = JSON.parse(localStorage.getItem(HB.key) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function hbSaveBoard(b) { try { localStorage.setItem(HB.key, JSON.stringify(b)); } catch (e) {} }
+const hbName = () => { try { return (localStorage.getItem('stickman-brawl-name') || 'PLAYER').slice(0, 12); } catch (e) { return 'PLAYER'; } };
+function openHunterBall(dev) {
+  const picks = arcadePicks();
+  hb = { phase: 'pick', sel: hb ? hb.sel : Math.max(0, picks.indexOf('COLBY')), dev: dev || 'keyboard', active: false, score: 0, board: hbLoadBoard(), t: 0 };
+  scene = 'hunterball';
+}
+function hbStart() {
+  const A = hb, ch = arcadePicks()[A.sel];
+  A.saved = { players: players.map(q => ({ off: q.off, cpu: q.cpu, char: q.char, level: q.level, dev: q.dev, team: q.team, name: q.name, profile: q.profile })),
+              stage: gameOptions.stage, stocks: gameOptions.stocks, teams: gameOptions.teams, watch: watchMode };
+  Object.assign(players[0], { off: false, cpu: false, dev: A.dev, char: ch, team: 0, name: 'YOU' });
+  Object.assign(players[1], { off: false, cpu: true, dev: null, char: 'HUNTER', level: 'STAND', team: 1, name: 'HUNTER' });
+  for (let i = 2; i < players.length; i++) players[i].off = true;
+  gameOptions.stage = 0; gameOptions.stocks = 1; gameOptions.teams = false; watchMode = false;
+  startMatch(); scene = 'fight';
+  Object.assign(A, { active: true, score: 0, ball: null, wait: HB.firstWait, over: false, overT: 0, newBest: false, rank: -1 });
+  hbPinHunter();
+  fighters[0].x = STAGE.x + STAGE.w * 0.4;
+}
+function hbRestore() {
+  const S = hb && hb.saved; if (!S) return;
+  S.players.forEach((q, i) => Object.assign(players[i], q));
+  gameOptions.stage = S.stage; gameOptions.stocks = S.stocks; gameOptions.teams = S.teams; watchMode = S.watch;
+  hb.saved = null;
+}
+const hbHunter = () => fighters.find(f => f.char === 'HUNTER' && !f.minion && f.controller !== 'keyboard' && !f.controller.startsWith('pad'));
+const hbHand = h => ({ x: h.x - 30, y: h.y - 62 });
+function hbPinHunter() {                                          // he hovers there, untouchable, facing the stage
+  const h = hbHunter(); if (!h) return;
+  h.x = STAGE.x + STAGE.w + HB.spotX; h.y = STAGE.y - HB.spotY; h.vx = h.vy = 0; h.ground = true; h.onPlatform = null;
+  h.face = -1; h.invuln = 9; h.damage = 0; h.shielding = false;
+  if (h.action && h.action.type !== 'land') h.action = null;
+}
+function hbFire(from, to, speed) {                                // a ki blast from one point at another
+  const ang = Math.atan2(to.y - from.y, to.x - from.x);
+  hb.ball = { x: from.x, y: from.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed, toward: 'you', trail: [] };
+}
+function hbThrow() {                                              // HUNTER fires it at you
+  const h = hbHunter(), p = fighters[0]; if (!h || !p) return;
+  const from = hbHand(h), sp = hb.ball ? Math.min(HB.cap, hb.ball.speed * HB.upHis) : HB.speed0;
+  hbFire(from, { x: p.x, y: p.y - 45 + (Math.random() - 0.5) * 50 }, sp);
+  h.action = { type: 'land', t: 0, dur: 0.22 };
+  burst(from.x, from.y, ['#86e63c', '#e6ff86', '#ffffff'], 16, Math.PI, 0.6, 500, { grav: 0 }); ring(from.x, from.y);
+  sfx.blast ? sfx.blast() : sfx.whoosh(true);
+}
+function hbGameOver(why) {
+  if (!hb || !hb.active || hb.over) return;
+  hb.over = true; hb.overT = 0; hb.why = why;
+  if (hb.ball) { burst(hb.ball.x, hb.ball.y, ['#86e63c', '#e6ff86', '#ffffff'], 30, 0, Math.PI, 700, { grav: 0 }); ring(hb.ball.x, hb.ball.y); hb.ball = null; }
+  // the score goes on the board
+  const board = hbLoadBoard(), prevBest = board.length ? board[0].score : 0, entry = { name: hbName(), score: hb.score, char: arcadePicks()[hb.sel], at: Date.now() };
+  if (hb.score > 0) { board.push(entry); board.sort((a, b) => b.score - a.score || a.at - b.at); board.length = Math.min(board.length, HB.board); hbSaveBoard(board); }
+  hb.board = board; hb.rank = board.indexOf(entry); hb.newBest = hb.score > 0 && hb.score > prevBest;
+  sfx.ko ? sfx.ko() : sfx.slam();
+}
+function hbLeaveFight() {                                         // back out of the fight to the Hunter Ball screen
+  hbRestore(); removeAllMinions(); paused = false; matchOver = null;
+  for (const f of fighters) { stopKameCharge(f); stopShotCharge(f); }
+  hb.active = false; hb.phase = 'result'; hb.t = 0; scene = 'hunterball';
+}
+function hbQuit() {                                               // (the pause menu: leave it altogether)
+  if (hb && hb.active) { hbRestore(); hb.active = false; }
+  removeAllMinions(); paused = false; matchOver = null; hb = null;
+  openMinigames(); menuSfx('back');
+}
+// every step of the fight while it's on
+function updateHunterBall(dt) {
+  if (!hb || !hb.active) return;
+  hbPinHunter();
+  const p = fighters[0];
+  if (hb.over) { if ((hb.overT += dt) >= HB.overT) hbLeaveFight(); return; }
+  if (!p || p.respawnTimer > 0 || p.out) { hbGameOver('ko'); return; }
+  if (readyT > 0) return;
+  if (!hb.ball) { if ((hb.wait -= dt) <= 0) hbThrow(); return; }
+  const B = hb.ball;
+  if (B.toward === 'you') {                                       // homing in on you (a little - you can't just walk away from it)
+    const want = Math.atan2((p.y - 45) - B.y, p.x - B.x), cur = Math.atan2(B.vy, B.vx);
+    let d = want - cur; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    const na = cur + clamp(d, -HB.turn * dt, HB.turn * dt); B.vx = Math.cos(na) * B.speed; B.vy = Math.sin(na) * B.speed;
+  }
+  B.x += B.vx * dt; B.y += B.vy * dt;
+  B.trail.push({ x: B.x, y: B.y }); if (B.trail.length > 10) B.trail.shift();
+  if (Math.random() < dt * 40) burst(B.x, B.y, ['#86e63c', '#e6ff86'], 1, Math.atan2(-B.vy, -B.vx), 0.5, 120, { grav: 0 });
+  if (B.toward === 'you') {
+    if (Math.hypot(B.x - p.x, B.y - (p.y - 45)) < HB.r + 26) {    // IT GETS TO YOU
+      if (p.shielding && p.shieldAge <= HB.parry) {               // PERFECT BLOCK: straight back at him - a point
+        hb.score++;
+        perfectBlockFx(p, B.x, B.y);
+        const h = hbHunter(); hbFire({ x: B.x, y: B.y }, h ? hbHand(h) : { x: B.x + 600, y: B.y }, Math.min(HB.cap, B.speed * HB.upMine));
+        hb.ball.toward = 'him';
+        painTexts.push({ x: p.x, y: p.y - 180, t: 0.6, max: 0.6, text: String(hb.score), big: true });
+      } else {                                                    // anything else: it hits you - rally over
+        applyHit(p, { dmg: 6, base: 420, growth: 0, angle: 135 }, -1, 1, B.x, B.y, { fighter: hbHunter() });
+        hbGameOver(p.shielding ? 'held' : 'hit');
+      }
+      return;
+    }
+    if (B.x < BLAST.left + 40 || B.y > BLAST.bottom - 40 || B.y < BLAST.top + 40 || (B.vx < 0 && B.x < p.x - 260)) { hbGameOver('missed'); return; }   // (it got past you)
+  } else {
+    const h = hbHunter(), hand = h ? hbHand(h) : null;
+    if (!hand || Math.hypot(B.x - hand.x, B.y - hand.y) < HB.r + 30 || B.x > hand.x + 40) {   // HE KNOCKS IT RIGHT BACK
+      if (hand) { burst(hand.x, hand.y, ['#86e63c', '#ffffff'], 20, Math.PI, 0.8, 600, { grav: 0 }); ring(hand.x, hand.y); }
+      sfx.parry(); shake = Math.max(shake, 5);
+      hbThrow();
+    }
+  }
+}
+// (drawing, in the world) the ki blast
+function drawHunterBall() {
+  if (!hb || !hb.active || !hb.ball) return;
+  const B = hb.ball, pulse = 1 + 0.12 * Math.sin(time * 30);
+  ctx.save();
+  if (!sketch) {
+    ctx.globalCompositeOperation = 'lighter';
+    B.trail.forEach((q, i) => { ctx.globalAlpha = (i + 1) / B.trail.length * 0.35; ctx.fillStyle = '#86e63c'; ctx.beginPath(); ctx.arc(q.x, q.y, HB.r * (i + 1) / B.trail.length, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const g = ctx.createRadialGradient(B.x, B.y, 2, B.x, B.y, HB.r * 2.2 * pulse); g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.35, 'rgba(200,255,120,0.8)'); g.addColorStop(1, 'rgba(60,200,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(B.x, B.y, HB.r * 2.2 * pulse, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = sketch ? '#ffffff' : '#f4ffd8'; ctx.strokeStyle = sketch ? '#333333' : '#3fae2a'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(B.x, B.y, HB.r * pulse, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+// (the HUD) the rally count
+function drawHunterBallHUD() {
+  if (!hb || !hb.active) return;
+  const best = hb.board && hb.board.length ? hb.board[0].score : 0;
+  text('RALLY ' + hb.score, W / 2, 70, 26, '#e6ff86', 'center');
+  text('BEST ' + Math.max(best, hb.score), W / 2, 96, 11, '#ffffff', 'center');
+  if (readyT <= 0 && !hb.ball && !hb.over && hb.score === 0) text('PERFECT BLOCK IT BACK - TAP BLOCK JUST AS IT REACHES YOU', W / 2, 130, 10, '#ffffff', 'center');
+  if (hb.over) text(hb.why === 'held' ? 'HELD BLOCK - IT HAS TO BE A PERFECT BLOCK!' : hb.why === 'missed' ? 'IT GOT PAST YOU!' : 'RALLY OVER!', W / 2, 160, 16, '#ff6a6a', 'center');
+}
+// the Hunter Ball screen: pick a fighter (and see the board), or the result of the last rally
+function hunterBallUpdate(dt) {
+  if (!hb) { openMinigames(); return; }
+  hb.t += dt;
+  const devs = menuDevices(dt), picks = arcadePicks();
+  for (const d of devs) {
+    if (hb.phase === 'pick') {
+      if (d.tap.left) { hb.sel = (hb.sel + picks.length - 1) % picks.length; menuSfx('move'); }
+      if (d.tap.right) { hb.sel = (hb.sel + 1) % picks.length; menuSfx('move'); }
+      if (d.tap.ok || d.tap.start) { hb.dev = d.dev; menuSfx('go'); hbStart(); return; }
+      if (d.tap.back || d.tap.esc) { hb = null; openMinigames(); menuSfx('back'); return; }
+    } else if (hb.phase === 'result') {
+      if ((d.tap.ok || d.tap.start) && hb.t > 0.5) { menuSfx('go'); hbStart(); return; }
+      if ((d.tap.back || d.tap.esc) && hb.t > 0.3) { hb.phase = 'pick'; hb.t = 0; menuSfx('back'); }
+    }
+  }
+  if (mouse.click && hb.phase === 'pick') picks.forEach((c, k) => { if (inRect(mouse, arcadeTileRect(k))) { if (hb.sel === k) { hb.dev = 'keyboard'; hbStart(); } else { hb.sel = k; menuSfx('move'); } } });
+  if (mouse.right) { if (hb.phase === 'result') hb.phase = 'pick'; else { hb = null; openMinigames(); } }
+  mouse.click = mouse.right = mouse.moved = false;
+}
+function drawHunterBallMenu() {
+  if (!hb) return;
+  const th = menuTheme(), px = th === 'pixel', sk = th === 'sketch';
+  const F = (sz, bold) => px ? `${Math.max(8, Math.round(sz * 0.5))}px ${PX_FONT}` : sk ? `${sz}px ${DOODLE_FONT}` : `${bold ? 'italic ' : ''}${sz}px ${CG_FONT}`;
+  const ink = sk ? INK : '#ffffff', dim = sk ? '#5a5470' : '#c9bfc4', green = sk ? '#2f8a3a' : '#86e63c', picks = arcadePicks();
+  const board = hb.board || [];
+  withMenuDrawing(() => {
+    if (sk) drawNotebook(); else if (px) { drawPXBackground(); blitPX(); } else drawCGBackground();
+    const title = (str, y, size, col) => { sctx.textAlign = 'center'; sctx.font = F(size, true); sctx.fillStyle = sk ? 'rgba(29,27,42,0.9)' : '#000'; sctx.fillText(str, W / 2 + 4, y + 4); sctx.fillStyle = col; sctx.fillText(str, W / 2, y); };
+    // THE BOARD (top 20, kept on this computer)
+    const drawBoard = (x, y) => {
+      sctx.textAlign = 'center'; sctx.font = F(18, true); sctx.fillStyle = green; sctx.fillText('TOP ' + HB.board + ' - THIS COMPUTER', x, y);
+      for (let i = 0; i < HB.board; i++) {
+        const e = board[i], col = i < 10 ? 0 : 1, row = i % 10, ex = x - 290 + col * 330, ey = y + 26 + row * 21, mine = i === hb.rank && hb.phase === 'result';
+        sctx.textAlign = 'left'; sctx.font = F(14, mine); sctx.fillStyle = mine ? '#ffd23f' : e ? ink : (sk ? 'rgba(29,27,42,0.3)' : 'rgba(255,255,255,0.22)');
+        sctx.fillText((i + 1) + '.', ex, ey);
+        sctx.fillText(e ? e.name + '  (' + charName(e.char) + ')' : '---', ex + 30, ey);
+        sctx.textAlign = 'right'; sctx.fillText(e ? String(e.score) : '', ex + 220, ey);
+      }
+    };
+    if (hb.phase === 'pick') {
+      title('HUNTER BALL', 72, 56, green);
+      sctx.textAlign = 'center'; sctx.font = F(16); sctx.fillStyle = dim;
+      sctx.fillText('Hunter fires ki blasts at you. PERFECT BLOCK them (tap block just as one reaches you) to send it back. Each one = 1 point.', W / 2, 106);
+      drawBoard(W / 2, 140);
+      const ch = picks[hb.sel], keep = sketch; if (sk) sketch = true;
+      drawPortrait(ch, W / 2, 440, 1.3, sk ? INK : (CHARACTERS[ch].look.body || '#fff'), menuTime); sketch = keep;
+      picks.forEach((c, k) => {
+        const r = arcadeTileRect(k), on = k === hb.sel;
+        if (sk) { if (on) { sctx.fillStyle = 'rgba(160,230,120,0.7)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 20, INK, on ? 3 : 1.5); }
+        else slantRect(r.x, r.y, r.w, r.h, 10, on ? '#3fae2a' : 'rgba(20,16,18,0.85)');
+        sctx.textAlign = 'center'; sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 38);
+      });
+      sctx.textAlign = 'center'; sctx.font = F(15); sctx.fillStyle = dim;
+      sctx.fillText('LEFT / RIGHT = FIGHTER   -   J / ENTER = PLAY   -   K / ESC = BACK', W / 2, H - 16);
+    } else {
+      title(hb.newBest ? 'NEW BEST!' : 'RALLY OVER', 80, 60, hb.newBest ? '#ffd23f' : green);
+      sctx.textAlign = 'center'; sctx.font = F(40, true); sctx.fillStyle = ink; sctx.fillText(hb.score + (hb.score === 1 ? ' POINT' : ' POINTS'), W / 2, 136);
+      sctx.font = F(16); sctx.fillStyle = dim;
+      sctx.fillText(hb.rank >= 0 ? 'That is #' + (hb.rank + 1) + ' on the board.' : hb.score > 0 ? 'Not quite enough for the top ' + HB.board + '.' : 'Tap block right as the ki blast reaches you!', W / 2, 166);
+      drawBoard(W / 2, 210);
+      sctx.font = F(18); sctx.fillStyle = dim;
+      if (hb.t > 0.5) sctx.fillText('J / ENTER = GO AGAIN   -   K / ESC = PICK A FIGHTER', W / 2, H - 24);
+    }
+  });
+}
+const MG_GRID = { cols: 3, rows: 3, w: 360, h: 118, gap: 24, top: 168 };
+let mini = null;   // { sel, scroll }
+function openMinigames(dev) { mini = { sel: mini ? mini.sel : 0, scroll: 0 }; scene = 'minigames'; }
+const mgSlots = () => Math.max(MG_GRID.cols * MG_GRID.rows, Math.ceil((MINIGAMES.length + 1) / MG_GRID.cols) * MG_GRID.cols);   // (always at least one empty slot showing)
+function mgRect(k) {
+  const G = MG_GRID, col = k % G.cols, row = Math.floor(k / G.cols) - (mini ? mini.scroll : 0);
+  const x0 = W / 2 - (G.cols * G.w + (G.cols - 1) * G.gap) / 2;
+  return { x: x0 + col * (G.w + G.gap), y: G.top + row * (G.h + G.gap), w: G.w, h: G.h, row };
+}
+function minigamesUpdate(dt) {
+  if (!mini) mini = { sel: 0, scroll: 0 };
+  const devs = menuDevices(dt), n = MINIGAMES.length, G = MG_GRID;
+  for (const d of devs) {
+    let s = mini.sel;
+    if (d.tap.left) s = Math.max(0, s - 1);
+    if (d.tap.right) s = Math.min(n - 1, s + 1);
+    if (d.tap.up) s = s - G.cols >= 0 ? s - G.cols : s;
+    if (d.tap.down) s = Math.min(n - 1, s + G.cols);
+    if (s !== mini.sel) { mini.sel = s; menuSfx('move'); }
+    if (d.tap.ok || d.tap.start) { menuSfx('go'); MINIGAMES[mini.sel].open(d.dev); return; }
+    if (d.tap.back || d.tap.esc) { mini = null; goHome(); return; }
+  }
+  const row = Math.floor(mini.sel / G.cols);                       // (keep the picked one on screen)
+  if (row < mini.scroll) mini.scroll = row; else if (row >= mini.scroll + G.rows) mini.scroll = row - G.rows + 1;
+  if (mouse.moved || mouse.click) MINIGAMES.forEach((m, k) => { const r = mgRect(k); if (r.row >= 0 && r.row < G.rows && inRect(mouse, r)) { if (mini.sel !== k && mouse.moved) menuSfx('move'); mini.sel = k; if (mouse.click) { menuSfx('go'); m.open('keyboard'); } } });
+  if (mouse.right) { mini = null; goHome(); }
+  mouse.click = mouse.right = mouse.moved = false;
+}
+function drawMinigames() {
+  if (!mini) return;
+  const th = menuTheme(), px = th === 'pixel', sk = th === 'sketch';
+  const F = (sz, bold) => px ? `${Math.max(8, Math.round(sz * 0.5))}px ${PX_FONT}` : sk ? `${sz}px ${DOODLE_FONT}` : `${bold ? 'italic ' : ''}${sz}px ${CG_FONT}`;
+  const ink = sk ? INK : '#ffffff', dim = sk ? '#5a5470' : '#c9bfc4';
+  withMenuDrawing(() => {
+    if (sk) drawNotebook(); else if (px) { drawPXBackground(); blitPX(); } else drawCGBackground();
+    sctx.textAlign = 'center'; sctx.font = F(60, true);
+    sctx.fillStyle = sk ? 'rgba(29,27,42,0.9)' : '#000'; sctx.fillText('MINIGAMES', W / 2 + 4, 92 + 4);
+    sctx.fillStyle = sk ? MARKERS[0] : '#ffffff'; sctx.fillText('MINIGAMES', W / 2, 92);
+    sctx.font = F(16); sctx.fillStyle = dim; sctx.fillText('Side modes - just for fun. Nothing here earns stars.', W / 2, 128);
+    const G = MG_GRID, total = mgSlots();
+    for (let k = 0; k < total; k++) {
+      const r = mgRect(k); if (r.row < 0 || r.row >= G.rows) continue;
+      const m = MINIGAMES[k], on = !!m && k === mini.sel;
+      if (sk) { if (on) { sctx.fillStyle = 'rgba(255,224,40,0.7)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 60, m ? INK : 'rgba(29,27,42,0.3)', on ? 3 : 1.5); }
+      else slantRect(r.x, r.y, r.w, r.h, 12, on ? (m.color || '#d62a22') : m ? 'rgba(20,16,18,0.88)' : 'rgba(20,16,18,0.4)');
+      sctx.textAlign = 'left';
+      if (m) {
+        sctx.font = F(26, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : ink; sctx.fillText(m.name, r.x + 22, r.y + 40);
+        sctx.font = F(13); sctx.fillStyle = on ? (sk ? INK : '#ffe9e0') : dim;
+        const words = m.desc.split(' '); let line = '', ly = r.y + 66;     // (the description, wrapped)
+        for (const w of words) { const t = line ? line + ' ' + w : w; if (sctx.measureText(t).width > r.w - 44) { sctx.fillText(line, r.x + 22, ly); ly += 17; line = w; } else line = t; }
+        if (line) sctx.fillText(line, r.x + 22, ly);
+      } else {
+        sctx.font = F(18, true); sctx.fillStyle = sk ? 'rgba(29,27,42,0.35)' : 'rgba(255,255,255,0.25)'; sctx.textAlign = 'center';
+        sctx.fillText('COMING SOON', r.x + r.w / 2, r.y + r.h / 2 + 6);
+      }
+    }
+    if (Math.ceil(total / G.cols) > G.rows) {                         // (more below / above: little arrows)
+      sctx.textAlign = 'center'; sctx.font = F(18, true); sctx.fillStyle = dim;
+      if (mini.scroll > 0) sctx.fillText('^ MORE ^', W / 2, G.top - 12);
+      if (mini.scroll + G.rows < Math.ceil(total / G.cols)) sctx.fillText('v MORE v', W / 2, G.top + G.rows * (G.h + G.gap) + 6);
+    }
+    sctx.textAlign = 'center'; sctx.font = F(15); sctx.fillStyle = dim;
+    sctx.fillText('ARROWS = PICK   -   J / ENTER = PLAY   -   K / ESC = BACK', W / 2, H - 16);
+  });
+}
+const homeItems = () => (appUpdate().state === 'ready' ? ['UPDATE NOW'] : []).concat(['PLAY', 'ARCADE', 'MINIGAMES', 'SANDBOX', 'ONLINE', 'MOVESETS', 'CONTROLS', 'OPTIONS']).concat(window.appInfo ? ['QUIT'] : []);
+const homeItemRect = k => { const n = homeItems().length, step = n > 9 ? 37 : n > 8 ? 41 : n > 7 ? 47 : n > 6 ? 54 : 64; return { x: W / 2 - 170, y: (n > 9 ? 314 : n > 8 ? 322 : 334) + k * step, w: 340, h: step - 8 }; };   // (tighter the more items there are)   // (tighter when there are 7 items)
 function goHome() { scene = 'home'; home.phase = 'menu'; menuSfx('back'); }
 function homeUpdate(dt) {
   const devs = menuDevices(dt);
@@ -28306,6 +28764,7 @@ function homeChoose(item, dev = 'keyboard') {
   else if (item === 'ONLINE') { sandbox = false; scene = 'select'; sbNet.ui.show('menu'); }
   else if (item === 'MOVESETS') openMovesets(dev);
   else if (item === 'ARCADE') { sandbox = false; openArcade(); }
+  else if (item === 'MINIGAMES') { sandbox = false; openMinigames(dev); }
   else if (item === 'CONTROLS') openControls('home');
   else if (item === 'OPTIONS') { scene = 'options'; opt.row = 0; }
   else if (item === 'QUIT') window.close();
@@ -28747,7 +29206,7 @@ function pauseChoose() {
   const item = PAUSE_ITEMS[pauseSel];
   if (item === 'RESUME') paused = false;
   else if (item === 'CHARACTER SELECT') backToSelect();
-  else if (item === 'MAIN MENU') { const arc = arcade && arcade.active; backToSelect(); if (!arc) goHome(); }   // (straight back to the home screen)
+  else if (item === 'MAIN MENU') { const arc = (arcade && arcade.active) || (hb && hb.active); backToSelect(); if (!arc) goHome(); }   // (straight back to the home screen)
   else if (item === 'TURBO') { setTurbo(!turbo); return; }
   else if (item === 'CLEAN MODE') { setCleanMode(!gameOptions.cleanHud); menuSfx('pick'); return; }
   else { paused = false; openControls('pause'); }
@@ -28788,6 +29247,8 @@ function frame(now) {
     else if (scene === 'controls') controlsUpdate(elapsed);
     else if (scene === 'movesets') movesetsUpdate(elapsed);
     else if (scene === 'arcade') arcadeUpdate(elapsed);
+    else if (scene === 'minigames') minigamesUpdate(elapsed);
+    else if (scene === 'hunterball') hunterBallUpdate(elapsed);
     else if (scene === 'stagevote') stageVoteUpdate(elapsed);
     else if (scene === 'results') resultsUpdate(elapsed);
     for (const k in pressed) delete pressed[k];
@@ -28795,6 +29256,8 @@ function frame(now) {
     else if (scene === 'home') drawHome(); else if (scene === 'options') drawOptions();
     else if (scene === 'movesets') drawMovesets();
     else if (scene === 'arcade') drawArcade();
+    else if (scene === 'minigames') drawMinigames();
+    else if (scene === 'hunterball') drawHunterBallMenu();
     else if (scene === 'stagevote') drawStageVote();
     else if (scene === 'results' && results) drawResults();
     drawUpdateToast(elapsed);
