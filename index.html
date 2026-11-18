@@ -5834,7 +5834,7 @@ const flailMove = (name, th0, th1, dur, hit, extra) => ({ name, startup: 0.08, a
     if (h && fighters.includes(h)) {
       const p = flailPos(f, th);
       h.x = p.x; h.y = p.y + 45; h.vx = h.vy = 0; h.face = f.face;
-      h.action.poseOverride = { ...LP_HELD, raw: true, spin: f.face * (Math.PI / 2 - th) };   // (stretched out along the swing)
+      if (h.action) h.action.poseOverride = { ...LP_HELD, raw: true, spin: f.face * (Math.PI / 2 - th) };   // (stretched out along the swing - unless something's knocked it out of the move)
       if (a.phase === 'active' && Math.random() < dt * 60) ghosts.push({ fig: figureOf(h), life: 0.12, max: 0.12, color: '#ff2a2a' });
       if (a.phase === 'end' && a.t > 0.06) { killMinion(h); a.helper = null; }
     }
@@ -11649,7 +11649,7 @@ function onePunchContact(f, a, v) {
     return false;
   }
   // CONNECTED: they're locked in
-  v.action = { type: 'hitstun', t: 0, dur: 9 }; v.vx = v.vy = 0; v.shielding = false;
+  v.action = { type: 'hitstun', t: 0, dur: 9, opBy: f }; v.vx = v.vy = 0; v.shielding = false;
   a.vx0 = v.x; a.vy0 = v.y;
   burst(hx, hy, [ONE_PUNCH.red, '#ffffff'], 14, 0, Math.PI, 420, { grav: 0 }); sfx.hit(0.6); sfx.parry();
   hitstop = Math.max(hitstop, 0.06); shake = Math.max(shake, 8);
@@ -11662,6 +11662,7 @@ function stepColtenOnePunch(f, a, dt) {
   f.vx = 0; f.vy = 0;
   let v = a.v;
   if (v && (!fighters.includes(v) || v.respawnTimer > 0 || v.out)) v = a.v = null;
+  if (a.ph !== 'reach') f.invuln = Math.max(f.invuln || 0, 0.1);   // (once it's connected: untouchable till it's done)
   if (a.ph === 'reach') {                                         // THE OPENING DASH (they're still free - see onePunchContact)
     if (!v) { f.action = { type: 'land', t: 0, dur: 0.3 }; return; }
     const tx = v.x - F * P.gap, d = tx - f.x, step = P.reachSpeed * dt;
@@ -11672,8 +11673,8 @@ function stepColtenOnePunch(f, a, dt) {
   }
   if (v && a.ph !== 'fly') {                                      // they're held right where they are
     v.vx = v.vy = 0; v.x = a.vx0; v.y = a.vy0; v.shielding = false;
-    if (a.ph === 'frame') { v.face = -F; v.action = { type: 'ultVictim', t: 0, pose: ONE_PUNCH_POSE.look }; }   // (turned round, looking back up at him)
-    else if (v.action && v.action.type === 'hitstun') v.action.t = 0; else v.action = { type: 'hitstun', t: 0, dur: 9 };
+    if (a.ph === 'frame') { v.face = -F; v.action = { type: 'ultVictim', t: 0, pose: ONE_PUNCH_POSE.look, opBy: f }; }   // (turned round, looking back up at him)
+    else if (v.action && v.action.type === 'hitstun' && v.action.opBy === f) v.action.t = 0; else v.action = { type: 'hitstun', t: 0, dur: 9, opBy: f };
   }
   if (a.fist) a.fist.t += dt;
   if (a.ph === 'eyes') {                                          // the close-up: his eyes LIGHT UP
@@ -20664,7 +20665,9 @@ function beginActive(f, a) {
 
 // ---------------- Actions in progress (attacks, dodges, hitstun...) ----------------
 function stepAction(f, inp, dt) {
-  const a = f.action;
+  let a = f.action;
+  // HELD BY COLTEN'S ONE PUNCH: the moment it isn't running on them any more (he was interrupted, KO'd...), they're let go
+  if (a.opBy && !(a.opBy.action && a.opBy.action.type === 'cOnePunch' && a.opBy.action.v === f && fighters.includes(a.opBy))) { f.action = null; return; }
   a.t += dt * (a.type !== 'attack' ? 1
               : f.minion ? (f.owner && f.owner.transformed ? CLONE_RAGE.attackSpeed : 1)   // raging clones attack 30% faster
               : (f.transformed || f.lanceForm || f.ssg ? tfStats(f).speed : 1) *                                     // transformed: attacks play 10% faster
@@ -30291,6 +30294,15 @@ function drawPause() {
 // ---------------- Main loop (fixed 120 Hz physics) ----------------
 const STEP = 1 / 120;
 let last = performance.now(), acc = 0;
+// A BUG MID-FRAME used to stop the game dead (the loop never got to ask for the next frame). Now it's logged (once per kind)
+// and the canvases are put straight (a crash mid-draw can leave a transform / clip / alpha behind) - and the game carries on.
+const frameErrSeen = new Set();
+function frameError(e, where) {
+  const key = where + ':' + (e && e.message);
+  if (!frameErrSeen.has(key)) { frameErrSeen.add(key); console.error('[Doodle Brothers] ' + where + ' error (skipped that frame):', e); }
+  for (const c of new Set([ctx, sctx, typeof loCtx !== 'undefined' ? loCtx : null])) { if (!c) continue;   // (unwind whatever save()s the crash left open - clips, alpha, blur - then a clean slate)
+    try { for (let k = 0; k < 64; k++) c.restore(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.shadowBlur = 0; c.filter = 'none'; } catch (_) {} }
+}
 function frame(now) {
   const elapsed = Math.min(0.1, (now - last) / 1000);
   last = now;
@@ -30370,7 +30382,7 @@ function frame(now) {
         hitstop -= STEP;              // freeze frame on hits (inputs are kept for after)
         for (const f of fighters) if (f.action && typeof f.action.songT === 'number') f.action.songT += STEP / Math.max(0.01, speed());   // (EVERY move that runs on its song - ultimates, transformations, comebacks - keeps going through the hitstop, so it stays on the music)   // (Colby's Primary Lotus runs on its song - it doesn't pause)
       } else {
-        update(STEP);
+        try { update(STEP); } catch (e) { frameError(e, 'update'); }   // (a bug in one frame must never freeze the whole game)
         for (const k in pressed) delete pressed[k];
       }
     }
@@ -30381,7 +30393,7 @@ function frame(now) {
     acc -= STEP;
   }
   if (netActive()) netAfterFrame();
-  render();
+  try { render(); } catch (e) { frameError(e, 'render'); }
   if (netplay) netDrawOverlay();                     // online: "waiting for opponent", ping, desync warning
   drawUpdateToast(elapsed);                          // "update ready" (briefly)
   requestAnimationFrame(frame);
