@@ -6912,6 +6912,10 @@ function demonGaze(f) {
     if (powerUpLocked(m.t) || isIntangible(m.t)) {               // (not while they're transforming / mid-comeback / in an ult: it fizzles, the mark stays)
       painTexts.push({ x: m.t.x, y: m.t.y - 150, t: 0.7, max: 0.7, text: 'CAN\u2019T SWAP', big: false }); sfx.whoosh(false); return;
     }
+    if (f.arcadeBoss && offStage(f)) {                           // THE ARCADE BOSS: the swap only gets him home from off the stage ONCE a life
+      if (f.bossSwapUsed) { painTexts.push({ x: f.x, y: f.y - 150, t: 0.7, max: 0.7, text: 'CAN’T SWAP', big: false }); sfx.whoosh(false); return; }
+      f.bossSwapUsed = true;
+    }
     gazeSwap(f, m.t); return;
   }
   f.gazeMark = null;
@@ -7147,6 +7151,8 @@ function stepHellwave(f, a) {
 // ...but several at once slowly overwhelm you.
 // ONE clone at a time: HALF as strong as Colbalias (its power, below), JUST AS FAST (his stats, no extra
 // startup), a QUARTER as durable (bursts after 25% damage), and takes 1.5x knockback (lighter).
+// (the ARCADE BOSS feels ALL of it: his clones' damage comes back to him in full)
+const cloneLink = o => (o && o.arcadeBoss) ? 1 : CLONE.link;
 const CLONE = { max: 2, cd: 0.25, life: 20, delay: 0, dmg: 1, kb: 1, kbTaken: 1.5, hits: 2, slow: 1.3, link: 0.5 };   // link = the share of a clone's damage Colbalias takes   // up to TWO clones at once; each one bursts on its 2nd hit
 // TRANSFORMED Colbalias: one MORE clone out at once, and each one takes one more hit before it bursts
 // how many fighters he's actually up against (his own TEAM doesn't count - only the people he has to fight)
@@ -10029,6 +10035,87 @@ function stepHailieComeback(f, a, dt) {
   f.rasen = 0;
   if (a.t > 0.25) f.action = null;
 }
+// ---- HAILIE'S SIDE ULTIMATE (transformed, SIDE + I): KUNAI BARRAGE - she hangs in the air and throws a TRACKING kunai at
+//      EVERY enemy on the stage. A PERFECT BLOCK knocks one away; dodged, it flies past; anything else (a plain block too)
+//      and it STICKS - they're pinned. Then she TELEPORTS to each one in turn and drives a FULLY CHARGED RASENGAN into them.
+const H_KULT = { wind: 0.3, speed: 1500, turn: 7, life: 1.4, hitR: 30, waitMax: 1.6, gap: 0.32, pin: 2.5 };
+function startHailieKunaiUlt(f) {
+  const foes = fighters.filter(t => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !t.out && !t.dead && !(t.poofT > 0) && !(t.minion && t.strikeClone));
+  f.action = { type: 'hKunaiUlt', t: 0, ph: 'wind', foes, kunai: [], stuck: [], y0: f.y };
+  f.vx = f.vy = 0; f.invuln = Math.max(f.invuln || 0, 0.5);
+}
+function stepHailieKunaiUlt(f, a, dt) {
+  const K = H_KULT;
+  f.vx = 0; f.vy = 0; f.invuln = Math.max(f.invuln || 0, 0.1);   // (untouchable while she does it)
+  if (a.ph === 'wind') {                                          // she rises a little, a kunai fanned in each hand
+    f.y = a.y0 - 40 * clamp(a.t / K.wind, 0, 1); f.ground = false; a.pose = H_POSE.throwW;
+    if (a.t >= K.wind) {
+      a.ph = 'throw'; a.t = 0; a.pose = H_POSE.throw || H_POSE.throwW;
+      for (const t of a.foes) {                                   // ONE TRACKING KUNAI PER ENEMY
+        const ang = Math.atan2((t.y - 50) - (f.y - 60), t.x - f.x);
+        a.kunai.push({ x: f.x, y: f.y - 60, vx: Math.cos(ang) * K.speed, vy: Math.sin(ang) * K.speed, t, life: K.life, state: 'fly' });
+      }
+      burst(f.x, f.y - 60, ['#ffffff', '#c9ced8', '#ffd23f'], 16, 0, Math.PI, 400, { grav: 0 }); sfx.whoosh(true);
+      if (!a.kunai.length) { f.action = { type: 'land', t: 0, dur: 0.2 }; }
+    }
+    return;
+  }
+  if (a.ph === 'throw') {                                         // the kunai hunt them down
+    for (const k of a.kunai) {
+      if (k.state !== 'fly') continue;
+      const t = k.t;
+      if (!fighters.includes(t) || t.respawnTimer > 0 || t.out) { k.state = 'gone'; continue; }
+      const want = Math.atan2((t.y - 50) - k.y, t.x - k.x), cur = Math.atan2(k.vy, k.vx);
+      let d = want - cur; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+      const na = cur + clamp(d, -K.turn * dt, K.turn * dt); k.vx = Math.cos(na) * K.speed; k.vy = Math.sin(na) * K.speed;
+      k.x += k.vx * dt; k.y += k.vy * dt; k.life -= dt;
+      if (k.life <= 0) { k.state = 'gone'; continue; }
+      if (Math.hypot(k.x - t.x, k.y - (t.y - 50)) > K.hitR) continue;
+      if (isIntangible(t) || (t.action && ['air', 'roll', 'spot'].includes(t.action.type))) continue;   // (dodged: it carries on past)
+      if (t.shielding && t.shieldAge <= PARRY_WINDOW && parryRoll(t)) {   // PERFECT BLOCK: knocked away
+        k.state = 'gone'; perfectBlockFx(t, k.x, k.y);
+        burst(k.x, k.y, ['#ffffff', '#c9ced8'], 10, 0, Math.PI, 300, { grav: 600 });
+        continue;
+      }
+      k.state = 'stuck'; a.stuck.push(t); t.shielding = false;   // STUCK - and pinned there
+      t.action = { type: 'hitstun', t: 0, dur: K.pin }; t.vx = t.vy = 0;
+      burst(t.x, t.y - 50, ['#ffffff', '#c9ced8', '#ffd23f'], 12, 0, Math.PI, 300, { grav: 0 }); sfx.hit(0.4);
+    }
+    for (const t of a.stuck) if (t.action && t.action.type === 'hitstun') { t.vx = t.vy = 0; }
+    if (a.kunai.every(k => k.state !== 'fly') || a.t > K.waitMax) {
+      a.ph = 'strike'; a.t = 0; a.next = 0; a.order = a.stuck.slice();
+      if (!a.order.length) { f.action = { type: 'land', t: 0, dur: 0.3 }; painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'ALL BLOCKED!', big: false }); }
+    }
+    return;
+  }
+  if (a.ph === 'strike') {                                        // TELEPORT... RASENGAN... next
+    for (const t of a.order) if (t.action && t.action.type === 'hitstun' && !t.hRasened) { t.vx = t.vy = 0; }
+    if (a.t < a.next) return;
+    const t = a.order.shift();
+    if (!t) { for (const q of a.stuck) delete q.hRasened; f.rasen = 0; f.action = { type: 'land', t: 0, dur: 0.3 }; f.ground = false; return; }
+    a.next = a.t + K.gap;
+    if (!fighters.includes(t) || t.respawnTimer > 0 || t.out) return;
+    ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#ffffff' });
+    const side = t.x > f.x ? -1 : 1;                              // (she appears right beside them)
+    f.x = t.x + side * 40; f.y = t.y; f.face = -side; f.ground = t.ground; f.onPlatform = t.onPlatform || null;
+    burst(f.x, f.y - 50, ['#ffffff', '#ffd23f'], 14, 0, Math.PI, 420, { grav: 0 }); sfx.vanish(0.8);
+    t.hRasened = true;
+    ultHitCtx = true; f.rasen = 1; rasenHit(f, t); ultHitCtx = false;
+    impactFrame = Math.max(impactFrame, 0.12); impactAt = { x: t.x, y: t.y - 55, ang: 0, all: true, focus: true, invert: true };
+    shake = Math.max(shake, 20); camPunch = 1;
+    painTexts.push({ x: t.x, y: t.y - 170, t: 0.8, max: 0.8, text: 'RASENGAN!', big: true });
+  }
+}
+// (drawing, in the world) the ultimate's kunai in flight
+function drawHailieKunaiUlt() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'hKunaiUlt' || !a.kunai) continue;
+    for (const k of a.kunai) {
+      if (k.state === 'fly') { drawKunaiShape(k.x, k.y, Math.atan2(k.vy, k.vx), 1.1); if (!sketch && Math.random() < 0.6) particles.push({ x: k.x, y: k.y, vx: 0, vy: 0, life: 0.15, max: 0.15, size: 2, color: '#ffd23f', type: 'bit', grav: 0 }); }
+      else if (k.state === 'stuck' && fighters.includes(k.t) && !k.t.hRasened) drawKunaiShape(k.t.x - 6, k.t.y - 52, -Math.PI / 2 + 0.6, 1.0);   // (stuck in them)
+    }
+  }
+}
 // ---- PORTALS (down K): places one end where she stands; down K again opens the other end where she is NOW and she steps
 //      through to the first. Anyone who touches an end comes out the other - and so do shots (even ultimate ones). 15s.
 function hailiePortal(f) {
@@ -10707,7 +10794,7 @@ function stepFinalExplosion(f, a, dt, inp) {
       a.touched.set(t, a.t);
       const dmg = C.tick * (f.ultPower || 1) * (tfStats(f).power || 1);
       t.damage += dmg; t.hitFlash = 0.08;
-      if (t.minion && t.owner && t.owner.respawnTimer <= 0) t.owner.damage += dmg * CLONE.link;
+      if (t.minion && t.owner && t.owner.respawnTimer <= 0) t.owner.damage += dmg * cloneLink(t.owner);
       burst(t.x, t.y - 50, ['#ffffff', '#ffe066'], 6, 0, Math.PI, 380, { grav: 0 }); sfx.hit(0.4);
     }
     a.poseOverride = pose({ lean: -0.32 * k - 0.1 * hk + Math.sin(a.t * 70) * (0.02 + 0.05 * hk) * k, bob: -10 * k, armA: [0.45, -0.3], legA: [0.75, 0.55], legB: [-0.75, 0.55] });
@@ -12149,6 +12236,7 @@ CHARACTERS.HUNTER.ult = { name: 'ERASER CANNON', hunterMove: HUNTER_ERASER };
 CHARACTERS.HUNTER.altUlt = { name: 'GIGANTIC ROAR', hunterMove: HUNTER_ROAR };
 // HAILIE: FLYING RAIJIN - she rings them with kunai, then teleports between them, cutting through them from every side (anyone
 // close by gets caught in it too) - and finishes with the knife through their chest: a launch that's PURELY HORIZONTAL
+CHARACTERS.HAILIE.sideUlt = { name: 'KUNAI BARRAGE', hKunaiUlt: true };   // (SIDE + I, transformed: a tracking kunai at everyone, then a Rasengan each)
 CHARACTERS.HAILIE.ult = { name: 'FLYING RAIJIN', raijin: true, finalWind: H_POSE.stab, finalStrike: H_POSE.chest, final: { dmg: 6, base: 780, growth: 7, angle: 0 } };
 CHARACTERS.HAILIE.transformName = 'THE VOICES';
 const RAIJIN = { throwT: 0.35, strikes: 14, every: 0.075, R: 170, hitR: 220, dmg: 1.6, final: 0.32 };
@@ -12654,7 +12742,7 @@ const BOSS_SONG = { file: 'master-of-puppets.mp3', from: 0 };   // (Metallica - 
 // extra clone), 5 with the demon clone on top of the transformation.
 // THE BOSS IS THE SAME COLBALIAS ON EVERY DIFFICULTY: one natural BOSS buff over his roster self (ARCADE_BOSS_BUFF) - the only
 // thing the difficulty changes is how good the CPU playing him is (its AI level).
-const ARCADE_BOSS_BUFF = { taken: 0.82, kb: 0.84, dealt: 1.15, speed: 1.06, clones: 1, stocks: 0 };
+const ARCADE_BOSS_BUFF = { taken: 0.82, kb: 0.94, dealt: 1.15, speed: 1.06, clones: 1, stocks: 0 };   // (kb 0.94: just a touch of knockback resistance - he still has to be KO-able)
 const ARCADE_BOSS_DIFF = {
   EASY:       { ...ARCADE_BOSS_BUFF, ai: 'EASY' },
   NORMAL:     { ...ARCADE_BOSS_BUFF, ai: 'NORMAL' },
@@ -13354,7 +13442,7 @@ function knock(t, h, dirSign, mult, hx, hy) {
   // CLONE LINK: whatever damage ANY of Colbalias's clones takes (summoned or J-string) goes back to him - at CLONE.link (half)
   if (t.minion && t.owner && !t.owner.out && t.owner.respawnTimer <= 0 && dmg > 0) {
     const o = t.owner;
-    o.damage += dmg * CLONE.link; o.hitFlash = Math.max(o.hitFlash || 0, 0.08);   // (he feels it - but only half of it)
+    o.damage += dmg * cloneLink(o); o.hitFlash = Math.max(o.hitFlash || 0, 0.08);   // (he feels it - but only half of it)
     burst(o.x, o.y - 55, ['#ff1a1a', '#3a0000', '#ffffff'], 6, 0, Math.PI, 220, { grav: 0 });
   }
   if (!t.transformed && !h.ultFinal && !h.ultHit && !beingUlted(t)) t.ult = Math.min(ULT_MAX, (t.ult || 0) + dmg * ULT_GAIN);   // getting hit charges your ultimate (not while transformed, and not from an ULTIMATE)
@@ -14697,6 +14785,7 @@ function startUltimate(f, alt = false, up = false, side = false) {   // (side = 
   if (def.dragon) startFlameDragon(f);             // Sevon: the Flame Dragon
   if (def.ship) startShipUlt(f);                   // Aiden: the pirate ship
   if (def.leeLotus) startLeeLotus(f);              // Colby: Primary Lotus (Rock Lee vs Gaara)
+  if (def.hKunaiUlt) startHailieKunaiUlt(f);       // Hailie: Kunai Barrage
   if (def.cruelSun) playSunSong(f);                // Colten: THE SUN (its music)
   ultBanner = { t: 1.1, name: def.name || 'ULTIMATE', color: f.color, who: f };
   hitstop = Math.max(hitstop, 0.4);                // dramatic freeze as it starts
@@ -16229,7 +16318,7 @@ function godSpeedZap(f, t, h, hx, hy) {
   if (!godSpeed(f) || !t || t === f || t.respawnTimer > 0) return;
   const z = (h && h.noStop ? GOD_SPEED.tickZap : GOD_SPEED.zap) * (t.kaioken ? KAIOKEN.taken : 1);
   t.damage += z; if (!t.transformed) t.ult = Math.min(ULT_MAX, (t.ult || 0) + z * ULT_GAIN);
-  if (t.minion && t.owner && t.owner.respawnTimer <= 0) t.owner.damage += z * CLONE.link;   // (clones pass it back to Colbalias - half of it)
+  if (t.minion && t.owner && t.owner.respawnTimer <= 0) t.owner.damage += z * cloneLink(t.owner);   // (clones pass it back to Colbalias - half of it)
   const n = h && h.noStop ? 1 : 3;
   for (let k = 0; k < n; k++) bolt(t.x + (Math.random() - 0.5) * 20, t.y - 30 - Math.random() * 50, Math.random() * Math.PI * 2, 30 + Math.random() * 40, 0.1, GOD_SPEED.colors[k % 3]);
   if (!(h && h.noStop)) burst(hx, hy, GOD_SPEED.colors, 8, 0, Math.PI, 420, { grav: 0 });
@@ -17126,7 +17215,7 @@ function stepLeeLotus(f, a, dt) {
   const SWING = P(0.5, -6, [0.8, 0.4], [-0.7, 0.3], [2.2, -0.2], [-0.4, -0.6]);
   const WRAP = P(0, 0, [0.06, 0.02], [-0.06, 0.02], [0.08, 0], [-0.08, 0]);
   const hitV = (dmg, dir, big) => {
-    v.damage += dmg * pw; if (v.minion && v.owner && v.owner.respawnTimer <= 0) v.owner.damage += dmg * pw * CLONE.link;
+    v.damage += dmg * pw; if (v.minion && v.owner && v.owner.respawnTimer <= 0) v.owner.damage += dmg * pw * cloneLink(v.owner);
     v.hitFlash = 0.12; hitstop = Math.max(hitstop, big ? 0.08 : 0.04); shake = Math.max(shake, big ? 22 : 10); sfx.hit(1); if (big) sfx.clash(true);
     burst(v.x, v.y - 55, ['#ffffff', C.blue, '#ffe066'], big ? 22 : 10, dir > 0 ? 0 : Math.PI, 0.9, 600, { grav: 0 });
     particles.push({ x: v.x, y: v.y - 55, vx: 0, vy: 0, life: 0.1, max: 0.1, r: big ? 30 : 18, type: 'impact' });
@@ -18108,7 +18197,7 @@ function drawSsj2Arcs(p) {
   if (realRandom() < 0.06) bolt(p.x, p.y - 55, realRandom() * Math.PI * 2, 60 + realRandom() * 30, 0.06, '#ffffff');
 }
 function endTransform(f, ko = false) {
-  if (ko) f.tfUsedStock = false;                                  // (a new stock: HUNTER can transform again)
+  if (ko) { f.tfUsedStock = false; f.bossSwapUsed = false; }      // (a new stock: HUNTER can transform again; the arcade boss gets his off-stage swap back)
   // LANCE'S FORMS: Super Saiyan / Super Saiyan 2 STAY on (buffs and all) when the meter runs out - only Ultra Instinct
   // ending (or a KO) drops him all the way back to base, to climb the ladder again
   if (ko && f.ssg) { f.ssg = false; setLanceForm(f, 0); stopSsgSong(f); }   // (KO'd in SUPER SAIYAN GOD: all the way back to BASE)
@@ -20027,7 +20116,8 @@ function stepAction(f, inp, dt) {
   if (a.type === 'hGrindCut') return stepHunterGrindCut(f, a, dt);  // Hunter: Glacier Grind (Broly demolishes Goku)
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
   if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else if (a.hailie) startHailieComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
-  if (a.type === 'hCome') return stepHailieComeback(f, a, dt);   // Hailie's comeback: out of the portal with a full Rasengan
+  if (a.type === 'hCome') return stepHailieComeback(f, a, dt);
+  if (a.type === 'hKunaiUlt') return stepHailieKunaiUlt(f, a, dt);   // Hailie's Kunai Barrage   // Hailie's comeback: out of the portal with a full Rasengan
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
   if (a.type === 'sunFrozen') {                                    // STOPPED by Colten's cut: held right there till the sun comes down
     const o = a.by;
@@ -20741,7 +20831,17 @@ function updateFighter(f, inp, dt) {
   if ((stageDef.pit || wideFloor()) && overX && f.y > STAGE.y) { f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true; }
   if (stageDef.ring) ringBoxSides(f, prevX, prevFeet);
   // THE ARENA's walls, out past the crowd: nobody walks (or jumps) out of the building - only someone LAUNCHED goes through
-  if (stageDef.arena && !(f.action && f.action.type === 'hitstun')) { const x = clamp(f.x, stageL(), stageR()); if (x !== f.x) { f.x = x; f.vx = 0; } }              // THE RING's apron: a solid wall from the floor up to the mat
+  // (LAUNCHED out past a wall = OUT: if the hitstun runs out before they reach the KO line, they're not snapped back inside -
+  //  they keep going out the side and are KO'd. Only someone who never got LAUNCHED out there - a teleport, a walk - is held.)
+  if (stageDef.arena) {
+    const outside = f.x < stageL() || f.x > stageR(), launched = f.action && f.action.type === 'hitstun';
+    if (outside && launched) f.launchedOut = true;
+    else if (!outside) f.launchedOut = false;
+    if (outside && !launched) {
+      if (f.launchedOut) { f.x = f.x < stageL() ? BLAST.left - 20 : BLAST.right + 20; }   // (out through the crowd: the KO below takes them)
+      else { const x = clamp(f.x, stageL(), stageR()); f.x = x; f.vx = 0; }
+    }
+  }              // THE RING's apron: a solid wall from the floor up to the mat
   if (!f.ground && f.vy >= 0) {
     for (const pl of PLATFORMS) {
       if (f.dropTimer > 0 && !pl.solid) continue;
@@ -23372,7 +23472,8 @@ function basePose(p) {
   }
   // ULTIMATE poses
   if (a && a.type === 'timeStop') return { ...a.pose, raw: true };   // frozen mid-motion
-  if (a && a.type === 'shipUlt' && a.pose) return { ...a.pose };   // Aiden's pirate ship ultimate animates itself
+  if (a && a.type === 'shipUlt' && a.pose) return { ...a.pose };
+  if (a && a.type === 'hKunaiUlt' && a.pose) return { ...a.pose };   // Hailie's Kunai Barrage (the throw)   // Aiden's pirate ship ultimate animates itself
   if (a && a.type === 'kiBarrage') {                  // Lance hanging in the air, hand thrust down at the stage
     const w = Math.sin(p.anim * 60) * 0.12;
     const k = a.phase === 'barrage' ? Math.sin(p.anim * 45) * 0.5 : 0;   // (barrage: his arm jerking all over as he sprays)
@@ -26085,6 +26186,7 @@ function render() {
       if (ult && ult.def && ult.def.legion) drawLegionFront(ult);   // the clone rush: their eyes lighting up
       if (ult && ult.def && ult.def.raijin) drawRaijin(ult);        // Hailie's Flying Raijin: the kunai ring
       drawHailieFx();                                               // Hailie: the Rasengan in her hand
+      drawHailieKunaiUlt();                                         // Hailie's Kunai Barrage: the kunai
       drawJajanFx();                                                // Colby: Jajanken's Nen (stance glow, Rock's orb, Scissors' blade)
       drawPortalLoops();                                            // Hailie's down throw: the two stacked portals
       drawHunterBall();                                             // the HUNTER BALL minigame's ki blast
@@ -26210,7 +26312,10 @@ addEventListener('pointerdown', unlockAudio);
 // ---------------- CHARACTER SELECT ----------------
 // Roster grid (Smash-style face tiles): fill the nulls in as new characters are made (null = "coming soon").
 // The last tile after these is RANDOM.
+// ROOM FOR 16 FIGHTERS: the empty slots (null) show as COMING SOON on the select screen until someone's added there
+const ROSTER_SLOTS = 16;
 const ROSTER = ['COLBY', 'LANCE', 'STICKMAN', 'AIDEN', 'COLBALIAS', 'COLTEN', 'SEVON', 'HUNTER', 'HAILIE'];
+while (ROSTER.length < ROSTER_SLOTS) ROSTER.push(null);
 const RANDOM_TILE = ROSTER.length;                 // tile index of the RANDOM tile
 const GRID_TILES = ROSTER.length + 1;
 const CHAR_INFO = {
@@ -26261,7 +26366,7 @@ const activePlayers = () => players.filter(p => !p.off);
 const localHuman = p => !p.cpu && !p.off && !p.remote;
 let selMsg = null;                    // little popup message ("COMING SOON", "CONTROLLER 1 JOINED")
 function rosterRect(i) {
-  const cols = 5, w = 200, h = 140, gap = 8, top = 100;
+  const cols = 6, w = 200, h = 108, gap = 6, top = 100;           // (6 x 3: the 16 fighter slots + RANDOM)
   const x0 = (W - (cols * w + (cols - 1) * gap)) / 2;
   return { x: x0 + (i % cols) * (w + gap), y: top + Math.floor(i / cols) * (h + gap), w, h };
 }
@@ -26752,7 +26857,7 @@ function startMatch() {
     Object.assign(f, { ultBuf: 0, atkBuf: 0, spcBuf: 0, jumpBuf: 0, grabBuf: 0, dodgeBuf: 0, dirBuf: 0, tauntBuf: 0, flyBuf: 0,
                        atkTapT: 9, spcTapT: 9, jumpTapT: 9, ultPower: 1, ultNerfT: 0, cFlick: null, lastInp: null, stompCD: 0,
                        comboTimer: 0, comboKey: null, opening: 0, squat: 0, flip: 0, slide: 0,
-                       riseTop: 0, circle: null, drawZ: 0, odm: null, odmHook: null, odmLedge: null, shipSong: null, tfUsedStock: false });
+                       riseTop: 0, circle: null, drawZ: 0, odm: null, odmHook: null, odmLedge: null, shipSong: null, tfUsedStock: false, bossSwapUsed: false });
     delete f.ai; delete f.odmGas;
   }
   applyStage(gameOptions.stage >= 0 ? gameOptions.stage : (voteStage ?? 0)); voteStage = null;   // (VOTE: the stage that won the vote)
@@ -26865,7 +26970,7 @@ function drawRosterTile(r, ch, isRandom, i, hoverCol) {
     sctx.globalAlpha = 0.22;
     drawPortrait(ROSTER.filter(Boolean)[k], x + w / 2, y + 60 + FACE_H * FACE_ZOOM, FACE_ZOOM, '#e8e8e8', menuTime);
     sctx.globalAlpha = 1;
-    text('?', x + w / 2, y + 92, 54, '#ffd23f', 'center');
+    text('?', x + w / 2, y + h * 0.62, 50, '#ffd23f', 'center');
     sctx.fillStyle = 'rgba(8,6,6,0.88)'; sctx.fillRect(x, y + h - 28, w, 28);
     sctx.fillStyle = '#ffd23f'; sctx.fillRect(x, y + h - 28, w, 3);
     text('RANDOM', x + w - 10, y + h - 8, 13, '#ffffff', 'right', false);
@@ -26873,7 +26978,7 @@ function drawRosterTile(r, ch, isRandom, i, hoverCol) {
     sctx.fillStyle = '#1b1819'; sctx.fillRect(x, y, w, h);
     sctx.fillStyle = 'rgba(255,255,255,0.03)';
     for (let k = 0; k < 6; k++) sctx.fillRect(x, y + k * 26, w, 12);
-    text('?', x + w / 2, y + 86, 42, '#34313a', 'center', false);
+    text('?', x + w / 2, y + h * 0.6, 40, '#34313a', 'center', false);
     text('COMING SOON', x + w / 2, y + h - 12, 7, '#56493f', 'center', false);
   }
   sctx.restore();
@@ -27115,7 +27220,7 @@ function drawSelect() {
       : players.some(p => p.cpu)
       ? 'CONTROLLER: PRESS A TO JOIN    KEYBOARD: WASD + J PICK, K BACK, ENTER START, TAB CONTROLS'
       : 'PICK YOUR FIGHTERS    A / J / CLICK = PICK    B / K / RIGHT CLICK = BACK    VIEW / DEL = LEAVE';
-    if (hint) text(hint, W / 2, 448, 8, '#b4b4bb', 'center', false);
+    if (hint) text(hint, W / 2, 452, 8, '#b4b4bb', 'center', false);
     // A controller is plugged in but nobody is using it: say so loudly
     const idlePad = getPads().findIndex((g, k) => g && g.connected && !players.some(p => !p.cpu && p.dev === 'pad' + k));
     if (idlePad >= 0 && !watchMode && !selMsg && Math.floor(menuTime * 2) % 2 === 0)
@@ -27638,7 +27743,8 @@ const MOVESETS = {
       ['DOWN THROW', 'Portal Loop', 'Two portals open, one stacked over the other, and she slams them in: they fall through them forever, faster and faster - until she spinning-roundhouse kicks them out.'] ] },
     { title: 'TRANSFORM + ULTIMATE (I)', rows: [
       ['I (FULL METER)', 'THE VOICES', 'Harder, faster - and three AUTOMATIC phase-outs when a hit is coming.'],
-      ['I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'] ] } ] },
+      ['I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'],
+      ['SIDE + I (TRANSFORMED)', 'Kunai Barrage', 'A TRACKING kunai at every enemy on the stage. Perfect block it to knock it away (or dodge it) - otherwise it sticks, and she teleports to each of them in turn with a fully charged RASENGAN.'] ] } ] },
   STICKMAN: { blurb: 'The original: a balanced all-rounder with simple smash attacks and energy shots. The best place to start.', sections: [
     { title: 'GROUND J', rows: [
       ['J', 'Jab', 'A quick punch.'],
@@ -28497,16 +28603,23 @@ function drawArcade() {
 const MINIGAMES = [
   { id: 'bossPractice', name: 'BOSS PRACTICE', desc: 'Fight the arcade FINAL BOSS - Colbalias on Hellfire - on any difficulty. No stars, just practice.', color: '#ff2a2a',
     open(dev) { openArcade(dev, true); } },
-  { id: 'hunterBall', name: 'HUNTER BALL', desc: 'Hunter fires ki blasts at you - PERFECT BLOCK them back. Every perfect block is a point. How long can you keep the rally going?', color: '#3fae2a',
+  { id: 'hunterBall', name: 'HUNTER BALL', desc: 'A ki blast that HUNTS you. Perfect block it back, dodge it, lead it into someone. Solo vs Hunter for the top 20 - or 2-player VERSUS.', color: '#3fae2a',
     open(dev) { openHunterBall(dev); } },
 ];
 // ---------------- HUNTER BALL ----------------
-// Hunter hovers just off the stage and fires a KI BLAST at you. PERFECT BLOCK it (tap block just as it gets to you) and it
-// flies straight back at him - he knocks it right back, a little faster every time. Every perfect block = 1 point. Get hit
-// (or let it past you, or just HOLD block) and the rally's over. Your best score + a TOP 20 board are kept on this computer.
-const HB = { speed0: 650, upMine: 1.05, upHis: 1.03, cap: 2600, parry: 0.12, r: 16, turn: 2.2, firstWait: 1.0, overT: 1.6,
-             spotX: 140, spotY: 70, board: 20, key: 'db-hunterball-board' };
-let hb = null;   // { phase: 'pick' | 'result', sel, dev, active, score, ball, best, board, ... }
+// A ki blast that HUNTS one player at a time (Genji-ball style). It homes in on its target with a fixed turn rate - so the
+// faster it gets, the wider it has to swing round:
+//   - PERFECT BLOCK it (tap block just as it reaches you): it goes after the OTHER side, a bit faster - and the rally goes up 1
+//   - DODGE it (a Z vanish, roll or spot dodge): it flies straight through you and has to turn all the way round - time!
+//   - it hits ANYONE it touches, not just its target: lead it into your opponent
+//   - anything else - hit, a held (not perfect) block, a KO - and that's it
+// SOLO: Hunter hovers off the stage knocking it back at you; your best rallies go on the TOP 20 board.
+// VERSUS: two players head to head, no Hunter - the blast just appears in the middle and picks a random target. Getting hit
+// loses the round; first to 3 rounds wins. The rally count is shared.
+const HB = { speed0: 650, upMine: 1.05, upHis: 1.03, cap: 2600, parry: 0.12, r: 16, turn: 3.0, firstWait: 1.0, overT: 1.6,
+             spotX: 140, spotY: 70, board: 20, key: 'db-hunterball-board', vsKey: 'db-hunterball-vsbest', grace: 0.3, toWin: 3,
+             dodges: ['air', 'roll', 'spot'] };
+let hb = null;   // { phase: 'pick' | 'result' | 'vsResult', mode: 'solo' | 'vs', sel, dev, p2, active, score, ball, board, wins, ... }
 // THE ONLINE TOP 20 (a Supabase table: hunterball_scores - name, score, char). Fill in url + key (the project's PUBLIC "anon"
 // key) to switch it on; left empty, the board is just this computer's. If it can't be reached, it falls back to the local one.
 const HB_ONLINE = { url: '', key: '', table: 'hunterball_scores' };
@@ -28528,25 +28641,31 @@ function hbSubmit(entry) {
 }
 function hbLoadBoard() { try { const v = JSON.parse(localStorage.getItem(HB.key) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
 function hbSaveBoard(b) { try { localStorage.setItem(HB.key, JSON.stringify(b)); } catch (e) {} }
+const hbVsBest = () => { try { return +localStorage.getItem(HB.vsKey) || 0; } catch (e) { return 0; } };
 const hbName = () => { try { return (localStorage.getItem('stickman-brawl-name') || 'PLAYER').slice(0, 12); } catch (e) { return 'PLAYER'; } };
 function openHunterBall(dev) {
   const picks = arcadePicks();
-  hb = { phase: 'pick', sel: hb ? hb.sel : Math.max(0, picks.indexOf('COLBY')), dev: dev || 'keyboard', active: false, score: 0, board: hbLoadBoard(), t: 0 };
+  hb = { phase: 'pick', mode: hb ? hb.mode : 'solo', sel: hb ? hb.sel : Math.max(0, picks.indexOf('COLBY')), dev: dev || 'keyboard', p2: null, ready: false,
+         active: false, score: 0, board: hbLoadBoard(), t: 0, wins: [0, 0] };
   scene = 'hunterball';
   hbFetchBoard();                                                 // (the online top 20, if it's switched on)
 }
-function hbStart() {
-  const A = hb, ch = arcadePicks()[A.sel];
-  A.saved = { players: players.map(q => ({ off: q.off, cpu: q.cpu, char: q.char, level: q.level, dev: q.dev, team: q.team, name: q.name, profile: q.profile })),
-              stage: gameOptions.stage, stocks: gameOptions.stocks, teams: gameOptions.teams, watch: watchMode };
-  Object.assign(players[0], { off: false, cpu: false, dev: A.dev, char: ch, team: 0, name: 'YOU' });
-  Object.assign(players[1], { off: false, cpu: true, dev: null, char: 'HUNTER', level: 'STAND', team: 1, name: 'HUNTER' });
+const hbVs = () => !!(hb && hb.mode === 'vs');
+// the players in it (SOLO: just you; VERSUS: both)
+const hbPlayers = () => hbVs() ? [fighters[0], fighters[1]].filter(Boolean) : [fighters[0]].filter(Boolean);
+function hbStart(fresh = true) {
+  const A = hb, picks = arcadePicks();
+  if (!A.saved) A.saved = { players: players.map(q => ({ off: q.off, cpu: q.cpu, char: q.char, level: q.level, dev: q.dev, team: q.team, name: q.name, profile: q.profile })),
+                            stage: gameOptions.stage, stocks: gameOptions.stocks, teams: gameOptions.teams, watch: watchMode };
+  Object.assign(players[0], { off: false, cpu: false, dev: A.dev, char: picks[A.sel], team: 0, name: hbVs() ? 'P1' : 'YOU' });
+  if (hbVs()) Object.assign(players[1], { off: false, cpu: false, dev: A.p2.dev, char: picks[A.p2.sel], team: 1, name: 'P2' });
+  else Object.assign(players[1], { off: false, cpu: true, dev: null, char: 'HUNTER', level: 'STAND', team: 1, name: 'HUNTER' });
   for (let i = 2; i < players.length; i++) players[i].off = true;
   gameOptions.stage = 0; gameOptions.stocks = 1; gameOptions.teams = false; watchMode = false;
+  if (fresh) A.wins = [0, 0];
   startMatch(); scene = 'fight';
-  Object.assign(A, { active: true, score: 0, ball: null, wait: HB.firstWait, over: false, overT: 0, newBest: false, rank: -1 });
-  hbPinHunter();
-  fighters[0].x = STAGE.x + STAGE.w * 0.4;
+  Object.assign(A, { active: true, score: 0, ball: null, wait: HB.firstWait, over: false, overT: 0, newBest: false, rank: -1, loser: -1 });
+  if (!hbVs()) { hbPinHunter(); fighters[0].x = STAGE.x + STAGE.w * 0.4; }
 }
 function hbRestore() {
   const S = hb && hb.saved; if (!S) return;
@@ -28554,7 +28673,7 @@ function hbRestore() {
   gameOptions.stage = S.stage; gameOptions.stocks = S.stocks; gameOptions.teams = S.teams; watchMode = S.watch;
   hb.saved = null;
 }
-const hbHunter = () => fighters.find(f => f.char === 'HUNTER' && !f.minion && f.controller !== 'keyboard' && !f.controller.startsWith('pad'));
+const hbHunter = () => hbVs() ? null : fighters.find(f => f.char === 'HUNTER' && !f.minion && f.controller !== 'keyboard' && !f.controller.startsWith('pad'));
 const hbHand = h => ({ x: h.x - 30, y: h.y - 62 });
 function hbPinHunter() {                                          // he hovers there, untouchable, facing the stage
   const h = hbHunter(); if (!h) return;
@@ -28562,86 +28681,135 @@ function hbPinHunter() {                                          // he hovers t
   h.face = -1; h.invuln = 9; h.damage = 0; h.shielding = false;
   if (h.action && h.action.type !== 'land') h.action = null;
 }
-function hbFire(from, to, speed) {                                // a ki blast from one point at another
-  const ang = Math.atan2(to.y - from.y, to.x - from.x);
-  hb.ball = { x: from.x, y: from.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed, toward: 'you', trail: [] };
+const hbAim = t => t === 'hunter' ? (hbHunter() ? hbHand(hbHunter()) : null) : t ? { x: t.x, y: t.y - 45 } : null;
+function hbFire(from, target, speed) {                            // the blast, from a point, after a target (a fighter / 'hunter')
+  const to = hbAim(target) || { x: from.x - 400, y: from.y }, ang = Math.atan2(to.y - from.y, to.x - from.x);
+  hb.ball = { x: from.x, y: from.y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, speed, target, trail: [], grace: null, graceT: 0 };
 }
-function hbThrow() {                                              // HUNTER fires it at you
+function hbThrow() {                                              // SOLO: HUNTER fires it at you
   const h = hbHunter(), p = fighters[0]; if (!h || !p) return;
   const from = hbHand(h), sp = hb.ball ? Math.min(HB.cap, hb.ball.speed * HB.upHis) : HB.speed0;
-  hbFire(from, { x: p.x, y: p.y - 45 + (Math.random() - 0.5) * 50 }, sp);
+  hbFire(from, p, sp);
   h.action = { type: 'land', t: 0, dur: 0.22 };
   burst(from.x, from.y, ['#86e63c', '#e6ff86', '#ffffff'], 16, Math.PI, 0.6, 500, { grav: 0 }); ring(from.x, from.y);
   sfx.blast ? sfx.blast() : sfx.whoosh(true);
 }
-function hbGameOver(why) {
+function hbSpawnCenter() {                                        // VERSUS: it appears in the middle and picks someone
+  const ps = hbPlayers(), t = ps[Math.floor(realRandom() * ps.length)], x = STAGE.x + STAGE.w / 2, y = STAGE.y - 250;
+  hbFire({ x, y }, t, HB.speed0);
+  burst(x, y, ['#86e63c', '#e6ff86', '#ffffff'], 40, 0, Math.PI, 600, { grav: 0 }); ring(x, y); ring(x, y - 20);
+  painTexts.push({ x: t.x, y: t.y - 170, t: 0.9, max: 0.9, text: "IT'S AFTER " + (t === fighters[0] ? 'P1' : 'P2') + '!', big: true });
+  sfx.blast ? sfx.blast() : sfx.whoosh(true);
+}
+function hbGameOver(why) {                                        // SOLO: the rally's over
   if (!hb || !hb.active || hb.over) return;
   hb.over = true; hb.overT = 0; hb.why = why;
-  if (hb.ball) { burst(hb.ball.x, hb.ball.y, ['#86e63c', '#e6ff86', '#ffffff'], 30, 0, Math.PI, 700, { grav: 0 }); ring(hb.ball.x, hb.ball.y); hb.ball = null; }
-  // the score goes on the board
+  hbPop();
   const board = hbLoadBoard(), prevBest = board.length ? board[0].score : 0, entry = { name: hbName(), score: hb.score, char: arcadePicks()[hb.sel], at: Date.now() };
   if (hb.score > 0) { board.push(entry); board.sort((a, b) => b.score - a.score || a.at - b.at); board.length = Math.min(board.length, HB.board); hbSaveBoard(board); }
   hb.board = board; hb.rank = board.indexOf(entry); hb.newBest = hb.score > 0 && hb.score > prevBest;
   hb.entry = entry; hbSubmit(entry);                              // (and onto the ONLINE board, if it's on)
   sfx.ko ? sfx.ko() : sfx.slam();
 }
-function hbLeaveFight() {                                         // back out of the fight to the Hunter Ball screen
+function hbRoundOver(loser, why) {                                // VERSUS: someone's been caught
+  if (!hb || !hb.active || hb.over) return;
+  const li = fighters.indexOf(loser), wi = li === 0 ? 1 : 0;
+  hb.over = true; hb.overT = 0; hb.why = why; hb.loser = li; hb.wins[wi]++;
+  hb.matchBest = Math.max(hb.matchBest || 0, hb.score);
+  if (hb.score > hbVsBest()) { try { localStorage.setItem(HB.vsKey, String(hb.score)); } catch (e) {} }
+  hbPop();
+  sfx.ko ? sfx.ko() : sfx.slam();
+}
+function hbPop() { if (hb.ball) { burst(hb.ball.x, hb.ball.y, ['#86e63c', '#e6ff86', '#ffffff'], 30, 0, Math.PI, 700, { grav: 0 }); ring(hb.ball.x, hb.ball.y); hb.ball = null; } }
+function hbLeaveFight(phase = 'result') {                         // back out of the fight to the Hunter Ball screen
   hbRestore(); removeAllMinions(); paused = false; matchOver = null;
   for (const f of fighters) { stopKameCharge(f); stopShotCharge(f); }
-  hb.active = false; hb.phase = 'result'; hb.t = 0; scene = 'hunterball';
+  hb.active = false; hb.phase = phase; hb.t = 0; scene = 'hunterball';
 }
 function hbQuit() {                                               // (the pause menu: leave it altogether)
   if (hb && hb.active) { hbRestore(); hb.active = false; }
   removeAllMinions(); paused = false; matchOver = null; hb = null;
   openMinigames(); menuSfx('back');
 }
+const hbDodging = f => isIntangible(f) || !!(f.action && HB.dodges.includes(f.action.type));
 // every step of the fight while it's on
 function updateHunterBall(dt) {
   if (!hb || !hb.active) return;
   hbPinHunter();
-  const p = fighters[0];
-  if (hb.over) { if ((hb.overT += dt) >= HB.overT) hbLeaveFight(); return; }
-  if (!p || p.respawnTimer > 0 || p.out) { hbGameOver('ko'); return; }
+  const ps = hbPlayers();
+  for (const p of fighters) { p.ult = 0; p.rage = 0; p.l2Pending = p.l3Pending = false; }   // (no ULT METER or Hunter's RAGE in here - nobody powers up or transforms)
+  if (hb.over) {
+    if ((hb.overT += dt) < HB.overT) return;
+    if (!hbVs()) { hbLeaveFight('result'); return; }
+    if (Math.max(...hb.wins) >= HB.toWin) { hbLeaveFight('vsResult'); return; }
+    const matchBest = hb.matchBest; hbStart(false); hb.matchBest = matchBest; return;   // (the next round)
+  }
+  for (const p of ps) if (p.respawnTimer > 0 || p.out) { if (hbVs()) hbRoundOver(p, 'ko'); else hbGameOver('ko'); return; }
   if (readyT > 0) return;
-  if (!hb.ball) { if ((hb.wait -= dt) <= 0) hbThrow(); return; }
+  if (!hb.ball) { if ((hb.wait -= dt) <= 0) { if (hbVs()) hbSpawnCenter(); else hbThrow(); } return; }
   const B = hb.ball;
-  if (B.toward === 'you') {                                       // homing in on you (a little - you can't just walk away from it)
-    const want = Math.atan2((p.y - 45) - B.y, p.x - B.x), cur = Math.atan2(B.vy, B.vx);
+  if (B.target !== 'hunter' && (!B.target || !fighters.includes(B.target))) B.target = ps[0];
+  // HUNTING: it turns toward its target - at a fixed rate, so at speed it swings wide
+  const aim = hbAim(B.target);
+  if (aim) {
+    const want = Math.atan2(aim.y - B.y, aim.x - B.x), cur = Math.atan2(B.vy, B.vx);
     let d = want - cur; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
     const na = cur + clamp(d, -HB.turn * dt, HB.turn * dt); B.vx = Math.cos(na) * B.speed; B.vy = Math.sin(na) * B.speed;
   }
   B.x += B.vx * dt; B.y += B.vy * dt;
+  B.x = clamp(B.x, BLAST.left + 30, BLAST.right - 30); B.y = clamp(B.y, BLAST.top + 30, BLAST.bottom - 30);   // (never lost off the edge - it just turns back)
   B.trail.push({ x: B.x, y: B.y }); if (B.trail.length > 10) B.trail.shift();
   if (Math.random() < dt * 40) burst(B.x, B.y, ['#86e63c', '#e6ff86'], 1, Math.atan2(-B.vy, -B.vx), 0.5, 120, { grav: 0 });
-  if (B.toward === 'you') {
-    if (Math.hypot(B.x - p.x, B.y - (p.y - 45)) < HB.r + 26) {    // IT GETS TO YOU
-      if (p.shielding && p.shieldAge <= HB.parry) {               // PERFECT BLOCK: straight back at him - a point
-        hb.score++;
-        perfectBlockFx(p, B.x, B.y);
-        const h = hbHunter(); hbFire({ x: B.x, y: B.y }, h ? hbHand(h) : { x: B.x + 600, y: B.y }, Math.min(HB.cap, B.speed * HB.upMine));
-        hb.ball.toward = 'him';
-        painTexts.push({ x: p.x, y: p.y - 180, t: 0.6, max: 0.6, text: String(hb.score), big: true });
-      } else {                                                    // anything else: it hits you - rally over
-        applyHit(p, { dmg: 6, base: 420, growth: 0, angle: 135 }, -1, 1, B.x, B.y, { fighter: hbHunter() });
-        hbGameOver(p.shielding ? 'held' : 'hit');
-      }
-      return;
-    }
-    if (B.x < BLAST.left + 40 || B.y > BLAST.bottom - 40 || B.y < BLAST.top + 40 || (B.vx < 0 && B.x < p.x - 260)) { hbGameOver('missed'); return; }   // (it got past you)
-  } else {
+  if (B.graceT > 0) B.graceT -= dt;
+  // SOLO: going back at Hunter - he knocks it right back
+  if (B.target === 'hunter') {
     const h = hbHunter(), hand = h ? hbHand(h) : null;
-    if (!hand || Math.hypot(B.x - hand.x, B.y - hand.y) < HB.r + 30 || B.x > hand.x + 40) {   // HE KNOCKS IT RIGHT BACK
+    if (!hand || Math.hypot(B.x - hand.x, B.y - hand.y) < HB.r + 30) {
       if (hand) { burst(hand.x, hand.y, ['#86e63c', '#ffffff'], 20, Math.PI, 0.8, 600, { grav: 0 }); ring(hand.x, hand.y); }
       sfx.parry(); shake = Math.max(shake, 5);
       hbThrow();
+      return;
     }
   }
+  // IT HITS WHOEVER IT TOUCHES
+  for (const p of ps) {
+    if (B.graceT > 0 && B.grace === p) continue;                  // (not the one who just sent it off)
+    if (Math.hypot(B.x - p.x, B.y - (p.y - 45)) >= HB.r + 26) continue;
+    if (hbDodging(p)) {                                           // DODGED: straight through them - it has to come round again
+      if (!B.dodged || B.dodged !== p) { B.dodged = p; painTexts.push({ x: p.x, y: p.y - 150, t: 0.5, max: 0.5, text: 'DODGED!', big: false }); }
+      continue;
+    }
+    if (p.shielding && p.shieldAge <= HB.parry) {                 // PERFECT BLOCK: it goes after the other side - a point
+      hb.score++;
+      perfectBlockFx(p, B.x, B.y);
+      const next = hbVs() ? ps.find(q => q !== p) || p : 'hunter';
+      hbFire({ x: B.x, y: B.y }, next, Math.min(HB.cap, B.speed * HB.upMine));
+      hb.ball.grace = p; hb.ball.graceT = HB.grace;
+      painTexts.push({ x: p.x, y: p.y - 180, t: 0.6, max: 0.6, text: String(hb.score), big: true });
+      return;
+    }
+    // CAUGHT
+    applyHit(p, { dmg: 6, base: 420, growth: 0, angle: 80 }, Math.sign(B.vx) || 1, 1, B.x, B.y, { fighter: hbHunter() || ps.find(q => q !== p) });
+    for (const q of fighters) { q.ult = 0; q.rage = 0; }          // (no meter from it)
+    const why = p.shielding ? 'held' : B.target === p ? 'hit' : 'led';
+    if (hbVs()) hbRoundOver(p, why); else hbGameOver(why);
+    return;
+  }
+  if (B.dodged && Math.hypot(B.x - B.dodged.x, B.y - (B.dodged.y - 45)) > 140) B.dodged = null;
 }
-// (drawing, in the world) the ki blast
+// (drawing, in the world) the ki blast - and who it's after
 function drawHunterBall() {
   if (!hb || !hb.active || !hb.ball) return;
   const B = hb.ball, pulse = 1 + 0.12 * Math.sin(time * 30);
   ctx.save();
+  if (B.target && B.target !== 'hunter') {                        // THE TARGET: a green ring at their feet + a marker over them
+    const t = B.target, k = 0.6 + 0.4 * Math.sin(time * 10);
+    ctx.strokeStyle = sketch ? '#333333' : `rgba(134,230,60,${0.5 + 0.5 * k})`; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(t.x, t.y, 30 + 6 * k, 9, 0, 0, Math.PI * 2); ctx.stroke();
+    const my = t.y - (t.h || 90) - 34 - 4 * k;
+    ctx.fillStyle = sketch ? '#333333' : '#86e63c';
+    ctx.beginPath(); ctx.moveTo(t.x - 9, my - 12); ctx.lineTo(t.x + 9, my - 12); ctx.lineTo(t.x, my); ctx.closePath(); ctx.fill();
+  }
   if (!sketch) {
     ctx.globalCompositeOperation = 'lighter';
     B.trail.forEach((q, i) => { ctx.globalAlpha = (i + 1) / B.trail.length * 0.35; ctx.fillStyle = '#86e63c'; ctx.beginPath(); ctx.arc(q.x, q.y, HB.r * (i + 1) / B.trail.length, 0, Math.PI * 2); ctx.fill(); });
@@ -28654,48 +28822,73 @@ function drawHunterBall() {
   ctx.beginPath(); ctx.arc(B.x, B.y, HB.r * pulse, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.restore();
 }
-// (the HUD) the rally count
+// (the HUD) the rally count - and in VERSUS the round score
 function drawHunterBallHUD() {
   if (!hb || !hb.active) return;
-  const best = hb.board && hb.board.length ? hb.board[0].score : 0;
   text('RALLY ' + hb.score, W / 2, 70, 26, '#e6ff86', 'center');
+  if (hbVs()) {
+    const [a, b] = [fighters[0], fighters[1]];
+    text('P1 ' + charName(a ? a.char : '') + '  ' + hb.wins[0] + ' - ' + hb.wins[1] + '  ' + charName(b ? b.char : '') + ' P2', W / 2, 96, 11, '#ffffff', 'center');
+    text('FIRST TO ' + HB.toWin, W / 2, 114, 8, '#b4b4bb', 'center');
+    if (hb.over) {
+      const w = hb.loser === 0 ? 1 : 0, done = hb.wins[w] >= HB.toWin;
+      text((hb.why === 'led' ? 'LED INTO IT! ' : hb.why === 'held' ? 'NOT A PERFECT BLOCK! ' : '') + 'P' + (w + 1) + (done ? ' WINS THE MATCH!' : ' WINS THE ROUND!'), W / 2, 160, 16, '#ffd23f', 'center');
+    }
+    return;
+  }
+  const best = hb.board && hb.board.length ? hb.board[0].score : 0;
   text('BEST ' + Math.max(best, hb.score), W / 2, 96, 11, '#ffffff', 'center');
-  if (readyT <= 0 && !hb.ball && !hb.over && hb.score === 0) text('PERFECT BLOCK IT BACK - TAP BLOCK JUST AS IT REACHES YOU', W / 2, 130, 10, '#ffffff', 'center');
-  if (hb.over) text(hb.why === 'held' ? 'HELD BLOCK - IT HAS TO BE A PERFECT BLOCK!' : hb.why === 'missed' ? 'IT GOT PAST YOU!' : 'RALLY OVER!', W / 2, 160, 16, '#ff6a6a', 'center');
+  if (readyT <= 0 && !hb.ball && !hb.over && hb.score === 0) text('PERFECT BLOCK IT BACK - OR DODGE IT AND MAKE IT TURN ROUND', W / 2, 130, 10, '#ffffff', 'center');
+  if (hb.over) text(hb.why === 'held' ? 'HELD BLOCK - IT HAS TO BE A PERFECT BLOCK!' : 'RALLY OVER!', W / 2, 160, 16, '#ff6a6a', 'center');
 }
-// the Hunter Ball screen: pick a fighter (and see the board), or the result of the last rally
+// the Hunter Ball screen: pick SOLO / VERSUS + fighters (and see the board), or the result
 function hunterBallUpdate(dt) {
   if (!hb) { openMinigames(); return; }
   hb.t += dt;
-  const devs = menuDevices(dt), picks = arcadePicks();
+  const devs = menuDevices(dt), picks = arcadePicks(), n = picks.length;
   for (const d of devs) {
     if (hb.phase === 'pick') {
-      if (d.tap.left) { hb.sel = (hb.sel + picks.length - 1) % picks.length; menuSfx('move'); }
-      if (d.tap.right) { hb.sel = (hb.sel + 1) % picks.length; menuSfx('move'); }
-      if (d.tap.ok || d.tap.start) { hb.dev = d.dev; menuSfx('go'); hbStart(); return; }
-      if (d.tap.back || d.tap.esc) { hb = null; openMinigames(); menuSfx('back'); return; }
-    } else if (hb.phase === 'result') {
+      const isP1 = d.dev === hb.dev || (d.dev === 'keyboard' && !hb.p2), isP2 = hb.p2 && d.dev === hb.p2.dev;
+      if (isP1 && !isP2) {
+        if ((d.tap.up || d.tap.down || d.tap.alt) && !hb.ready) { hb.mode = hbVs() ? 'solo' : 'vs'; if (!hbVs()) hb.p2 = null; menuSfx('move'); }
+        if (!hb.ready && d.tap.left) { hb.sel = (hb.sel + n - 1) % n; menuSfx('move'); }
+        if (!hb.ready && d.tap.right) { hb.sel = (hb.sel + 1) % n; menuSfx('move'); }
+        if (d.tap.ok || d.tap.start) {
+          hb.dev = d.dev;
+          if (!hbVs()) { menuSfx('go'); hbStart(); return; }
+          hb.ready = true; menuSfx('pick');
+        }
+        if (d.tap.back || d.tap.esc) { if (hb.ready) { hb.ready = false; menuSfx('back'); } else { hb = null; openMinigames(); menuSfx('back'); return; } }
+      } else if (hbVs()) {                                         // VERSUS: anyone else is P2
+        if (!hb.p2) { if (d.tap.ok || d.tap.start) { hb.p2 = { dev: d.dev, sel: (hb.sel + 1) % n, ready: false }; menuSfx('pick'); } continue; }
+        if (!isP2) continue;
+        if (!hb.p2.ready && d.tap.left) { hb.p2.sel = (hb.p2.sel + n - 1) % n; menuSfx('move'); }
+        if (!hb.p2.ready && d.tap.right) { hb.p2.sel = (hb.p2.sel + 1) % n; menuSfx('move'); }
+        if (d.tap.ok || d.tap.start) { hb.p2.ready = true; menuSfx('pick'); }
+        if (d.tap.back || d.tap.esc) { if (hb.p2.ready) hb.p2.ready = false; else hb.p2 = null; menuSfx('back'); }
+      }
+      if (hbVs() && hb.ready && hb.p2 && hb.p2.ready) { hb.ready = false; hb.p2.ready = false; menuSfx('go'); hbStart(); return; }
+    } else if (hb.phase === 'result' || hb.phase === 'vsResult') {
       if ((d.tap.ok || d.tap.start) && hb.t > 0.5) { menuSfx('go'); hbStart(); return; }
-      if ((d.tap.back || d.tap.esc) && hb.t > 0.3) { hb.phase = 'pick'; hb.t = 0; menuSfx('back'); }
+      if ((d.tap.back || d.tap.esc) && hb.t > 0.3) { hb.phase = 'pick'; hb.t = 0; hb.ready = false; if (hb.p2) hb.p2.ready = false; menuSfx('back'); }
     }
   }
-  if (mouse.click && hb.phase === 'pick') picks.forEach((c, k) => { if (inRect(mouse, arcadeTileRect(k))) { if (hb.sel === k) { hb.dev = 'keyboard'; hbStart(); } else { hb.sel = k; menuSfx('move'); } } });
-  if (mouse.right) { if (hb.phase === 'result') hb.phase = 'pick'; else { hb = null; openMinigames(); } }
+  if (mouse.click && hb.phase === 'pick' && !hb.ready) picks.forEach((c, k) => { if (inRect(mouse, arcadeTileRect(k))) { if (hb.sel === k && !hbVs()) { hb.dev = 'keyboard'; hbStart(); } else { hb.sel = k; menuSfx('move'); } } });
+  if (mouse.right) { if (hb.phase !== 'pick') hb.phase = 'pick'; else { hb = null; openMinigames(); } }
   mouse.click = mouse.right = mouse.moved = false;
 }
 function drawHunterBallMenu() {
   if (!hb) return;
   const th = menuTheme(), px = th === 'pixel', sk = th === 'sketch';
   const F = (sz, bold) => px ? `${Math.max(8, Math.round(sz * 0.5))}px ${PX_FONT}` : sk ? `${sz}px ${DOODLE_FONT}` : `${bold ? 'italic ' : ''}${sz}px ${CG_FONT}`;
-  const ink = sk ? INK : '#ffffff', dim = sk ? '#5a5470' : '#c9bfc4', green = sk ? '#2f8a3a' : '#86e63c', picks = arcadePicks();
+  const ink = sk ? INK : '#ffffff', dim = sk ? '#5a5470' : '#c9bfc4', green = sk ? '#2f8a3a' : '#86e63c', blue = sk ? '#2a5fb0' : '#5aa8ff', picks = arcadePicks();
   const online = hbOnline.state === 'ok', board = online ? hbOnline.list : (hb.board || []);
   const boardTitle = online ? 'TOP ' + HB.board + ' - ONLINE' : 'TOP ' + HB.board + ' - THIS COMPUTER' + (hbOnline.state === 'loading' ? '  (loading online...)' : hbOnline.state === 'error' ? '  (online board unreachable)' : '');
   const isMine = (e, i) => hb.phase === 'result' && (online ? !!hb.entry && e && e.name === hb.entry.name && e.score === hb.entry.score && board.findIndex(q => q.name === hb.entry.name && q.score === hb.entry.score) === i : i === hb.rank);
   withMenuDrawing(() => {
     if (sk) drawNotebook(); else if (px) { drawPXBackground(); blitPX(); } else drawCGBackground();
     const title = (str, y, size, col) => { sctx.textAlign = 'center'; sctx.font = F(size, true); sctx.fillStyle = sk ? 'rgba(29,27,42,0.9)' : '#000'; sctx.fillText(str, W / 2 + 4, y + 4); sctx.fillStyle = col; sctx.fillText(str, W / 2, y); };
-    // THE BOARD (top 20, kept on this computer)
-    const drawBoard = (x, y) => {
+    const drawBoard = (x, y) => {                                 // THE BOARD (solo rallies)
       sctx.textAlign = 'center'; sctx.font = F(18, true); sctx.fillStyle = green; sctx.fillText(boardTitle, x, y);
       for (let i = 0; i < HB.board; i++) {
         const e = board[i], col = i < 10 ? 0 : 1, row = i % 10, ex = x - 290 + col * 330, ey = y + 26 + row * 21, mine = isMine(e, i);
@@ -28705,21 +28898,52 @@ function drawHunterBallMenu() {
         sctx.textAlign = 'right'; sctx.fillText(e ? String(e.score) : '', ex + 220, ey);
       }
     };
+    const portrait = (ch, x, y, k, dir = 1) => { const keep = sketch; if (sk) sketch = true; drawPortrait(ch, x, y, k, sk ? INK : (CHARACTERS[ch].look.body || '#fff'), menuTime, dir); sketch = keep; };
     if (hb.phase === 'pick') {
-      title('HUNTER BALL', 72, 56, green);
-      sctx.textAlign = 'center'; sctx.font = F(16); sctx.fillStyle = dim;
-      sctx.fillText('Hunter fires ki blasts at you. PERFECT BLOCK them (tap block just as one reaches you) to send it back. Each one = 1 point.', W / 2, 106);
-      drawBoard(W / 2, 140);
-      const ch = picks[hb.sel], keep = sketch; if (sk) sketch = true;
-      drawPortrait(ch, W / 2, 440, 1.3, sk ? INK : (CHARACTERS[ch].look.body || '#fff'), menuTime); sketch = keep;
+      title('HUNTER BALL', 62, 52, green);
+      // the mode tabs
+      [['solo', 'SOLO vs HUNTER'], ['vs', 'VERSUS (2 PLAYERS)']].forEach(([m, label], k) => {
+        const r = { x: W / 2 - 300 + k * 310, y: 82, w: 290, h: 34 }, on = hb.mode === m;
+        if (sk) { if (on) { sctx.fillStyle = 'rgba(160,230,120,0.7)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 90, INK, on ? 3 : 1.5); }
+        else slantRect(r.x, r.y, r.w, r.h, 8, on ? '#3fae2a' : 'rgba(20,16,18,0.85)');
+        sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(label, r.x + r.w / 2, r.y + 23);
+      });
+      sctx.textAlign = 'center'; sctx.font = F(14); sctx.fillStyle = dim;
+      sctx.fillText('It HUNTS its target. PERFECT BLOCK it to send it at the other side (+1 rally) - DODGE it to make it turn round - lead it into your opponent!', W / 2, 140);
+      if (!hbVs()) {
+        drawBoard(W / 2, 172);
+        portrait(picks[hb.sel], W / 2, 440, 1.25);
+      } else {                                                     // VERSUS: P1 and P2, side by side
+        sctx.font = F(16, true); sctx.fillStyle = green; sctx.fillText('BEST VERSUS RALLY: ' + hbVsBest() + '     -     FIRST TO ' + HB.toWin + ' ROUNDS', W / 2, 178);
+        const slot = (x, label, col, sel, joined, ready) => {
+          sctx.textAlign = 'center'; sctx.font = F(26, true); sctx.fillStyle = col; sctx.fillText(label, x, 222);
+          if (!joined) { sctx.font = F(16); sctx.fillStyle = dim; sctx.fillText('PRESS J / A ON ANOTHER', x, 330); sctx.fillText('CONTROLLER (OR KEYBOARD) TO JOIN', x, 352); return; }
+          portrait(picks[sel], x, 430, 1.15);
+          sctx.font = F(22, true); sctx.fillStyle = ink; sctx.fillText(charName(picks[sel]), x, 452);
+          sctx.font = F(18, true); sctx.fillStyle = ready ? '#ffd23f' : dim; sctx.fillText(ready ? 'READY!' : 'J / A = READY', x, 248);
+        };
+        slot(W / 2 - 260, 'P1', green, hb.sel, true, hb.ready);
+        slot(W / 2 + 260, 'P2', blue, hb.p2 ? hb.p2.sel : 0, !!hb.p2, hb.p2 && hb.p2.ready);
+        sctx.font = F(60, true); sctx.fillStyle = '#ff6a6a'; sctx.textAlign = 'center'; sctx.fillText('VS', W / 2, 360);
+      }
       picks.forEach((c, k) => {
-        const r = arcadeTileRect(k), on = k === hb.sel;
-        if (sk) { if (on) { sctx.fillStyle = 'rgba(160,230,120,0.7)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 20, INK, on ? 3 : 1.5); }
-        else slantRect(r.x, r.y, r.w, r.h, 10, on ? '#3fae2a' : 'rgba(20,16,18,0.85)');
-        sctx.textAlign = 'center'; sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 38);
+        const r = arcadeTileRect(k), on = k === hb.sel, on2 = hbVs() && hb.p2 && k === hb.p2.sel;
+        if (sk) { if (on || on2) { sctx.fillStyle = on ? 'rgba(160,230,120,0.7)' : 'rgba(120,170,255,0.6)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 20, INK, on || on2 ? 3 : 1.5); }
+        else { slantRect(r.x, r.y, r.w, r.h, 10, on ? '#3fae2a' : on2 ? '#1f6fd6' : 'rgba(20,16,18,0.85)'); if (on && on2) { sctx.fillStyle = '#1f6fd6'; sctx.fillRect(r.x + r.w / 2, r.y + r.h - 8, r.w / 2 - 6, 6); } }
+        sctx.textAlign = 'center'; sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on || on2 ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 38);
       });
       sctx.textAlign = 'center'; sctx.font = F(15); sctx.fillStyle = dim;
-      sctx.fillText('LEFT / RIGHT = FIGHTER   -   J / ENTER = PLAY   -   K / ESC = BACK', W / 2, H - 16);
+      sctx.fillText('UP / DOWN = SOLO / VERSUS   -   LEFT / RIGHT = FIGHTER   -   J / ENTER = ' + (hbVs() ? 'READY' : 'PLAY') + '   -   K / ESC = BACK', W / 2, H - 16);
+    } else if (hb.phase === 'vsResult') {
+      const w = hb.wins[0] >= HB.toWin ? 0 : 1, wc = w === 0 ? picks[hb.sel] : picks[hb.p2 ? hb.p2.sel : 0];
+      title('P' + (w + 1) + ' WINS!', 90, 66, w === 0 ? green : blue);
+      sctx.textAlign = 'center'; sctx.font = F(40, true); sctx.fillStyle = ink; sctx.fillText(hb.wins[0] + ' - ' + hb.wins[1], W / 2, 150);
+      sctx.font = F(18); sctx.fillStyle = dim;
+      sctx.fillText('Longest rally this match: ' + (hb.matchBest || 0) + '     -     Best ever versus rally: ' + hbVsBest(), W / 2, 186);
+      portrait(wc, W / 2, 520, 1.8);
+      sctx.font = F(26, true); sctx.fillStyle = ink; sctx.fillText(charName(wc), W / 2, 548);
+      sctx.font = F(18); sctx.fillStyle = dim;
+      if (hb.t > 0.5) sctx.fillText('J / ENTER = REMATCH   -   K / ESC = PICK FIGHTERS', W / 2, H - 24);
     } else {
       title(hb.newBest ? 'NEW BEST!' : 'RALLY OVER', 80, 60, hb.newBest ? '#ffd23f' : green);
       sctx.textAlign = 'center'; sctx.font = F(40, true); sctx.fillStyle = ink; sctx.fillText(hb.score + (hb.score === 1 ? ' POINT' : ' POINTS'), W / 2, 136);
