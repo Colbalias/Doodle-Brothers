@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.85",
+    "version":  "0.7.86",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "f25944c5cc8e0bd0074c41ac877b3a1bb01826d787a69d9c146227a4d97de8a0",
-                                     "size":  2198822
+                                     "hash":  "992a49843d4557152e0202dd6c9c40f676df51f39381507ffc28d1215cd7b255",
+                                     "size":  2234131
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -75,6 +75,10 @@
                                                         "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
                                                         "size":  1010304
                                                     },
+                  "sounds/battle/colten-one-punch.mp3":  {
+                                                             "hash":  "508a0fcddb056b98314a273fcc8b49e62bed62318868f5d138b3399db50caf8a",
+                                                             "size":  1422070
+                                                         },
                   "sounds/battle/colten-sun.mp3":  {
                                                        "hash":  "510f71e8ed4dade1f2fa2c18fc8f55214a6bf59704d026f4dc68175b14075605",
                                                        "size":  404121

@@ -126,8 +126,9 @@ for (let k = 0; k < 32768; k++) {
 }
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - 0.5);
 const DITHER = 22;
-// Art styles - P cycles through them: chunky pixel art, smooth Combat Gods animation, notebook sketch
-const ART_STYLES = ['PIXEL', 'COMBAT GODS', 'SKETCHBOOK'];
+// Art styles - P cycles through them: smooth Combat Gods animation, notebook sketch. (The old chunky PIXEL style has
+// been CUT - it's no longer offered, and anyone who had it saved is moved over to Combat Gods.)
+const ART_STYLES = ['COMBAT GODS', 'SKETCHBOOK'];
 let artStyle = 'COMBAT GODS';   // smooth by default (like the Combat Gods animations) - P switches to pixel / sketchbook
 let pixelMode = false;   // artStyle === 'PIXEL'
 let sketch = false;      // artStyle === 'SKETCHBOOK'
@@ -141,6 +142,7 @@ const settings = (() => {
 function saveSettings() { try { localStorage.setItem('stickman-brawl-settings', JSON.stringify(settings)); } catch (e) {} }
 function setArtStyle(s) { artStyle = s; pixelMode = s === 'PIXEL'; sketch = s === 'SKETCHBOOK'; if (settings.art !== s) { settings.art = s; saveSettings(); } }
 if (ART_STYLES.includes(settings.art)) setArtStyle(settings.art);   // the art style you picked last time
+else if (settings.art === 'PIXEL') setArtStyle('COMBAT GODS');     // (PIXEL was cut: their saved pick moves to the default)
 // QUALITY (OPTIONS): HIGH = full sharpness and every effect; PERFORMANCE = for slower PCs (see fit(), drawGhosts, drawParticles)
 const QUALITIES = ['HIGH', 'PERFORMANCE'];
 const lowQuality = () => settings.quality === 'PERFORMANCE';
@@ -792,7 +794,7 @@ function updateCamera(dt) {
   if (shipF) {                                       // Aiden's pirate ship: pull out to show the whole ship
     const a = shipF.action; tx = a.x + a.dir * (a.t < SHIP.holdEnd ? 0 : SHIP.L * 0.45); ty = a.gy - 210; tz = 0.72; speed = 3;
   }
-  const uiF = alive.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut') && f.action.cam);   // (+ Hunter's Legendary 3)
+  const uiF = alive.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'cOnePunch') && f.action.cam);   // (+ Colten's One Punch)   // (+ Hunter's Legendary 3)
   if (uiF) { const c = uiF.action.cam; tx = c.x; ty = c.y; tz = c.z; speed = c.speed; }   // Lance's Ultra Instinct: the cutscene's own camera
   if (typeof ult !== 'undefined' && ult) {          // ultimate: push in close on the action
     const u = ult.user, v = ult.target;
@@ -3511,7 +3513,7 @@ const CROSS_CHOP = { grabR: 50, aoe: 140, maxDrop: 360,             // maxDrop: 
                      drop: { dmg: 4,  base: 260, growth: 2,   angle: 80 } };   // never reached the floor: let go
 // COLBY'S JAJANKEN: ROCK - once he's picked it (wind-up, the punch, the hold) no grab can take him: it goes straight through
 const rockCommitted = t => !!(t && t.action && t.action.type === 'attack' && t.action.key === 'jjRock' && t.action.phase !== 'end');
-const canBeGrabbed = (f, t) => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !(t.halo > 0) && !isIntangible(t) && !t.dead && !(t.poofT > 0) && !unstoppable(t) && !rockCommitted(t) &&
+const canBeGrabbed = (f, t) => t !== f && !allies(f, t) && !guanyinClone(f) && t.respawnTimer <= 0 && !(t.halo > 0) && !isIntangible(t) && !t.dead && !(t.poofT > 0) && !unstoppable(t) && !rockCommitted(t) &&
   !(t.action && ['grabbed', 'holding', 'thrown', 'whipped', 'impaled', 'ultVictim', 'ultSeq', 'timeStop', 'shipUlt'].includes(t.action.type));
 // Only someone STANDING ON THE GROUND gets grabbed. Someone IN THE AIR just gets HIT and dragged along with him.
 // (Either way a well-timed Z vanish dodges it - you're intangible, so it can't catch you.)
@@ -9191,7 +9193,7 @@ Object.assign(HUNTER_MOVES, {
     strike: pose({ bob: 4, armA: [2.9, -0.2], armB: [-0.5, -1.0], lean: -0.1, legA: [0.2, 0.1], legB: [-0.3, 0.1] }) },
   // SIDE J - THE BROLY EXPRESS: a hyper-armored charge. Whoever he runs into, he grabs by the head and DRAGS face-first
   // along the floor - then hurls them (at the edge: straight off it). Misses = he skids to a stop, wide open.
-  sideGround: { name: 'THE BROLY EXPRESS', startup: 0.2, active: 2, endlag: 0.45, armor: true, noClash: true, hitboxes: [],
+  sideGround: { name: 'THE BROLY EXPRESS', startup: 0.2, active: 2, endlag: 0.45, armor: true, noClash: true, hitboxes: [], noGrabUlt: true,   // (no Glacier Grind out of it - too strong)
     wind: pose({ lean: 0.5, bob: -14, armA: [-0.4, -0.8], armB: [0.6, -1.4], legA: [1.1, 1.3], legB: [-0.8, 0.5] }),
     strike: pose({ lean: 0.7, bob: -8, armA: [1.6, 0], armB: [-1.2, -0.4], legA: [1.0, 0.6], legB: [-1.0, 0.3] }),
     step(f, a, dt) { return stepHunterExpress(f, a, dt); } },
@@ -10039,7 +10041,7 @@ function stepHailieComeback(f, a, dt) {
   f.rasen = 0;
   if (a.t > 0.25) f.action = null;
 }
-// ---- HAILIE'S SIDE ULTIMATE (transformed, SIDE + I): KUNAI BARRAGE - she hangs in the air and throws a TRACKING kunai at
+// ---- HAILIE'S MAIN ULTIMATE (transformed, I - it was her side one): KUNAI BARRAGE - she hangs in the air and throws a TRACKING kunai at
 //      EVERY enemy on the stage. A PERFECT BLOCK knocks one away; dodged, it flies past; anything else (a plain block too)
 //      and it STICKS - they're pinned. Then she TELEPORTS to each one in turn and drives a FULLY CHARGED RASENGAN into them.
 const H_KULT = { wind: 0.3, speed: 1500, turn: 7, life: 1.4, hitR: 30, waitMax: 1.6, gap: 0.32, pin: 2.5 };
@@ -10118,6 +10120,164 @@ function drawHailieKunaiUlt() {
       if (k.state === 'fly') { drawKunaiShape(k.x, k.y, Math.atan2(k.vy, k.vx), 1.1); if (!sketch && Math.random() < 0.6) particles.push({ x: k.x, y: k.y, vx: 0, vy: 0, life: 0.15, max: 0.15, size: 2, color: '#ffd23f', type: 'bit', grav: 0 }); }
       else if (k.state === 'stuck' && fighters.includes(k.t) && !k.t.hRasened) drawKunaiShape(k.t.x - 6, k.t.y - 52, -Math.PI / 2 + 0.6, 1.0);   // (stuck in them)
     }
+  }
+}
+// ---- HAILIE'S SIDE ULTIMATE (transformed, SIDE + I): RASENGAN DROP - she throws ONE kunai. If it sticks in someone, she
+//      TELEPORTS straight above them, a FULLY CHARGED RASENGAN held up over her head... and drops onto them with it, driving
+//      them down INTO the floor (a crater, a dome of chakra blowing out round them) - they're ground into it for a moment,
+//      then they BOUNCE off it and all the knockback goes STRAIGHT UP. (No floor under them? It just spikes them down.)
+//      A PERFECT BLOCK knocks the kunai away; a dodge lets it fly past - either way, nothing happens.
+const H_RDROP = { wind: 0.16, speed: 1800, turn: 2.6, life: 0.8, hitR: 34, above: 200, charge: 0.42, dive: 0.12, grind: 0.42,
+                  slamDmg: 9, final: { dmg: 12, base: 820, growth: 7.2, angle: 90, ultFinal: true, xray: 'SPINE' },   // (the bounce: straight up)
+                  spike: { dmg: 14, base: 520, growth: 6, angle: -90, ultFinal: true } };                             // (nothing under them)
+const H_RDROP_POSE = {
+  held: pose({ lean: -0.25, bob: 0, armA: [3.05, 0.1], armB: [-0.9, -0.7], legA: [0.7, 1.5], legB: [-0.3, 1.1] }),   // above them: the Rasengan held up over her head
+  drive: pose({ lean: 0.25, bob: -6, armA: [0.12, 0], armB: [2.4, 0.5], legA: [-0.5, 0.7], legB: [-0.9, 0.9] }),     // dropping, driving it straight down
+};
+function startHailieRasenDrop(f) {
+  f.action = { type: 'hRasenDrop', t: 0, ph: 'wind', pose: H_POSE.throwW };
+  f.vx = f.vy = 0; f.invuln = Math.max(f.invuln || 0, 0.4);
+}
+// what's under them to be driven into: the stage or a platform (null = nothing - they're off the stage)
+function rdropFloor(v) {
+  let best = null;
+  if (v.x > STAGE.x && v.x < STAGE.x + STAGE.w && v.y <= STAGE.y + 2) best = STAGE.y;
+  for (const p of PLATFORMS) if (v.x > p.x && v.x < p.x + p.w && v.y <= p.y + 2 && (best === null || p.y < best)) best = p.y;
+  return best;
+}
+function stepHailieRasenDrop(f, a, dt) {
+  const R = H_RDROP, F = f.face, pw = powerOf(f) * (f.ultPower || 1);
+  f.invuln = Math.max(f.invuln || 0, 0.1);                       // (untouchable while she does it)
+  const v = a.v, gone = v && (!fighters.includes(v) || v.respawnTimer > 0 || v.out);
+  const finish = () => { a.orb = null; f.action = { type: 'land', t: 0, dur: 0.3 }; f.ground = false; };
+  if (gone) { finish(); return; }
+  const pin = () => { const w = a.v; w.vx = w.vy = 0; w.x = a.vx0; w.y = a.vy0; w.shielding = false; if (w.action && w.action.type === 'hitstun') w.action.t = 0; };
+  if (a.ph === 'wind') {                                         // the throw
+    f.vx = 0; if (!f.ground) f.vy = 0;
+    if (a.t >= R.wind) {
+      a.ph = 'fly'; a.t = 0; a.pose = H_POSE.throwS;
+      const foes = fighters.filter(t => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !t.out && !t.dead && Math.sign(t.x - f.x) === F);
+      const aim = foes.sort((p, q) => Math.hypot(p.x - f.x, p.y - f.y) - Math.hypot(q.x - f.x, q.y - f.y))[0];
+      let ang = F > 0 ? 0 : Math.PI;
+      if (aim) { const want = Math.atan2((aim.y - 50) - (f.y - 60), aim.x - f.x); if (Math.abs(Math.atan2(Math.sin(want - ang), Math.cos(want - ang))) < 1.0) ang = want; }
+      a.k = { x: f.x + F * 20, y: f.y - 60, vx: Math.cos(ang) * R.speed, vy: Math.sin(ang) * R.speed, life: R.life, aim };
+      burst(f.x + F * 20, f.y - 60, ['#ffffff', '#c9ced8', '#ffd23f'], 10, F > 0 ? 0 : Math.PI, 0.5, 400, { grav: 0 }); sfx.whoosh(true);
+    }
+    return;
+  }
+  if (a.ph === 'fly') {                                          // the kunai in flight (it bends a little toward whoever it was thrown at)
+    f.vx = 0; if (!f.ground) f.vy = 0;
+    const k = a.k, t0 = k.aim;
+    if (t0 && fighters.includes(t0) && t0.respawnTimer <= 0) {
+      const want = Math.atan2((t0.y - 50) - k.y, t0.x - k.x), cur = Math.atan2(k.vy, k.vx);
+      let d = want - cur; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+      const na = cur + clamp(d, -R.turn * dt, R.turn * dt); k.vx = Math.cos(na) * R.speed; k.vy = Math.sin(na) * R.speed;
+    }
+    k.x += k.vx * dt; k.y += k.vy * dt; k.life -= dt;
+    if (k.life <= 0) { a.k = null; finish(); return; }
+    for (const t of fighters) {
+      if (t === f || allies(f, t) || t.respawnTimer > 0 || t.out || t.dead || (t.poofT > 0)) continue;
+      if (Math.hypot(k.x - t.x, k.y - (t.y - 50)) > R.hitR) continue;
+      if (isIntangible(t) || (t.action && ['air', 'roll', 'spot'].includes(t.action.type))) continue;   // (dodged: it flies on past)
+      if (t.shielding && t.shieldAge <= PARRY_WINDOW && parryRoll(t)) {   // PERFECT BLOCK: knocked away - and that's it
+        perfectBlockFx(t, k.x, k.y); burst(k.x, k.y, ['#ffffff', '#c9ced8'], 10, 0, Math.PI, 300, { grav: 600 });
+        a.k = null; finish(); return;
+      }
+      // IT STICKS - they're pinned where they are...
+      a.v = t; a.vx0 = t.x; a.vy0 = t.y; a.k = null;
+      t.action = { type: 'hitstun', t: 0, dur: 9 }; pin();
+      burst(t.x, t.y - 50, ['#ffffff', '#c9ced8', '#ffd23f'], 12, 0, Math.PI, 300, { grav: 0 }); sfx.hit(0.4);
+      // ...and she's RIGHT ABOVE THEM
+      ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#ffffff' });
+      burst(f.x, f.y - 50, ['#ffffff', '#ffd23f'], 12, 0, Math.PI, 380, { grav: 0 });
+      f.x = t.x; f.y = t.y - R.above; f.vx = f.vy = 0; f.ground = false; f.onPlatform = null;
+      burst(f.x, f.y - 60, ['#ffffff', '#ffd23f', H_RASEN.blue[0]], 16, 0, Math.PI, 420, { grav: 0 }); sfx.vanish(0.9);
+      a.ph = 'charge'; a.t = 0; a.pose = H_RDROP_POSE.held;
+      painTexts.push({ x: f.x, y: f.y - 170, t: 0.7, max: 0.7, text: 'RASENGAN...', big: false });
+      return;
+    }
+    return;
+  }
+  if (a.ph === 'charge') {                                       // hanging over them, the Rasengan swelling over her head
+    pin(); f.vx = f.vy = 0; f.x = v.x; f.y = a.vy0 - R.above;
+    const c = clamp(a.t / R.charge, 0, 1);
+    { const h = titleHand({ x: f.x, y: f.y, s: 1, face: F }, H_RDROP_POSE.held, f.look || {}, 'a'); const r = 12 + 10 * c; a.orb = { x: h.x, y: h.y - r * 0.95, r }; }   // (sitting on her raised palm, up over her head)
+    if (Math.random() < dt * 70) {                                // chakra pulled into it
+      const an = Math.random() * Math.PI * 2, rr = 70;
+      particles.push({ x: a.orb.x + Math.cos(an) * rr, y: a.orb.y + Math.sin(an) * rr, vx: -Math.cos(an) * rr * 5, vy: -Math.sin(an) * rr * 5, life: 0.18, max: 0.18, size: 2, color: Math.random() < 0.5 ? '#ffffff' : H_RASEN.blue[0], type: 'bit', grav: 0 });
+    }
+    shake = Math.max(shake, 2 + 5 * c);
+    if (a.t >= R.charge) { a.ph = 'dive'; a.t = 0; a.pose = H_RDROP_POSE.drive; sfx.whoosh(true); }
+    return;
+  }
+  if (a.ph === 'dive') {                                         // DROPS onto them, Rasengan first
+    pin();
+    const k = clamp(a.t / R.dive, 0, 1);
+    f.x = v.x; f.y = lerp(a.vy0 - R.above, a.vy0 - 64, k * k); f.vx = f.vy = 0;
+    { const h = titleHand({ x: f.x, y: f.y, s: 1, face: F }, H_RDROP_POSE.drive, f.look || {}, 'a'); a.orb = { x: h.x, y: h.y + 14, r: 24 }; }   // (driven down ahead of her)
+    if (Math.random() < dt * 60) ghosts.push({ fig: figureOf(f), life: 0.14, max: 0.14, color: H_RASEN.blue[0] });
+    if (k < 1) return;
+    const floor = rdropFloor(v);
+    impactFrame = Math.max(impactFrame, 0.16); impactAt = { x: v.x, y: v.y - 40, ang: 0, all: true, focus: true, invert: true };
+    shake = Math.max(shake, 30); camPunch = 1; hitstop = Math.max(hitstop, 0.12);
+    painTexts.push({ x: v.x, y: v.y - 190, t: 0.9, max: 0.9, text: 'RASENGAN!', big: true });
+    sfx.blast(); sfx.slam(); sfx.hit(1);
+    if (floor === null) {                                         // nothing under them: SPIKED straight down
+      a.orb = null; v.action = null;
+      ultHitCtx = true; knock(v, R.spike, F, pw, v.x, v.y - 40); ultHitCtx = false;
+      for (let q = 0; q < 3; q++) auraWaves.push({ x: v.x, y: v.y - 30, t: -q * 0.05, dur: 0.4, max: 120 + 60 * q, color: H_RASEN.blue[q % 3] });
+      finish(); return;
+    }
+    // DRIVEN INTO THE FLOOR: the crater, the rubble, a dome of chakra blowing out round them
+    a.floor = floor; a.vy0 = floor; v.y = floor; v.ground = true;
+    v.damage += R.slamDmg * pw; if (!v.transformed) v.ult = Math.min(ULT_MAX, (v.ult || 0) + R.slamDmg * pw); v.hitFlash = 0.12;
+    cracks.push({ x: v.x, y: floor, life: 4, max: 4, seed: Math.random() * 1000, size: 2.4 });
+    dust(v.x, floor, 30, 3);
+    burst(v.x, floor - 6, ['#6e6e78', '#8a8a94', '#4a4a52', '#cdb79a'], 34, -Math.PI / 2, 1.3, 900, { grav: 1400 });   // rubble flung up
+    for (let q = 0; q < 4; q++) auraWaves.push({ x: v.x, y: floor - 30, t: -q * 0.06, dur: 0.55, max: 150 + 70 * q, color: q % 2 ? '#ffffff' : H_RASEN.blue[q % 3] });
+    ring(v.x, floor - 30); ring(v.x, floor - 10);
+    a.ph = 'grind'; a.t = 0;
+    return;
+  }
+  if (a.ph === 'grind') {                                        // ...ground into it
+    pin(); f.x = v.x; f.y = a.floor - 64; f.vx = f.vy = 0;
+    a.orb = { x: v.x, y: a.floor - 16, r: 24 + 4 * Math.sin(a.t * 40) };
+    shake = Math.max(shake, 14);
+    if (Math.random() < dt * 60) burst(v.x + (Math.random() - 0.5) * 50, a.floor - 6, ['#6e6e78', '#8a8a94', H_RASEN.blue[0]], 2, -Math.PI / 2, 1.2, 500, { grav: 1200 });
+    if ((a.wT = (a.wT || 0) - dt) <= 0) { a.wT = 0.08; auraWaves.push({ x: v.x, y: a.floor - 20, t: 0, dur: 0.3, max: 110, color: H_RASEN.blue[0] }); v.damage += 0.6 * pw; v.hitFlash = 0.05; sfx.hit(0.3); }
+    if (a.t < R.grind) return;
+    // THE BOUNCE: off the floor and all of it STRAIGHT UP
+    a.orb = null; v.action = null; v.y = a.floor - 2; v.ground = false; v.onPlatform = null;
+    ultHitCtx = true; knock(v, R.final, F, pw, v.x, v.y - 30); ultHitCtx = false;
+    v.vx = 0;                                                      // (straight up - nothing sideways)
+    for (let q = 0; q < 3; q++) auraWaves.push({ x: v.x, y: a.floor - 30, t: -q * 0.05, dur: 0.45, max: 200 + 80 * q, color: H_RASEN.blue[q % 3] });
+    burst(v.x, a.floor - 20, H_RASEN.blue, 40, -Math.PI / 2, 0.6, 1100, { grav: 0 });
+    shake = Math.max(shake, 26); sfx.blast();
+    f.vy = -520; f.vx = -F * 160; finish();
+    return;
+  }
+}
+// (drawing, in the world) the thrown kunai, the kunai stuck in them, and the big Rasengan
+function drawHailieRasenDrop() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'hRasenDrop') continue;
+    if (a.k) { drawKunaiShape(a.k.x, a.k.y, Math.atan2(a.k.vy, a.k.vx), 1.15); if (!sketch && Math.random() < 0.6) particles.push({ x: a.k.x, y: a.k.y, vx: 0, vy: 0, life: 0.15, max: 0.15, size: 2, color: '#ffd23f', type: 'bit', grav: 0 }); }
+    if (a.v && (a.ph === 'charge' || a.ph === 'dive')) drawKunaiShape(a.v.x - 6, a.v.y - 52, -Math.PI / 2 + 0.6, 1.0);
+    const o = a.orb; if (!o) continue;
+    const now = time;
+    ctx.save();
+    if (!sketch) {
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r * 2.6);
+      g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.3, 'rgba(127,216,255,0.55)'); g.addColorStop(1, 'rgba(58,160,255,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    } else { ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = sketch ? '#ffffff' : '#bfeaff'; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = sketch ? '#333333' : '#3aa0ff'; ctx.lineWidth = 2;
+    for (let k = 0; k < 4; k++) { const a0 = now * 16 + k * 1.6; ctx.beginPath(); ctx.arc(o.x, o.y, o.r * (0.35 + 0.17 * k), a0, a0 + 2.3); ctx.stroke(); }
+    if (sketch) { ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.restore();
   }
 }
 // ---- PORTALS (down K): places one end where she stands; down K again opens the other end where she is NOW and she steps
@@ -11419,6 +11579,226 @@ const COLTEN_BOXING = (() => { const B = BOX_POSE; return {
   upRanged: CHARACTERS.COLTEN.bareMoves.upRanged,
 }; })();
 CHARACTERS.COLTEN.bareMoves = COLTEN_BOXING;
+// ---------------- COLTEN: SIDE + I (transformed) - ONE PUNCH (One Punch Man) ----------------
+//   EYES  (0.35s) - the camera snaps right in on his face: head down, teeth gritted... and his eyes LIGHT UP gold
+//   THE SHOT       - cut to THEM: they've turned round and are looking back up behind them... at HIM - ENORMOUS, a looming
+//                    dark-red giant filling the sky behind them, white-hot eyes, his fist pulled back and swelling with red
+//   ONE PUNCH      - ONE punch: a GIGANTIC glowing red fist bursts out of his and swallows them whole... and THEN they go
+//                    flying, the fist rolling on across the stage behind them. A KO punch.
+// Locks on to the nearest enemy close enough (ONE_PUNCH.range). Nobody in range: he throws it at the air.
+const ONE_PUNCH = { eyes: 0.35, wind: 0.3, engulf: 0.16, after: 0.5, range: 720, gap: 70, vol: 1.0, reachSpeed: 3800, reachMax: 0.25,   // (reach: the opening dash - perfect blockable)   // QUICK: the punch lands ~0.65s in -
+                    // and its clip (colten-one-punch.mp3) STARTS ON THE PUNCH: its opening hit is the impact, and it plays on after
+                    giant: { size: 5, back: 250, drop: 260 },     // the GIANT Colten behind them: how big, how far back, how far below the shot his feet are
+                    fist: { w: 460, travel: 1500, life: 0.45 },   // the giant fist: how big, how far it flies, how long it's on screen
+                    // THE LAUNCH: KOs a normal-weight fighter at about 200% (mid-stage). Anyone LIGHTER than that is treated as
+                    // normal weight for this punch (see onePunchHit) - so nobody goes early; the HEAVIES keep their extra weight
+                    // and last longer still
+                    hit: { dmg: 22, base: 120, growth: 4.4, angle: 30, ultFinal: true, xray: 'RIBS' },   // (mostly GROWTH: low damage barely moves them, even by the edge)
+                    red: '#ff2a1a', gold: '#ffd84a' };
+const ONE_PUNCH_POSE = {
+  glare: pose({ lean: 0.35, bob: -10, armA: [0.5, -1.7], armB: [0.3, -1.9], legA: [0.8, 0.6], legB: [-0.7, 0.25] }),       // head down, fists up
+  wind:  pose({ lean: -0.3, bob: -12, armA: [-1.5, -0.5], armB: [0.6, -1.7], legA: [0.7, 0.7], legB: [-0.9, 0.3] }),       // fist all the way back
+  punch: pose({ lean: 0.85, bob: -14, armA: [1.7, 0], armB: [-1.0, -0.7], legA: [1.2, 0.5], legB: [-1.1, 0.1] }),          // thrown
+  look:  pose({ lean: -0.4, bob: -10, armA: [2.3, -0.6], armB: [1.4, -1.2], legA: [0.2, 0.25], legB: [-0.55, 0.45] }),      // THEM: turned round, recoiling, looking up at him
+};
+// where his head / front fist are - the same skeleton maths as drawFigure (f can be a stand-in: x, y, face, look, transformed, sizeMul)
+function onePunchBody(f, pz) {
+  const look = f.transformed && f.look && f.look.escanorForm ? escLook(f.look) : (f.look || {}), S = (look.scale || 1) * (f.sizeMul || 1), F = f.face;
+  const hipY = -(LEG_UP + LEG_LOW - 1) - (pz.bob || 0) * LEG_SCALE;
+  const sh = { x: Math.sin(pz.lean || 0) * TORSO * F, y: hipY - Math.cos(pz.lean || 0) * TORSO };
+  const [th, bend] = pz.armA || [0, 0], mid = { x: sh.x + Math.sin(th) * 16 * F, y: sh.y + Math.cos(th) * 16 }, a2 = th - bend;
+  const hand = { x: mid.x + Math.sin(a2) * 15 * F, y: mid.y + Math.cos(a2) * 15 };
+  return { head: { x: f.x + (sh.x + Math.sin(pz.lean || 0) * NECK * F) * S, y: f.y + (sh.y - NECK) * S }, hand: { x: f.x + hand.x * S, y: f.y + hand.y * S }, S };
+}
+// THE GIANT: him, enormous, looming up behind them (feet way below the shot, head and fist filling the top of it)
+function onePunchGiant(f, a) {
+  const v = a.v, F = f.face, bx = v ? a.vx0 : f.x + F * ONE_PUNCH.gap, by = v ? a.vy0 : f.y;
+  const g = { x: bx - F * ONE_PUNCH.giant.back, y: by + ONE_PUNCH.giant.drop, face: F, transformed: f.transformed, look: f.look, sizeMul: ONE_PUNCH.giant.size };
+  return { ...onePunchBody(g, a.pose), g };
+}
+// the launch for THIS target: anyone lighter than normal weight flies as if they were normal weight (knockback is divided by
+// weight - so this just takes the light ones' extra flight back out). The heavier ones are left as they are.
+function onePunchHit(v) {
+  const w = ((v.stats && v.stats.weight) || 1) * hypeWeight(v), k = w < 1 ? w : 1 / (w * w);   // (heavier than normal: their extra weight counts THREE times over - they last a good bit longer)
+  return { ...ONE_PUNCH.hit, base: ONE_PUNCH.hit.base * k, growth: ONE_PUNCH.hit.growth * k, noGlassJaw: true };   // (Colbalias's glass jaw doesn't apply either)
+}
+function startColtenOnePunch(f) {
+  const foes = fighters.filter(t => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !t.out && !t.dead && !(t.poofT > 0) && Math.hypot(t.x - f.x, t.y - f.y) < ONE_PUNCH.range)
+    .sort((p, q) => Math.hypot(p.x - f.x, p.y - f.y) - Math.hypot(q.x - f.x, q.y - f.y));
+  const v = foes[0] || null;
+  if (v) f.face = Math.sign(v.x - f.x) || f.face;
+  // THE OPENING: he DASHES at them - nothing's locked in yet. When he reaches them they can PERFECT BLOCK it (it's
+  // stopped, and he's left staggered) or dodge through it (he whiffs). Anything else and it connects: the cutscene.
+  f.action = { type: 'cOnePunch', t: 0, ph: v ? 'reach' : 'eyes', v, pose: ONE_PUNCH_POSE.punch, eyes: 0, fist: null, cam: null };
+  if (!v) { const B = onePunchBody(f, ONE_PUNCH_POSE.glare); f.action.pose = ONE_PUNCH_POSE.glare; f.action.cam = { x: B.head.x, y: B.head.y + 6, z: 2.8, speed: 22 }; }
+  f.vx = f.vy = 0;
+  sfx.whoosh(true);
+}
+// the moment he reaches them: perfect blocked / dodged / CONNECTS (true = connected)
+function onePunchContact(f, a, v) {
+  const F = f.face, hx = f.x + F * 40, hy = f.y - 62;
+  if (isIntangible(v) || (v.action && ['air', 'roll', 'spot'].includes(v.action.type))) {          // DODGED: he whiffs, wide open
+    painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'MISSED!', big: false });
+    f.action = { type: 'land', t: 0, dur: 0.5 }; return false;
+  }
+  if (v.shielding && v.shieldAge <= PARRY_WINDOW && parryRoll(v)) {                             // PERFECT BLOCKED: stopped dead, and he staggers
+    perfectBlockFx(v, hx, hy);
+    painTexts.push({ x: v.x, y: v.y - 140, t: 0.7, max: 0.7, text: 'PERFECT BLOCK!', big: true });
+    f.vx = -F * 300; f.action = { type: 'hitstun', t: 0, dur: 0.55 };
+    hitstop = Math.max(hitstop, 0.1); shake = Math.max(shake, 10);
+    return false;
+  }
+  // CONNECTED: they're locked in
+  v.action = { type: 'hitstun', t: 0, dur: 9 }; v.vx = v.vy = 0; v.shielding = false;
+  a.vx0 = v.x; a.vy0 = v.y;
+  burst(hx, hy, [ONE_PUNCH.red, '#ffffff'], 14, 0, Math.PI, 420, { grav: 0 }); sfx.hit(0.6); sfx.parry();
+  hitstop = Math.max(hitstop, 0.06); shake = Math.max(shake, 8);
+  const B = onePunchBody(f, ONE_PUNCH_POSE.glare);
+  a.ph = 'eyes'; a.t = 0; a.pose = ONE_PUNCH_POSE.glare; a.cam = { x: B.head.x, y: B.head.y + 6, z: 2.8, speed: 22 };
+  return true;
+}
+function stepColtenOnePunch(f, a, dt) {
+  const P = ONE_PUNCH, F = f.face, pw = powerOf(f) * (f.ultPower || 1);
+  f.vx = 0; f.vy = 0;
+  let v = a.v;
+  if (v && (!fighters.includes(v) || v.respawnTimer > 0 || v.out)) v = a.v = null;
+  if (a.ph === 'reach') {                                         // THE OPENING DASH (they're still free - see onePunchContact)
+    if (!v) { f.action = { type: 'land', t: 0, dur: 0.3 }; return; }
+    const tx = v.x - F * P.gap, d = tx - f.x, step = P.reachSpeed * dt;
+    f.x += Math.abs(d) <= step ? d : Math.sign(d) * step; f.y = v.ground ? v.y : f.y;
+    if (Math.random() < 0.7) ghosts.push({ fig: figureOf(f), life: 0.16, max: 0.16, color: P.red });
+    if (Math.abs(tx - f.x) < 4 || a.t >= P.reachMax) onePunchContact(f, a, v);
+    return;
+  }
+  if (v && a.ph !== 'fly') {                                      // they're held right where they are
+    v.vx = v.vy = 0; v.x = a.vx0; v.y = a.vy0; v.shielding = false;
+    if (a.ph === 'frame') { v.face = -F; v.action = { type: 'ultVictim', t: 0, pose: ONE_PUNCH_POSE.look }; }   // (turned round, looking back up at him)
+    else if (v.action && v.action.type === 'hitstun') v.action.t = 0; else v.action = { type: 'hitstun', t: 0, dur: 9 };
+  }
+  if (a.fist) a.fist.t += dt;
+  if (a.ph === 'eyes') {                                          // the close-up: his eyes LIGHT UP
+    a.pose = ONE_PUNCH_POSE.glare; a.eyes = clamp((a.t - 0.05) / 0.15, 0, 1);
+    const B = onePunchBody(f, a.pose); a.cam = { x: B.head.x, y: B.head.y + 6, z: 2.8, speed: 22 };
+    if (a.eyes > 0 && !a.lit) { a.lit = true; sfx.clash(false); shake = Math.max(shake, 6); }
+    if (a.t >= P.eyes) {
+      a.ph = 'frame'; a.t = 0; a.pose = ONE_PUNCH_POSE.wind; sfx.beam(0.6);
+      if (v) { f.x = v.x - F * P.gap; f.y = v.y; f.ground = v.ground; f.onPlatform = v.onPlatform || null; }   // (really, he's right behind them)
+    }
+    return;
+  }
+  if (a.ph === 'frame') {                                         // THE SHOT: they look back... and he's ENORMOUS
+    const cx = v ? a.vx0 : f.x + F * P.gap, cy = v ? a.vy0 : f.y;
+    a.cam = { x: cx - F * 40, y: cy - 150, z: 1.25, speed: 18 };
+    shake = Math.max(shake, 2 + 8 * clamp(a.t / P.wind, 0, 1));
+    if (!a.fist) { if (a.t < P.wind) return; a.punchT = a.t; }
+    if (!a.fist) {                                                // ...ONE PUNCH (and the clip kicks in with it)
+      playOnePunchSong(f);
+      a.pose = ONE_PUNCH_POSE.punch;
+      const G = onePunchGiant(f, a);
+      a.fist = { x0: G.hand.x, y: G.hand.y, t: 0 };
+      painTexts.push({ x: cx, y: cy - 230, t: 1.2, max: 1.2, text: 'ONE PUNCH!', big: true });
+      impactFrame = Math.max(impactFrame, 0.2); impactAt = { x: cx, y: cy - 60, ang: 0, all: true, focus: true, invert: true };
+      shake = Math.max(shake, 36); camPunch = 1; hitstop = Math.max(hitstop, 0.14);
+      sfx.huge ? sfx.huge() : sfx.slam(); sfx.clash(true); sfx.hit(1);
+    }
+    if (a.t < a.punchT + P.engulf) return;
+    a.ph = 'fly'; a.t = 0; a.pose = ONE_PUNCH_POSE.punch;         // the fist has swallowed them whole - NOW they go
+    if (v) {
+      v.action = null;
+      ultHitCtx = true; knock(v, onePunchHit(v), F, pw, v.x, v.y - 55); ultHitCtx = false;
+      for (let q = 0; q < 3; q++) auraWaves.push({ x: v.x, y: v.y - 55, t: -q * 0.05, dur: 0.45, max: 140 + 80 * q, color: q === 1 ? '#ffffff' : P.red });
+      burst(v.x, v.y - 55, [P.red, '#ffffff', '#ff8a3c'], 50, F > 0 ? 0 : Math.PI, 0.6, 1500, { grav: 0 });
+    }
+    if (f.ground) dust(f.x + F * 60, f.y, 30, 3);
+    return;
+  }
+  if (a.ph === 'fly') {                                           // the fist rolls on across the stage and fades
+    a.cam = null;
+    if (a.t >= P.after) { a.fist = null; f.action = { type: 'land', t: 0, dur: 0.3 }; }
+  }
+}
+// (drawn BEHIND the fighters) HIM - drawn here instead of with everyone else: normal size for the close-up, and in THE
+// SHOT a looming dark-red GIANT (the world gone dark red round him) with white-hot eyes
+function drawColtenOnePunchBack() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'cOnePunch') continue;
+    if (a.ph === 'eyes') { drawFigure({ ...figureOf(f), noScythe: true, pose: a.pose }); continue; }
+    const vb = viewBounds(), fade = a.ph === 'fly' ? 1 - clamp(a.t / ONE_PUNCH.after, 0, 1) : 1;
+    ctx.fillStyle = sketch ? `rgba(200,40,30,${0.16 * fade})` : `rgba(30,0,0,${0.78 * fade})`; ctx.fillRect(vb.l - 60, vb.t - 60, vb.r - vb.l + 120, vb.b - vb.t + 120);
+    if (!sketch) { const cx = (vb.l + vb.r) / 2, cy = (vb.t + vb.b) / 2, g = ctx.createRadialGradient(cx, cy, 40, cx, cy, (vb.r - vb.l) * 0.7); g.addColorStop(0, `rgba(255,40,20,${0.35 * fade})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(vb.l - 60, vb.t - 60, vb.r - vb.l + 120, vb.b - vb.t + 120); }
+    if (a.ph === 'fly') { drawFigure({ ...figureOf(f), noScythe: true, pose: ONE_PUNCH_POSE.punch }); continue; }
+    const G = onePunchGiant(f, a);
+    drawFigure({ ...figureOf(f), noScythe: true, x: G.g.x, y: G.g.y, sizeMul: G.g.sizeMul, pose: a.pose }, { tint: sketch ? '#b9a8a8' : '#3a0a0a', alpha: 0.92 });
+    const r = 2.4 * G.S;                                           // the eyes: white-hot
+    for (const d of [-1, 1]) {
+      const ex = G.head.x + f.face * (3.5 + d * 3.2) * G.S, ey = G.head.y - 1.5 * G.S;
+      ctx.save();
+      if (!sketch) { ctx.globalCompositeOperation = 'lighter'; const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 4); g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.4, 'rgba(255,120,90,0.5)'); g.addColorStop(1, 'rgba(255,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ex, ey, r * 4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.ellipse(ex, ey, r * 1.3, r * 0.6, f.face * 0.25, 0, Math.PI * 2); ctx.fill();
+      if (sketch) { ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.restore();
+    }
+    if (!a.fist) {                                                 // red power swelling in the giant's fist
+      const k = clamp(a.t / ONE_PUNCH.wind, 0, 1), rr = (30 + 70 * k) * (1 + 0.08 * Math.sin(time * 40));
+      ctx.save();
+      if (!sketch) { ctx.globalCompositeOperation = 'lighter'; const g = ctx.createRadialGradient(G.hand.x, G.hand.y, 0, G.hand.x, G.hand.y, rr * 2); g.addColorStop(0, 'rgba(255,255,255,0.85)'); g.addColorStop(0.3, 'rgba(255,60,30,0.7)'); g.addColorStop(1, 'rgba(255,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(G.hand.x, G.hand.y, rr * 2, 0, Math.PI * 2); ctx.fill(); }
+      else { ctx.strokeStyle = MARKERS[0]; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(G.hand.x, G.hand.y, rr * 0.6, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+}
+// one GIGANTIC fist (x = its front), facing `dir`, w = its height: a glowing red fist with a blurred arm streaking behind it
+function drawGiantFist(x, y, w, dir, al) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
+  if (!sketch) {
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(-w * 0.3, 0, w * 0.2, -w * 0.3, 0, w * 1.6);
+    g.addColorStop(0, `rgba(255,90,60,${0.65 * al})`); g.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(-w * 0.3, 0, w * 1.6, 0, Math.PI * 2); ctx.fill();
+    for (let k = 0; k < 14; k++) {                                 // speed lines blowing back off it
+      const yy = (hash(k * 7.1) - 0.5) * w * 1.2, len = w * (1.5 + 2 * hash(k + 3));
+      ctx.fillStyle = `rgba(255,${120 + 100 * hash(k)},${80 * hash(k + 9)},${0.35 * al})`; ctx.fillRect(-w * 0.4 - len, yy, len, 3 + 5 * hash(k + 1));
+    }
+  }
+  ctx.globalAlpha = al; ctx.globalCompositeOperation = 'source-over';
+  const col = sketch ? MARKERS[0] : '#e8241a';
+  ctx.strokeStyle = sketch ? INK : '#4a0600'; ctx.lineWidth = Math.max(2, w * 0.03); ctx.lineJoin = 'round';
+  const arm = ctx.createLinearGradient(-w * 3, 0, -w * 0.3, 0);   // the forearm, fading into a blur behind
+  arm.addColorStop(0, 'rgba(232,40,20,0)'); arm.addColorStop(1, col);
+  ctx.fillStyle = arm; ctx.fillRect(-w * 3, -w * 0.3, w * 2.75, w * 0.6);
+  ctx.fillStyle = col;
+  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-w * 0.55, -w * 0.48, w * 0.62, w * 0.96, w * 0.22); else ctx.rect(-w * 0.55, -w * 0.48, w * 0.62, w * 0.96); ctx.fill(); ctx.stroke();   // the fist
+  for (let j = 0; j < 4; j++) {                                    // four knuckles, front edge
+    const ky = -w * 0.36 + j * w * 0.24;
+    ctx.beginPath(); ctx.ellipse(w * 0.02, ky, w * 0.12, w * 0.115, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(-w * 0.12, -w * 0.48); ctx.lineTo(-w * 0.12, w * 0.48); ctx.stroke();   // the fold of the fingers
+  ctx.beginPath(); ctx.ellipse(-w * 0.32, w * 0.36, w * 0.24, w * 0.11, -0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();   // the thumb, under
+  if (!sketch) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,255,255,${0.35 * al})`; ctx.beginPath(); ctx.ellipse(-w * 0.2, -w * 0.1, w * 0.3, w * 0.22, 0, 0, Math.PI * 2); ctx.fill(); }   // white-hot core
+  ctx.restore();
+}
+// (drawn IN FRONT) his glowing eyes in the close-up, and THE FIST (in front of them: it swallows them whole)
+function drawColtenOnePunch() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'cOnePunch') continue;
+    if (a.ph === 'eyes' && a.eyes > 0) {
+      const B = onePunchBody(f, a.pose || ONE_PUNCH_POSE.glare), r = 2.6 * B.S;
+      for (const d of [-1, 1]) {
+        const ex = B.head.x + f.face * (3.5 + d * 3.2) * B.S, ey = B.head.y - 1.5 * B.S;
+        ctx.save();
+        if (!sketch) { ctx.globalCompositeOperation = 'lighter'; const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 5 * a.eyes); g.addColorStop(0, 'rgba(255,240,150,0.95)'); g.addColorStop(1, 'rgba(255,200,40,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ex, ey, r * 5 * a.eyes, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = sketch ? '#f29a1f' : ONE_PUNCH.gold; ctx.beginPath(); ctx.arc(ex, ey, r * a.eyes, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    if (a.fist) {                                                  // THE FIST: out of the giant's hand, through them, on across the stage
+      const P = ONE_PUNCH.fist, k = clamp(a.fist.t / P.life, 0, 1), e = 1 - Math.pow(1 - k, 3);
+      const x = a.fist.x0 + f.face * (P.w * 0.3 + P.travel * e), y = lerp(a.fist.y, (a.v ? a.vy0 : a.fist.y) - 60, Math.min(1, k * 3)), w = P.w * (0.7 + 0.4 * Math.min(1, k * 4));
+      drawGiantFist(x, y, w, f.face, 1 - k * k);
+    }
+  }
+}
 // AIDEN'S TAUNTS - three little skits (see HEEL_TAUNT / heelTauntStep / drawHeelTauntProps):
 //   UP   : RUM BARREL - hops up onto a barrel of rum, lights a cigar... puffs - and the smoke pours straight out of his
 //          ribcage (he's a SKELETON). Realises, hops down, flicks the cigar at the barrel: KA-BOOM.
@@ -11921,6 +12301,7 @@ CHARACTERS.COLTEN.ultOld = {
 };
 CHARACTERS.COLTEN.transformName = 'WARLORD';
 CHARACTERS.COLTEN.ult = { name: 'THE SUN', cruelSun: true };
+CHARACTERS.COLTEN.sideUlt = { name: 'ONE PUNCH', cOnePunch: true };   // SIDE + I: ONE PUNCH (the glare, the giant, the fist - see startColtenOnePunch)
 CHARACTERS.COLTEN.altUlt = CHARACTERS.COLTEN.ultOld;              // DOWN + I: his old one, WARLORD'S JUDGMENT (three giant critical swings)
 // Sevon: FIFTH FORM: FLAME TIGER - a lunge; whoever it catches takes a storm of flaming slashes from every side, then he
 // charges straight through them as a giant TIGER OF FIRE (see the flameFinal finisher in updateUlt)
@@ -12394,8 +12775,9 @@ CHARACTERS.HUNTER.ult = { name: 'ERASER CANNON', hunterMove: HUNTER_ERASER };
 CHARACTERS.HUNTER.altUlt = { name: 'GIGANTIC ROAR', hunterMove: HUNTER_ROAR };
 // HAILIE: FLYING RAIJIN - she rings them with kunai, then teleports between them, cutting through them from every side (anyone
 // close by gets caught in it too) - and finishes with the knife through their chest: a launch that's PURELY HORIZONTAL
-CHARACTERS.HAILIE.sideUlt = { name: 'KUNAI BARRAGE', hKunaiUlt: true };   // (SIDE + I, transformed: a tracking kunai at everyone, then a Rasengan each)
-CHARACTERS.HAILIE.ult = { name: 'FLYING RAIJIN', raijin: true, finalWind: H_POSE.stab, finalStrike: H_POSE.chest, final: { dmg: 6, base: 780, growth: 7, angle: 0 } };
+CHARACTERS.HAILIE.ult = { name: 'KUNAI BARRAGE', hKunaiUlt: true };       // (I, transformed: a tracking kunai at everyone, then a Rasengan each)
+CHARACTERS.HAILIE.sideUlt = { name: 'RASENGAN DROP', hRasenDrop: true };   // (SIDE + I: one kunai - she teleports above them and drives a Rasengan down through them)
+CHARACTERS.HAILIE.upUlt = { name: 'FLYING RAIJIN', raijin: true, finalWind: H_POSE.stab, finalStrike: H_POSE.chest, final: { dmg: 6, base: 780, growth: 7, angle: 0 } };
 CHARACTERS.HAILIE.transformName = 'THE VOICES';
 const RAIJIN = { throwT: 0.35, strikes: 14, every: 0.075, R: 170, hitR: 220, dmg: 1.6, final: 0.32 };
 function updateRaijinUlt(U, dt) {
@@ -12527,7 +12909,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -12926,7 +13308,7 @@ function startBattleSong() {
 }
 // ONE ULT SONG AT A TIME: with ultimates and transformations all able to go off together, only the NEWEST one is heard -
 // every older one is CUT (muted, not stopped: it still plays out silently, so anything timed to it stays on time)
-const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong'];
+const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong'];
 let ultAudioSeq = 0;
 const ultAudioOrder = new WeakMap();                              // (handle -> when it started)
 const ULT_EXTRA = [];                                            // (voice lines / clips belonging to ultimates and cutscenes)
@@ -13022,7 +13404,7 @@ function updateBattleMusic(dt) {
   }
   // turned down under an ultimate's own music / voice lines, and while the game's paused
   const ultMusic = ult || fighters.some(f => (f.action && f.action.type === 'shipUlt') || f.uiSong);   // (+ Lance's Ultra Instinct theme)
-  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
+  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong || f.opSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
   el.volume = clamp(BATTLE_MUSIC.vol * battleMusic.level * duck * settings.master * settings.music * 1.6, 0, 1);
   if (el.paused && want) el.play().catch(() => {});
 }
@@ -13439,6 +13821,7 @@ playSs1Song = gateSound('ss1Song', playSs1Song, (h, [f]) => { if (h && f) f.ss1S
 playSsgSong = gateSound('sgSong', playSsgSong, (h, [f]) => { if (h && f) f.sgSong = h; });
 playFxSong = gateSound('fxSong', playFxSong, (h, [f]) => { if (h && f) f.fxSong = h; });   // (Lance's Final Explosion song)   // (Lance's Super Saiyan God song)
 playGrindSong = gateSound('grindSong', playGrindSong, (h, [f]) => { if (h && f) f.grindSong = h; });   // (Hunter's Glacier Grind)
+playOnePunchSong = gateSound('opSong', playOnePunchSong, (h, [f]) => { if (h && f) f.opSong = h; });   // (Colten's One Punch)
 playLeeSong = gateSound('leeSong', playLeeSong, (h, [f]) => { if (h && f) f.leeSong = h; });   // (Colby's Primary Lotus)
 playTsuSong = gateSound('tsuSong', playTsuSong, (h, [f]) => { if (h && f) f.tsuSong = h; });   // (Colbalias's Tsukuyomi: the Mugen Tsukuyomi clip)
 playSharinganSfx = gateSound('sfx.sharingan', playSharinganSfx);
@@ -13473,6 +13856,8 @@ const TF_CUT_DMG = 0.5;   // damage taken while in a transformation cutscene (no
 // UNSTOPPABLE: mid-TRANSFORMATION, or COLTEN in THE SUN. Hits on them do their DAMAGE - but no knockback (none stored either),
 // no grabs, no freezing, no swapping, no being carried off by an ultimate. It plays out.
 const unstoppable = t => !!(t && t.action && (t.action.type === 'cruelSun' || TF_HITTABLE.includes(t.action.type)));
+// one of COLBALIAS'S SHADOW CLONES while his 100-Type Guanyin is up (their hits don't stun - see applyHit / canBeGrabbed)
+const guanyinClone = c => !!(c && c.minion && c.owner && typeof ult !== 'undefined' && ult && ult.def && ult.def.statue && ult.user === c.owner);
 function isIntangible(f) {
   if (ultHitCtx && f.action && TF_HITTABLE.includes(f.action.type) && (f.char === 'LANCE' || f.char === 'HUNTER') && !(f.invuln > 0)) return false;   // (an ultimate / comeback gets through)
   if (f.invuln > 0) return true;
@@ -13530,7 +13915,15 @@ const parryRoll = t => t.controller !== 'dummy' ||
 function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (t.respawnTimer > 0) return false;
   { const by = src.fighter || src.by || (src.shot && src.shot.owner), k = by && CHAR_DMG[by.char];   // (per-fighter DAMAGE trims - knockback untouched)
-    if (k && h.dmg) h = { ...h, dmg: h.dmg * k }; }
+    if (k && h.dmg) h = { ...h, dmg: h.dmg * k };
+    // COLBALIAS'S CLONES during his 100-Type Guanyin: their hits only CHIP - no hitstun, no knockback (the Guanyin's targets
+    // have to stay free to move and PERFECT BLOCK its beam - the clones can't lock them down for it)
+    if (guanyinClone(by) && t !== by.owner) {
+      if (isIntangible(t)) { t.dodgedFlash = 0.35; return false; }
+      t.damage += h.dmg * mult; t.hitFlash = 0.08; if (!t.transformed) t.ult = Math.min(ULT_MAX, (t.ult || 0) + h.dmg * mult * ULT_GAIN);
+      burst(hx ?? t.x, hy ?? t.y - 55, ['#ffffff', '#ff4a4a'], 5, 0, Math.PI, 260, { grav: 0 }); sfx.hit(0.3);
+      return true;
+    } }
   if (t.action && (t.action.type === 'cruelSun' || (t.action.type === 'attack' && t.action.move && t.action.move.finalExp))) {   // Lance's FINAL EXPLOSION / Colten's SUN: HYPER ARMOR - he takes the damage, nothing else
     t.damage += h.dmg * mult; t.hitFlash = 0.08; shake = Math.max(shake, 4);
     burst(hx, hy, ['#ffffff', '#ffe066'], 6, 0, Math.PI, 300, { grav: 0 }); sfx.block();
@@ -13631,7 +14024,7 @@ function knock(t, h, dirSign, mult, hx, hy) {
   const kbMult = h.ultFinal ? ULT_KB.power * (ULT_KB.minMeter + (1 - ULT_KB.minMeter) * mult) : mult;
   let speed = (h.base + h.growth * t.damage) * kbMult * ramp / (t.stats.weight * hypeWeight(t)) * (t.arcadeBoss ? ARCADE_BOSS.kb : 1);   // heavier = flies less (Aiden: lighter at low HYPE)
   // GLASS JAW (Colbalias - he's broken, so this is his price): the MOST base knockback in the game when he's hit
-  if (t.look && t.look.glassJaw && !t.minion && speed > 0) speed = speed * GLASS_JAW.mult + GLASS_JAW.add;
+  if (t.look && t.look.glassJaw && !t.minion && speed > 0 && !h.noGlassJaw) speed = speed * GLASS_JAW.mult + GLASS_JAW.add;   // (noGlassJaw: Colten's One Punch - the same KO point for everyone)
   // COLTEN'S AURA ARMOR (transformed): a bit less knockback, and ULTRA ARMOR - anything that wouldn't launch
   // him hard doesn't even make him flinch (the damage still counts)
   if (t.transformed && t.look && t.look.auraArmor && !h.ultFinal) {
@@ -14944,6 +15337,8 @@ function startUltimate(f, alt = false, up = false, side = false) {   // (side = 
   if (def.ship) startShipUlt(f);                   // Aiden: the pirate ship
   if (def.leeLotus) startLeeLotus(f);              // Colby: Primary Lotus (Rock Lee vs Gaara)
   if (def.hKunaiUlt) startHailieKunaiUlt(f);       // Hailie: Kunai Barrage
+  if (def.hRasenDrop) startHailieRasenDrop(f);     // Hailie: Rasengan Drop
+  if (def.cOnePunch) startColtenOnePunch(f);       // Colten: One Punch
   if (def.cruelSun) playSunSong(f);                // Colten: THE SUN (its music)
   ultBanner = { t: 1.1, name: def.name || 'ULTIMATE', color: f.color, who: f };
   hitstop = Math.max(hitstop, 0.4);                // dramatic freeze as it starts
@@ -15416,6 +15811,18 @@ function playGrindSong(f) {
   return h;
 }
 function stopGrindSong(f) { if (f && f.grindSong) { try { f.grindSong.el.pause(); } catch (e) {} f.grindSong = null; } }
+// COLTEN'S ONE PUNCH: its own clip (sounds/battle/colten-one-punch.mp3, ~4.5s) - it starts ON the punch and plays on after
+function playOnePunchSong(f) {
+  stopOnePunchSong(f);
+  if (!soundOn) return null;
+  let el; try { el = new Audio('sounds/battle/colten-one-punch.mp3'); } catch (e) { return null; }
+  el.preload = 'auto'; el.volume = clamp(ONE_PUNCH.vol * settings.master * settings.music * 1.6, 0, 1);
+  el.play().catch(() => {});
+  el.addEventListener('ended', () => { if (f.opSong && f.opSong.el === el) f.opSong = null; });   // (the battle music comes back when it's done)
+  const h = { el, at: performance.now() }; f.opSong = h;
+  return h;
+}
+function stopOnePunchSong(f) { if (f && f.opSong) { try { f.opSong.el.pause(); } catch (e) {} f.opSong = null; } }
 function startHunterGrind(f, v) {
   f.ultPower = 0.5 + 0.5 * clamp((f.ult || 0) / ULT_MAX, 0, 1);
   f.ult = 0; f.ultBuf = 0; f.atkBuf = f.spcBuf = f.grabBuf = 0; f.shielding = false; f.ultNerfT = ULT_NERF.time;
@@ -19846,9 +20253,20 @@ const COLTEN_KATANA_KIT = (() => {
     wind: S.sideRanged.wind, strike: S.sideRanged.strike, fire(f) { throwScythe(f); } };
   return k;
 })();
-// (katana: Sevon never runs out - when Colten rips it away he just draws a SPARE. So it has no "owner" to go home to.)
+// COLTEN wielding Hailie's KUNAI: her knife work on J, her kunai on K (side K: throw / teleport to it, up K: Kunai Rise) -
+// and NEUTRAL K throws it away (side K is the kunai itself). Not her Rasengan or her portals - those aren't the weapon.
+const COLTEN_KUNAI_KIT = (() => {
+  const S = HAILIE_MOVES, k = {};
+  for (const key of ['counter', 'jab', 'jab2', 'jab3', 'sideGround', 'upGround', 'downGround', 'dashAttack', 'nair', 'fair', 'bair', 'uair', 'dair', 'sideRanged', 'upRanged']) if (S[key]) k[key] = S[key];
+  k.downRanged = S.downGround;
+  k.neutralRanged = { name: 'Gate Throw', startup: 0.1, active: 0.06, endlag: 0.3, landLag: 0.14, throwScythe: true,
+    wind: H_POSE.throwW, strike: H_POSE.throwS, fire(f) { throwScythe(f); } };
+  return k;
+})();
+// (katana / kunai: Sevon and Hailie never run out - when Colten rips one away they just draw a SPARE. No "owner" to go home to.)
 const WEAPONS = { scythe: { name: 'SCYTHE', owner: 'COLBY' }, sword: { name: 'DRAGONSLAYER', owner: 'COLTEN' },
-                  katana: { name: 'KATANA', owner: 'SEVON', kit: COLTEN_KATANA_KIT, spare: true } };
+                  katana: { name: 'KATANA', owner: 'SEVON', kit: COLTEN_KATANA_KIT, spare: true },
+                  kunai: { name: 'KUNAI', owner: 'HAILIE', kit: COLTEN_KUNAI_KIT, spare: true } };
 const CATCH = { window: 0.22, reach: 14 };   // press K within this many seconds of it reaching you (a little extra reach)
 // Wielding the RIVAL'S weapon: Colby is quick with Colten's greatsword (faster swings, same power);
 // Colten is a brute with Colby's scythe (hits harder, swings slower). Only their weapon moves change.
@@ -19858,6 +20276,7 @@ const weaponUser = f => !!nativeWeapon(f) && !f.minion;
 function weaponLook(w) {
   if (w === 'scythe') { const L = CHARACTERS.COLBY.look; return { scythe3d: true, greatsword: false, bleed: true, idle: L.idle, carry: L.carry, stow: L.stow }; }
   if (w === 'katana') return { scythe3d: false, greatsword: true, katana: true, bleed: false, fireHits: true, idle: CHARACTERS.SEVON.look.idle, carry: undefined, stow: undefined };
+  if (w === 'kunai') return { scythe3d: false, greatsword: false, kunaiHand: true, bleed: true, idle: H_POSE.idle, carry: undefined, stow: undefined };   // (Hailie's kunai, reverse grip)
   return { scythe3d: false, greatsword: true, bleed: false, idle: CHARACTERS.COLTEN.look.idle, carry: undefined, stow: undefined };
 }
 function equipWeapon(f, w) {
@@ -19894,6 +20313,7 @@ function coltenDisarm(f, t) {
   if (t.minion) return;
   let w = null;
   if (t.char === 'SEVON') w = 'katana';
+  else if (t.char === 'HAILIE') w = 'kunai';
   else if (t.weapon && !t.noScythe && WEAPONS[t.weapon] && t.weapon !== nativeWeapon(f)) w = t.weapon;
   if (!w) return;
   if (!WEAPONS[w].spare) equipWeapon(t, null);                         // (Colby: bare-handed until he gets it back)
@@ -19995,9 +20415,9 @@ function weaponWatchdog(dt) {
     if (f.spareSwordT <= 0) { burst(f.x + f.face * 18, f.y - 60, ['#ffffff', '#ff7a1a'], 10, 0, Math.PI, 300, { grav: 0 }); sfx.shing ? sfx.shing() : sfx.block(); }
   }
   for (let i = scythes.length - 1; i >= 0; i--) {                       // a thrown KATANA lying around: Sevon walks over it = takes it back
-    const q = scythes[i]; if (q.weapon !== 'katana' || q.state !== 'stuck') continue;
+    const q = scythes[i]; if (!(q.weapon === 'katana' || q.weapon === 'kunai') || q.state !== 'stuck') continue;   // (a thrown KUNAI: the same, with Hailie)
     q.stuckT = (q.stuckT || 0) + dt;
-    const sv = fighters.find(o => o.char === 'SEVON' && o.respawnTimer <= 0 && Math.hypot(o.x - q.x, (o.y - 30) - q.y) < 70);
+    const sv = fighters.find(o => o.char === WEAPONS[q.weapon].owner && o.respawnTimer <= 0 && Math.hypot(o.x - q.x, (o.y - 30) - q.y) < 70);
     if (sv || q.stuckT > 12) { scythes.splice(i, 1); if (sv) { burst(q.x, q.y - 20, ['#ffffff', '#ff7a1a'], 10, -Math.PI / 2, 0.8, 260); sfx.shing ? sfx.shing() : sfx.block(); } }
   }
   for (const owner of fighters) {
@@ -20035,7 +20455,7 @@ function updateScythes(dt) {
                                    circleHitsFighter(s.x, s.y, SCYTHE_THROW.r + CATCH.reach, t));
       if (c) { scythes.splice(i, 1); c.action = null; c.spcBuf = 0; c.spcTapT = -9; catchWeapon(c, s); continue; }
     }
-    const SW = s.weapon === 'sword' ? 1.2 : s.weapon === 'katana' ? 0.85 : 1;   // the Dragonslayer hits harder when thrown, a katana lighter
+    const SW = s.weapon === 'sword' ? 1.2 : s.weapon === 'katana' ? 0.85 : s.weapon === 'kunai' ? 0.6 : 1;   // (a kunai: lighter still)   // the Dragonslayer hits harder when thrown, a katana lighter
     if (s.state === 'fly') {
       s.x += s.vx * dt; s.y += s.vy * dt; s.ang += s.dir * SCYTHE_THROW.spin * dt;
       if (Math.random() < dt * 40) particles.push({ x: s.x, y: s.y, vx: 0, vy: 0, life: 0.08, max: 0.08, size: 1, color: '#cfd8e6', type: 'bit', grav: 0 });
@@ -20155,6 +20575,7 @@ function drawThrownScythes() {
   for (const s of scythes) {
     if (s.weapon === 'sword') drawThrownSword(s);
     else if (s.weapon === 'katana') drawThrownKatana(s);
+    else if (s.weapon === 'kunai') drawKunaiShape(snap(s.x), snap(s.y - (s.state === 'stuck' ? 6 : 0)), s.state === 'stuck' ? (s.dir > 0 ? 0.5 : Math.PI - 0.5) : Math.atan2(s.vy || 0, s.vx || s.dir || 1), 1.6);
     else {
     ctx.save();
     ctx.translate(snap(s.x), snap(s.y - (s.state === 'stuck' ? 6 : 0)));
@@ -20256,7 +20677,7 @@ function stepAction(f, inp, dt) {
   }
   // HUNTER: ULT while holding someone (a grab or a chain link) = GLACIER GRIND (transformed, or straight from a full meter)
   if (f.ultBuf > 0 && f.look && f.look.rage && !f.minion && !ult && (f.transformed ? f.ult > 0 : f.ult >= ULT_MAX) &&
-      (a.type === 'holding' || (a.type === 'attack' && (a.move.hChain || (a.held && typeof a.held === 'object'))))) {   // (a grab, a chain link - or his SIDE grabs: Gigantic Buster / Choke)
+      (a.type === 'holding' || (a.type === 'attack' && !a.move.noGrabUlt && (a.move.hChain || (a.held && typeof a.held === 'object'))))) {   // (a grab, a chain link - or his side K grabs: Gigantic Buster / Choke. NOT the Broly Express)
     const v = a.type === 'holding' ? a.victim : a.held;
     if (v && v.respawnTimer <= 0) { startHunterGrind(f, v); return; }
   }
@@ -20275,6 +20696,8 @@ function stepAction(f, inp, dt) {
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
   if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else if (a.hailie) startHailieComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
   if (a.type === 'hCome') return stepHailieComeback(f, a, dt);
+  if (a.type === 'hRasenDrop') return stepHailieRasenDrop(f, a, dt);   // Hailie's Rasengan Drop
+  if (a.type === 'cOnePunch') return stepColtenOnePunch(f, a, dt);     // Colten's One Punch   // Hailie's Rasengan Drop
   if (a.type === 'hKunaiUlt') return stepHailieKunaiUlt(f, a, dt);   // Hailie's Kunai Barrage   // Hailie's comeback: out of the portal with a full Rasengan
   if (a.type === 'fxSac') return stepFxSac(f, a, dt);              // Lance: Final Explosion - the sacrifice
   if (a.type === 'sunFrozen') {                                    // STOPPED by Colten's cut: held right there till the sun comes down
@@ -23650,7 +24073,7 @@ function basePose(p) {
   // ULTIMATE poses
   if (a && a.type === 'timeStop') return { ...a.pose, raw: true };   // frozen mid-motion
   if (a && a.type === 'shipUlt' && a.pose) return { ...a.pose };
-  if (a && a.type === 'hKunaiUlt' && a.pose) return { ...a.pose };   // Hailie's Kunai Barrage (the throw)   // Aiden's pirate ship ultimate animates itself
+  if (a && (a.type === 'hKunaiUlt' || a.type === 'hRasenDrop' || a.type === 'cOnePunch') && a.pose) return { ...a.pose };   // Hailie's Kunai Barrage (the throw)   // Aiden's pirate ship ultimate animates itself
   if (a && a.type === 'kiBarrage') {                  // Lance hanging in the air, hand thrust down at the stage
     const w = Math.sin(p.anim * 60) * 0.12;
     const k = a.phase === 'barrage' ? Math.sin(p.anim * 45) * 0.5 : 0;   // (barrage: his arm jerking all over as he sprays)
@@ -24698,7 +25121,7 @@ function drawFigure(fig, opts = {}) {
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armA, f, main, EDGE); drawHunterBracer(shoulder, pz.armA, f, opts); }   // (the near arm's delt + bracer, on top of it)
-  if (look.hellcat && !grip) {                                   // HAILIE: her kunai, always in her front hand - in a REVERSE GRIP:
+  if ((look.hellcat || look.kunaiHand) && !grip) {               // HAILIE (or Colten, holding hers): her kunai, always in her front hand - in a REVERSE GRIP:
     const H = swordHold(shoulder, pz, f), ux = H.ux, uy = H.uy;     //  the blade comes out the bottom of her fist and lies back along her
     let px = -uy, py = ux; if (py < 0 || (Math.abs(py) < 0.2 && px * f > 0)) { px = -px; py = -py; }   //  forearm (pointing down / back), the ring
     let dx = px * 0.75 - ux * 0.65, dy = py * 0.75 - uy * 0.65; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;   //  poking out over her thumb
@@ -25083,6 +25506,7 @@ function drawSmear(p) {
 function drawFighter(p) {
   const a = p.action;
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return;   // (Lance mid-Embodied-Light: gone - just the streak of light)
+  if (a && a.type === 'cOnePunch') return;                         // (Colten's One Punch draws him itself - the close-up, the GIANT)
   if (a && a.type === 'taunt' && p.look && p.look.pirateHat) {         // Captain Heel's taunt skits: barrel / anchor / bones
     drawHeelTauntProps(p, a);
     if (a.bones) { drawBonePile(p, a); return; }
@@ -26347,6 +26771,7 @@ function render() {
     if (fighters.some(f => f.action && f.action.type === 'timeStop' && !f.action.bind)) {   // the world takes on a stopped-time tint
       const vb = viewBounds(); ctx.fillStyle = 'rgba(70,40,140,0.16)'; ctx.fillRect(vb.l - 60, vb.t - 60, vb.r - vb.l + 120, vb.b - vb.t + 120);
     }
+    drawColtenOnePunchBack();                           // Colten's One Punch: him (the close-up / the GIANT behind them) + the red world
     drawGhosts();
     drawHunterDragons(false);                           // Hunter's golden dragon: the coils behind him
     if (ult && ult.phase === 'cutscene') drawUltCutscene();
@@ -26364,10 +26789,12 @@ function render() {
       if (ult && ult.def && ult.def.raijin) drawRaijin(ult);        // Hailie's Flying Raijin: the kunai ring
       drawHailieFx();                                               // Hailie: the Rasengan in her hand
       drawHailieKunaiUlt();                                         // Hailie's Kunai Barrage: the kunai
+      drawHailieRasenDrop();                                        // Hailie's Rasengan Drop: the kunai + the big Rasengan
       drawJajanFx();                                                // Colby: Jajanken's Nen (stance glow, Rock's orb, Scissors' blade)
       drawPortalLoops();                                            // Hailie's down throw: the two stacked portals
       drawHunterBall();                                             // the HUNTER BALL minigame's ki blast
       drawCruelSun();                                               // Colten: THE SUN
+      drawColtenOnePunch();                                         // Colten: ONE PUNCH (his eyes, the giant fist)
     }
     drawProjectiles();
     drawBeamClashes();                                // a BEAM CLASH: the flare where the two attacks meet
@@ -27920,8 +28347,9 @@ const MOVESETS = {
       ['DOWN THROW', 'Portal Loop', 'Two portals open, one stacked over the other, and she slams them in: they fall through them forever, faster and faster - until she spinning-roundhouse kicks them out.'] ] },
     { title: 'TRANSFORM + ULTIMATE (I)', rows: [
       ['I (FULL METER)', 'THE VOICES', 'Harder, faster - and three AUTOMATIC phase-outs when a hit is coming.'],
-      ['I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'],
-      ['SIDE + I (TRANSFORMED)', 'Kunai Barrage', 'A TRACKING kunai at every enemy on the stage. Perfect block it to knock it away (or dodge it) - otherwise it sticks, and she teleports to each of them in turn with a fully charged RASENGAN.'] ] } ] },
+      ['UP + I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'],
+      ['I (TRANSFORMED)', 'Kunai Barrage', 'A TRACKING kunai at every enemy on the stage. Perfect block it to knock it away (or dodge it) - otherwise it sticks, and she teleports to each of them in turn with a fully charged RASENGAN.'],
+      ['SIDE + I (TRANSFORMED)', 'Rasengan Drop', 'One kunai. If it sticks, she teleports right above them and drops a fully charged RASENGAN on them - driven into the floor, then they bounce off it and fly STRAIGHT UP (off the stage: spiked down). Perfect block or dodge the kunai to stop it.'] ] } ] },
   STICKMAN: { blurb: 'The original: a balanced all-rounder with simple smash attacks and energy shots. The best place to start.', sections: [
     { title: 'GROUND J', rows: [
       ['J', 'Jab', 'A quick punch.'],
@@ -28066,10 +28494,11 @@ const MOVESETS = {
     { title: 'TRANSFORM + ULTIMATE (I)', rows: [
       ['I (FULL METER)', 'WARLORD', 'He gets HUGE and bare-chested: much more damage and knockback, and 2 hits of HYPER ARMOR (both come back 2 seconds after they are used up). Only while it lasts.'],
       ['I (TRANSFORMED)', 'The Sun', 'He floats up and charges a sun over his hand, bigger and bigger (hyper armor the whole time) - then compresses it and throws it: the WHOLE floor explodes. Get off the ground! He is back to normal after.'],
+      ['SIDE + I (TRANSFORMED)', 'One Punch', 'A close-up: his eyes light up. Then they turn round and look back... and he is ENORMOUS behind them. One gigantic red fist swallows them whole and sends them flying - a KO punch. It opens with a dash at the nearest enemy in range: PERFECT BLOCK it as he arrives to stop it (and stagger him), or dodge through it.'],
       ['DOWN + I (TRANSFORMED)', "Warlord's Judgment", 'His old ultimate: three giant greatsword swings - every one a CRITICAL hit. He is back to normal after.'] ] },
     { title: 'WHAT MAKES HIM UNIQUE', notes: [
-      'GATE OF BABYLON: his GRAB rips the weapon out of their hands. He keeps it - and fights with THEIR moveset (Colby\'s scythe kit, Sevon\'s katana forms) - until he throws it with side K. His Dragonslayer waits in the Gate.',
-      'Colby is left bare-handed until he picks his scythe back up. Sevon gets a "!" and draws a spare katana.',
+      'GATE OF BABYLON: his GRAB rips the weapon out of their hands. He keeps it - and fights with THEIR moveset (Colby\'s scythe kit, Sevon\'s katana forms, Hailie\'s knife and kunai) - until he throws it with side K (the kunai: neutral K, since side K is the kunai itself). His Dragonslayer waits in the Gate.',
+      'Colby is left bare-handed until he picks his scythe back up. Sevon gets a "!" and draws a spare katana; Hailie just pulls out another kunai.',
       'Only Colten can pick up and use other fighters\' weapons.',
       'Slow and heavy: you always see his swings coming - but every one hits about 15% harder, and in his plate he is hard to launch.' ] } ] },
   SEVON: { blurb: 'The Flame Hashira: a fast samurai with flaming sword forms, ODM gear to grapple onto you, and Total Concentration breathing.', sections: [
@@ -29984,7 +30413,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)
