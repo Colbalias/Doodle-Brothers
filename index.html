@@ -668,10 +668,12 @@ const STAGE_LIST = [
   // platforms, nowhere to hide - stay on the tiles.
   { name: 'MARTIAL ARENA', tourney: true, platforms: [], scale: 0.92 },
 ];
-const TOURNEY = { step: 260, rim: 26 };  // (step: how far down the grass is - the ring-out line, set deep so a knock off the edge can still be recovered from; rim: the ring's own thin stone edge)
-const grassY = () => STAGE.y + TOURNEY.step;
-// out on the grass, off the ring = RING OUT
-const ringedOut = f => !!(stageDef && stageDef.tourney && f.respawnTimer <= 0 && !f.out && f.y >= grassY() - 1);   // (the grass is well below the ring: reach it anywhere and you're out)
+const TOURNEY = { rim: 26, grace: 2.0 };   // (rim: the ring's own thin stone edge; grace: seconds you can stand on the grass before it's a RING OUT)
+// THE GRASS is a real floor, right at the foot of the ring (the ring is a raised stone platform standing on it). Land on it
+// and a countdown starts - get back up on the ring before it runs out, or it's a RING OUT. (A clone on the grass just vanishes.)
+const grassY = () => STAGE.y + STAGE.h;
+const onGrass = f => !!(stageDef && stageDef.tourney && f.respawnTimer <= 0 && !f.out && f.y >= grassY() - 1);
+const ringedOut = f => onGrass(f) && (f.minion || (f.grassT || 0) >= TOURNEY.grace);
 const RING = { w: 760, cageH: 400, raise: 64 };                // raise: how far the mat sits up off the arena floor
 const ringL = () => 50 + (1180 - RING.w) / 2, ringR = () => ringL() + RING.w;   // (centred on the normal stage)
 const ringTop = () => STAGE.y - RING.raise;
@@ -2574,7 +2576,7 @@ const AETHER = { throwAt: 0.07, riseTime: 0.24, height: 320, hang: 0.1, fall: 15
                  snag:  { dmg: 3 },                                                   // caught on the way down
                  slam:  { dmg: 8, base: 430, growth: 5.6, angle: 72 },                // driven into the ground
                  wave:  { dmg: 6, base: 360, growth: 4.6, angle: 60 },                // the landing shockwave
-                 waveR: 150, endlag: 0.34, cd: 1.8, mash: 5 };   // (cd: seconds before he can use it again; mash: presses to struggle off the blade)
+                 waveR: 150, endlag: 0.34, cd: 1.1, mash: 5 };   // (cd was 1.8 - too much; none at all was too spammable)   // (cd: seconds before he can use it again; mash: presses to struggle off the blade)
 COLBY_MOVES.upRanged = { name: "Reaper's Aether", startup: 0.06, active: 9, endlag: AETHER.endlag, landLag: 0.2, aether: true, noClash: true, throwScythe: true,
   hitboxes: [],
   wind: pose({ lean: 0.1, bob: -14, legA: [0.9, 1.4], legB: [-0.5, 0.8], sc: { gx: 8, gy: 8, pitch: -0.4, yaw: 0.1, n: [0, 0, -1], hands: 2 } }),
@@ -3423,7 +3425,7 @@ function stepAlolanWhip(f, a, dt, inp) {
     if (Math.random() < dt * 40) burst(f.x - f.face * 20, f.y - 50, FIRE, 1, f.face > 0 ? Math.PI : 0, 0.4, 260, { grav: -100 });
     const gx = f.x + f.face * WHIP.reach * 0.7, gy = f.y - 55;
     for (const t of fighters) {
-      if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t)) continue;
+      if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t) || rockCommitted(t)) continue;
       const ta = t.action;
       if (ta && ['grabbed', 'holding', 'thrown', 'whipped', 'ultVictim', 'ultSeq'].includes(ta.type)) continue;
       if (!circleHitsFighter(gx, gy, WHIP.r, t)) continue;
@@ -3507,7 +3509,9 @@ const CROSS_CHOP = { grabR: 50, aoe: 140, maxDrop: 360,             // maxDrop: 
                      held: { dmg: 14, base: 460, growth: 6.6, angle: 70 },     // the one he carried down with him
                      near: { dmg: 10, base: 400, growth: 5.6, angle: 60 },     // everyone else in the shockwave
                      drop: { dmg: 4,  base: 260, growth: 2,   angle: 80 } };   // never reached the floor: let go
-const canBeGrabbed = (f, t) => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !(t.halo > 0) && !isIntangible(t) && !t.dead && !(t.poofT > 0) && !unstoppable(t) &&
+// COLBY'S JAJANKEN: ROCK - once he's picked it (wind-up, the punch, the hold) no grab can take him: it goes straight through
+const rockCommitted = t => !!(t && t.action && t.action.type === 'attack' && t.action.key === 'jjRock' && t.action.phase !== 'end');
+const canBeGrabbed = (f, t) => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !(t.halo > 0) && !isIntangible(t) && !t.dead && !(t.poofT > 0) && !unstoppable(t) && !rockCommitted(t) &&
   !(t.action && ['grabbed', 'holding', 'thrown', 'whipped', 'impaled', 'ultVictim', 'ultSeq', 'timeStop', 'shipUlt'].includes(t.action.type));
 // Only someone STANDING ON THE GROUND gets grabbed. Someone IN THE AIR just gets HIT and dragged along with him.
 // (Either way a well-timed Z vanish dodges it - you're intangible, so it can't catch you.)
@@ -3908,7 +3912,7 @@ function trySPD(f) {
   // the stick motion is spent either way
   f.circle = null;
   for (const t of fighters) {
-    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t) || !t.ground) continue;
+    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t) || rockCommitted(t) || !t.ground) continue;
     const ta = t.action;
     if (ta && ['grabbed', 'holding', 'thrown', 'whipped', 'ultVictim', 'timeStop'].includes(ta.type)) continue;
     if (!circleHitsFighter(gx, gy, SPD.grabR, t)) continue;
@@ -7033,7 +7037,7 @@ function stepHellGrab(f, a) {
   const gx = f.x + f.face * 62, gy = f.y - 58;
   if (Math.random() < 0.5) burst(gx, gy, HELLFIRE, 1, 0, Math.PI, 120, { grav: 0 });
   for (const t of fighters) {
-    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t)) continue;
+    if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0 || isIntangible(t) || unstoppable(t) || rockCommitted(t)) continue;
     const ta = t.action;
     if (ta && ['grabbed', 'holding', 'thrown', 'whipped', 'ultVictim', 'ultSeq', 'timeStop'].includes(ta.type)) continue;
     if (!circleHitsFighter(gx, gy, 40, t)) continue;   // (Hell Grab reach: raised a bit, 34 -> 40)
@@ -8890,7 +8894,7 @@ function drawJajanFx() {
   for (const f of fighters) {
     const a = f.action; if (!a || a.type !== 'attack' || f.respawnTimer > 0) continue;
     if (a.key === 'jajanken' && a.phase !== 'end') {               // THE STANCE: a pulsing golden glow round all of him, the orb in his fist
-      const k = (a.ct || 0) / JAJAN.maxCharge, pulse = 0.75 + 0.25 * Math.sin(now * 9);
+      const P = jjPower(a.ct || 0), k = P.k + 1.4 * Math.min(1.2, P.u), pulse = 0.75 + 0.25 * Math.sin(now * 9);
       if (!sketch) { ctx.save(); ctx.globalCompositeOperation = 'lighter';
         const g = ctx.createRadialGradient(f.x, f.y - 50, 10, f.x, f.y - 50, 78 + 18 * k); g.addColorStop(0, `rgba(255,200,80,${0.22 * pulse})`); g.addColorStop(0.7, `rgba(255,150,40,${0.14 * pulse})`); g.addColorStop(1, 'rgba(255,120,20,0)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(f.x, f.y - 50, 60 + 14 * k, 86 + 16 * k, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
@@ -11095,18 +11099,48 @@ function playJJ(f, final) {
   f.jjSnd = { el, final };
 }
 function stopJJ(f) { if (f && f.jjSnd) { try { f.jjSnd.el.pause(); } catch (e) {} f.jjSnd = null; } }
-function jjStart(f, key, mult) {
+function jjStart(f, key, mult, kb = 1) {
   const move = CHARACTERS.COLBY.bareMoves[key];
-  f.action = { type: 'attack', key, move, btn: 'atk', phase: 'startup', t: 0, charge: 0, mult, hit: new Set(), air: !f.ground, started: time, startupMul: 1 };
+  f.action = { type: 'attack', key, move, btn: 'atk', phase: 'startup', t: 0, charge: 0, mult, jjKB: kb, hit: new Set(), air: !f.ground, started: time, startupMul: 1 };
+}
+// THE ENDLESS CHARGE: the stance fills up as before (full at JAJAN.maxCharge) - and then it just KEEPS GOING, slowly. Damage
+// and knockback keep climbing for as long as he holds it, with no cap - slow at first, so it doesn't get silly quickly:
+// about 15 seconds of charging without being interrupted and it'll KO in one hit (JJ_OVER.full).
+const JJ_AIR = { hold: 0.5, fall: 110 };   // the stance started in the air: hangs this long, then falls this slowly (px/s)
+const JJ_OVER = { full: 15, dmg: 0.9, kb: 2.4, pow: 1.6, holdScissors: 0.2 };
+function jjPower(ct) {
+  const k = Math.min(1, ct / JAJAN.maxCharge), u = Math.max(0, ct - JAJAN.maxCharge) / (JJ_OVER.full - JAJAN.maxCharge);
+  return { k, u, mult: 1 + JAJAN.chargeBonus * k + JJ_OVER.dmg * u, kb: 1 + JJ_OVER.kb * Math.pow(u, JJ_OVER.pow) };
 }
 CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active: Infinity, endlag: 0.12, landLag: 0.1, noClash: true, hitboxes: [],
   wind: JJ_POSE.stance, strike: JJ_POSE.stance,
+  floatWhile(f, a) { return a.phase === 'active' && !!a.airStart && !f.ground && f.vy >= 0; },   // (started in the AIR: he hangs there, then slow-falls - see step)
   fire(f, mult, c, a) { a.ct = 0; a.hops = 0; a.lastD = 0; painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'JAN... KEN...', big: false }); sfx.parry(); playJJ(f, false); },
   step(f, a, dt, inp) {
     if (a.phase !== 'active') return false;
-    a.ct = Math.min(JAJAN.maxCharge, (a.ct || 0) + dt);
-    const k = a.ct / JAJAN.maxCharge, h = jjHand(f);
+    if (a.airStart === undefined) a.airStart = !!a.air && !f.ground;   // (started in the air?)
+    // IN THE AIR: held up there for a moment, then a slow, floaty fall - still charging the whole way down (a jump still rises as normal)
+    if (a.airStart && !f.ground && f.vy >= 0) { f.vy = a.t < JJ_AIR.hold ? 0 : JJ_AIR.fall; f.vx = approach(f.vx, 0, 900 * dt); }
+    a.air = false;                                                // (it's a stance - landing never cancels it, wherever it started)
+    a.ct = (a.ct || 0) + dt;                                      // (no cap: see jjPower)
+    const P = jjPower(a.ct), k = P.k, h = jjHand(f);
     if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt);
+    // the OVERCHARGE: past full it keeps building - a call-out every so often, the aura burning hotter and hotter
+    const lvl = Math.floor(P.u * 5);
+    if (P.u > 0 && lvl !== a.lvl) { a.lvl = lvl; painTexts.push({ x: f.x, y: f.y - 150, t: 0.7, max: 0.7, text: P.u >= 1 ? 'ONE-HIT KO!' : 'NEN x' + (P.mult * P.kb * 0.62).toFixed(1), big: P.u >= 1 }); if (lvl > 0) { ring(h.x, h.y); sfx.parry(); } }
+    if (P.u > 0 && Math.random() < dt * (10 + 40 * Math.min(1.5, P.u))) burst(f.x + (Math.random() - 0.5) * 40, f.y - Math.random() * 90, [JAJAN.gold, JAJAN.orange, '#ffffff'], 1, -Math.PI / 2, 0.6, 200 + 300 * Math.min(1.5, P.u), { grav: -300 });
+    // UP (JUMP): straight up, still charging - and a JUMP in the air uses a double jump
+    if (inp.jumpTap && a.t > 0.1 && (f.ground || f.airJumps > 0)) {
+      if (!f.ground) f.airJumps--;
+      f.vy = -(f.ground ? f.stats.jumpVel : (f.stats.doubleJumpVel || f.stats.jumpVel)) * JUMP_SCALE; f.vx = 0; f.ground = false; f.onPlatform = null; f.y -= 2;
+      dust(f.x, f.y, 6, 1); sfx.whoosh(false);
+    }
+    // BLOCK: TAP = a Z VANISH (still charging) - HOLD = SCISSORS
+    if (inp.blockTap && a.t > 0.1) { a.blkOn = true; a.blkT = 0; }
+    if (a.blkOn) {
+      if (inp.blockHeld) a.blkT = (a.blkT || 0) + dt;
+      else { a.blkOn = false; if (canAirDodge(f)) { tfVanish(f, inp); f.invuln = Math.max(f.invuln || 0, 0.2); } }
+    }
     for (let q = 0; q < 2; q++) if (Math.random() < dt * (30 + 50 * k)) {        // aura POURING INTO the fist from all round him
       const an = Math.random() * Math.PI * 2, d = 60 + Math.random() * 50, life = 0.22;
       particles.push({ x: h.x + Math.cos(an) * d, y: h.y + Math.sin(an) * d, vx: -Math.cos(an) * d / life, vy: -Math.sin(an) * d / life,
@@ -11121,15 +11155,15 @@ CHARACTERS.COLBY.bareMoves.jajanken = { name: 'Jajanken', startup: 0.05, active:
       dust(f.x, f.y, 10, 1.6); sfx.whoosh(false);
     }
     a.lastD = d;
-    const mult = 1 + JAJAN.chargeBonus * k;
+    const mult = P.mult;
     let pick = null;
-    if (a.t > 0.1) pick = inp.atkTap ? 'jjRock' : inp.spcTap ? 'jjPaper' : inp.blockTap ? 'jjScissors' : null;
+    if (a.t > 0.1) pick = inp.atkTap ? 'jjRock' : inp.spcTap ? 'jjPaper' : (a.blkOn && a.blkT >= JJ_OVER.holdScissors) ? 'jjScissors' : null;
     if (!pick && (f.controller === 'dummy' || f.minion) && a.t > (a.aiT || (a.aiT = 0.35 + Math.random() * 0.5))) {   // (the CPU: picks by range)
       const o = nearestFoe(f), dx = o ? Math.abs(o.x - f.x) : 999, dy = o ? o.y - f.y : 0;
       pick = dy < -60 || projectiles.some(q => q.owner !== f && Math.hypot(q.x - f.x, q.y - f.y) < 220) ? 'jjScissors' : dx < 110 ? 'jjRock' : 'jjPaper';
       if (o) f.face = Math.sign(o.x - f.x) || f.face;
     }
-    if (pick) { f.atkBuf = f.spcBuf = f.dodgeBuf = 0; jjStart(f, pick, mult); playJJ(f, true); painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: pick === 'jjRock' ? 'ROCK!' : pick === 'jjPaper' ? 'PAPER!' : 'SCISSORS!', big: true }); return true; }
+    if (pick) { f.atkBuf = f.spcBuf = f.dodgeBuf = 0; jjStart(f, pick, mult, P.kb); playJJ(f, true); painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: pick === 'jjRock' ? 'ROCK!' : pick === 'jjPaper' ? 'PAPER!' : 'SCISSORS!', big: true }); return true; }
     if (a.t > JAJAN.timeout) { a.phase = 'end'; a.t = 0; }
     return true;
   } };
@@ -11153,6 +11187,7 @@ CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, act
     painTexts.push({ x, y: y - 90, t: 0.9, max: 0.9, text: 'ROCK!!', big: true });
   },
   step(f, a, dt) {
+    if (!a.hold) jjRockClash(f, a);                              // (the fist on its way: it SMASHES the shots it meets)
     const H = a.hold; if (!H || H.done) return false;
     const v = H.v;
     if (!fighters.includes(v) || v.respawnTimer > 0) { H.done = true; return false; }
@@ -11176,6 +11211,33 @@ CHARACTERS.COLBY.bareMoves.jjRock = { name: 'Jajanken: Rock', startup: 0.06, act
     sfx.huge ? sfx.huge() : sfx.slam(); sfx.clash(true); sfx.hit(1);
     return true;
   } };
+// ROCK vs PROJECTILES: the Nen orb round his fist CLASHES with any shot it meets - it's smashed apart right there and the
+// punch keeps going. A BEAM is stopped dead at his fist (he punches up the length of it). Ultimates are too much for it...
+// unless it's charged all the way to ONE-HIT KO, which smashes anything.
+function jjRockClash(f, a) {
+  const fx = f.x + f.face * 66, fy = f.y - 58, R = 46 + 12 * Math.min(1, ((a.mult || 1) - 1) / JAJAN.chargeBonus), allUlt = (a.jjKB || 1) >= 1 + JJ_OVER.kb - 0.01;
+  const pop = (x, y, c) => {
+    burst(x, y, [JAJAN.gold, c || '#ffffff', '#ffffff'], 22, 0, Math.PI, 650, { grav: 0 }); ring(x, y);
+    particles.push({ x, y, vx: 0, vy: 0, life: 0.1, max: 0.1, r: 26, type: 'impact' });
+    hitstop = Math.max(hitstop, 0.05); shake = Math.max(shake, 8); sfx.clash(false);
+    painTexts.push({ x, y: y - 60, t: 0.45, max: 0.45, text: 'CLASH!', big: false });
+  };
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const q = projectiles[i];
+    if (!q || !q.owner || q.owner === f || allies(f, q.owner) || q.clash || q.stuck || (ultProjectile(q) && !allUlt)) continue;
+    if (q.kind === 'beam') {
+      if (q.vdir) continue;
+      const along = (fx - q.x) * q.dir;
+      if (along > 0 && along < q.len + R && Math.abs(fy - q.y) < (q.w || 20) / 2 + R) {
+        if (!q.rockCut) pop(q.x + q.dir * along, q.y, q.color);
+        q.rockCut = true; q.len = Math.max(0, along - R * 0.6); q.maxLen = Math.min(q.maxLen || q.len, q.len);   // (cut off at his fist)
+      }
+      continue;
+    }
+    if (q.x === undefined || q.phase === 'hold') continue;
+    if (Math.hypot(q.x - fx, q.y - fy) < R + (q.r || 12)) { pop((q.x + fx) / 2, (q.y + fy) / 2, q.color); if (q.eraser && typeof eraserBlast === 'function') eraserBlast(q); projectiles.splice(i, 1); }
+  }
+}
 CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, active: 0.06, endlag: 0.26, landLag: 0.12, noClash: true, hitboxes: [],
   wind: JJ_POSE.paperWind, strike: JJ_POSE.paper,
   step(f, a, dt) {                                             // the open palm SENDS PROJECTILES BACK (from the push out, for a moment)
@@ -11193,8 +11255,8 @@ CHARACTERS.COLBY.bareMoves.jjPaper = { name: 'Jajanken: Paper', startup: 0.1, ac
     return false;
   },
   fire(f, mult, c, a) {
-    const m = (a && a.mult) || 1, sp = 950;
-    projectiles.push({ owner: f, x: f.x + f.face * 46, y: f.y - 62, vx: f.face * sp, vy: 0, r: 24 + 6 * (m - 1) / JAJAN.chargeBonus, dmg: 8 * m, base: 360, growth: 4.5, angle: 35,
+    const m = (a && a.mult) || 1, kb = (a && a.jjKB) || 1, sp = 950;
+    projectiles.push({ owner: f, x: f.x + f.face * 46, y: f.y - 62, vx: f.face * sp, vy: 0, r: Math.min(70, 24 + 6 * (m - 1) / JAJAN.chargeBonus), dmg: 8 * m, base: 360 * kb, growth: 4.5 * kb, angle: 35,
                        mult: powerOf(f), life: 0.9, kind: 'orb', color: JAJAN.gold, hit: new Set(), pierce: false, trail: [], grav: 0, trailLen: 10 });
     burst(f.x + f.face * 46, f.y - 62, [JAJAN.gold, '#ffffff'], 16, f.face > 0 ? 0 : Math.PI, 0.5, 500, { grav: 0 }); sfx.blast();
   } };
@@ -11261,6 +11323,102 @@ CHARACTERS.COLTEN.bareMoves.upGround = { name: 'Titan Sweep', startup: 0.3, acti
     if (realRandom() < dt * 60) { const ang = k * Math.PI * 2, lx = Math.cos(ang) * 80 * f.face; dust(f.x + lx, f.y, 2, 1.2); }
     return false;
   } };
+// COLTEN EMPTY-HANDED = A BOXER. No kicks, no tricks: every move is a PUNCH, and every punch has a LONG reach - the air
+// pressure off his fists carries way past his knuckles (the white speed lines show how far it goes). K = the long
+// STRAIGHTS (jab, jab, cross...), J = the HOOKS and BODY SHOTS - and they share one string, like Colby's. The string's
+// last hit is a HAYMAKER. Built from boxPunch: reach = how far out from him it hits.
+const BOXER = { chainBase: 150, chainGrowth: 0.5 };   // (string hits: light knockback, so the string stays together)
+const BOX_POSE = {
+  guard:    pose({ lean: 0.1, armA: [0.6, -1.8], armB: [0.4, -1.9], legA: [0.5, 0.4], legB: [-0.5, 0.2] }),
+  jab:      pose({ lean: 0.25, armA: [1.6, 0], armB: [0.4, -1.9], legA: [0.6, 0.4], legB: [-0.5, 0.15] }),
+  cross:    pose({ lean: 0.38, armA: [0.5, -1.9], armB: [1.65, 0], legA: [0.65, 0.4], legB: [-0.6, 0.1] }),
+  hook:     pose({ lean: 0.3, armA: [1.25, -0.95], armB: [0.4, -1.9], legA: [0.6, 0.45], legB: [-0.5, 0.2] }),
+  body:     pose({ lean: 0.55, bob: -12, armA: [1.25, 0.15], armB: [0.4, -1.8], legA: [0.95, 0.85], legB: [-0.7, 0.3] }),
+  upWind:   pose({ bob: -10, lean: 0.4, armA: [-0.4, -2.0], armB: [0.4, -1.8], legA: [0.75, 1.0], legB: [-0.5, 0.4] }),
+  upper:    pose({ bob: 2, lean: -0.15, armA: [2.6, 0.3], armB: [0.4, -1.8], legA: [0.3, 0.2], legB: [-0.4, 0.3] }),
+  haymWind: pose({ lean: -0.3, bob: -6, armA: [-1.4, -0.6], armB: [0.5, -1.8], legA: [0.5, 0.6], legB: [-0.7, 0.3] }),
+  haymaker: pose({ lean: 0.7, bob: -8, armA: [1.7, 0], armB: [-0.9, -0.8], legA: [1.05, 0.5], legB: [-0.95, 0.1] }),
+  airWind:  pose({ lean: -0.15, armA: [0.5, -2.0], armB: [0.3, -1.8], legA: [0.8, 1.6], legB: [0.3, 1.2] }),
+  airPunch: pose({ lean: 0.45, armA: [1.65, 0], armB: [-0.6, -1.2], legA: [-0.3, 0.4], legB: [-0.6, 0.3] }),
+  backFist: pose({ lean: 0.35, armA: [-1.6, -0.1], armB: [0.4, -1.8], legA: [0.6, 1.4], legB: [0.2, 1.1] }),
+  hammer:   pose({ lean: 0.4, armA: [0.25, 0], armB: [0.35, 0], legA: [0.6, 1.4], legB: [0.2, 1.1] }),
+  hammerUp: pose({ lean: -0.2, armA: [3.0, 0], armB: [2.8, 0], legA: [0.8, 1.7], legB: [0.4, 1.4] }),
+};
+// the PUNCH'S REACH, shown: white speed lines shooting out to the end of it, and a puff of air where it ends
+// (dir: 1 = out in front, -1 = behind him; ang: tilted down (+) / up (-))
+function boxFx(f, reach, y, ang = 0, dir = 1) {
+  const ux = Math.cos(ang) * f.face * dir, uy = Math.sin(ang);
+  const tx = f.x + ux * reach, ty = f.y + y + uy * reach;
+  for (let i = 0; i < 3; i++) {
+    const j = (Math.random() - 0.5) * 16;
+    particles.push({ x: tx - uy * j, y: ty + ux * j, vx: ux * 500, vy: uy * 500, ang: Math.atan2(uy, ux), len: Math.max(40, (reach - 30) * (0.65 + 0.3 * Math.random())), life: 0.1, max: 0.1, type: 'hitline' });
+  }
+  particles.push({ x: tx, y: ty, vx: 0, vy: 0, life: 0.1, max: 0.1, r: 10, type: 'impact', rot: Math.random() * Math.PI });
+}
+// one punch: hits all the way from his fist out to `reach` (only once, however much of that line they're in)
+function boxPunch(name, o) {
+  const reach = o.reach, y = o.y ?? -68, r = o.r ?? 26, ang = o.ang ?? 0, ux = Math.cos(ang), uy = Math.sin(ang), dir = o.back ? -1 : 1;
+  const h = { dmg: o.dmg, base: o.base ?? BOXER.chainBase, growth: o.growth ?? BOXER.chainGrowth, angle: o.kbAngle ?? 45, group: 0 };
+  const n = Math.max(2, Math.ceil((reach - 24) / (r * 1.4)));          // (a row of hitboxes, fist to the end of the reach)
+  const hitboxes = [];
+  for (let i = 0; i < n; i++) { const d = 24 + (reach - r - 24) * (i / (n - 1)); hitboxes.push({ x: dir * d * ux, y: y + d * uy, r, ...h }); }
+  const m = { name, startup: o.su, active: o.act ?? 0.07, endlag: o.el, landLag: o.landLag ?? 0.1, boxer: true, hitboxes,
+    wind: o.wind || BOX_POSE.guard, strike: o.strike || BOX_POSE.jab,
+    fire(f) { boxFx(f, reach, y, ang, dir); sfx.whoosh(!!o.big); if (o.big) shake = Math.max(shake, 5); } };
+  for (const k of ['chain', 'charge', 'lunge', 'lungeFriction', 'hop', 'spike', 'windUp', 'impactOnHit']) if (o[k] !== undefined) m[k] = o[k];
+  return m;
+}
+// a punch that hits more than once (the air FLURRY)
+function boxFlurry(name, o) {
+  const m = boxPunch(name, o), per = o.act / o.hits;
+  m.hitboxes = [];
+  for (let i = 0; i < o.hits; i++) {
+    const last = i === o.hits - 1, y = -66 + (i % 2 ? 10 : -10);
+    for (const d of [30, o.reach * 0.5, o.reach - 26]) m.hitboxes.push({ x: d, y, r: 28, dmg: last ? o.lastDmg : o.dmg, base: last ? 340 : 60, growth: last ? 4.6 : 0, angle: last ? 40 : 30, group: i, from: i * per, to: (i + 1) * per });
+  }
+  m.fire = () => {};
+  m.step = (f, a) => { if (a.phase === 'active') { const i = Math.floor(a.t / per); if (i !== a.fl && i < o.hits) { a.fl = i; boxFx(f, o.reach, -66 + (i % 2 ? 10 : -10)); sfx.whoosh(false); } } return false; };
+  return m;
+}
+const COLTEN_BOXING = (() => { const B = BOX_POSE; return {
+  // ---- K: THE STRAIGHTS (his longest reach) ----
+  p1: boxPunch('Jab', { chain: 1, su: 0.06, el: 0.14, reach: 150, dmg: 4, strike: B.jab }),
+  p2: boxPunch('Double Jab', { chain: 2, su: 0.06, el: 0.14, reach: 150, dmg: 4, strike: B.jab }),
+  p3: boxPunch('Cross', { chain: 3, su: 0.07, el: 0.16, reach: 160, dmg: 6, base: 170, strike: B.cross }),
+  p4: boxPunch('Stepping Jab', { chain: 4, su: 0.06, el: 0.14, reach: 160, dmg: 5, strike: B.jab, lunge: 260, lungeFriction: 0.5 }),
+  p5: boxPunch('Cross', { chain: 5, su: 0.07, el: 0.16, reach: 160, dmg: 6, base: 170, strike: B.cross }),
+  p6: boxPunch('Long Straight', { chain: 6, su: 0.07, el: 0.16, reach: 170, dmg: 7, base: 180, strike: B.cross }),
+  pFinish: boxPunch('Knockout Straight', { chain: CHAIN_LEN, su: 0.12, act: 0.08, el: 0.32, reach: 190, r: 30, dmg: 14, base: 520, growth: 7, kbAngle: 35, wind: B.haymWind, strike: B.cross, big: true, windUp: true, impactOnHit: true }),
+  // ---- J: THE HOOKS and BODY SHOTS (a bit shorter than the straights - still long) ----
+  k1: boxPunch('Lead Hook', { chain: 1, su: 0.07, el: 0.15, reach: 125, r: 30, dmg: 5, strike: B.hook }),
+  k2: boxPunch('Rear Hook', { chain: 2, su: 0.07, el: 0.15, reach: 125, r: 30, dmg: 5, strike: B.hook }),
+  k3: boxPunch('Liver Shot', { chain: 3, su: 0.08, el: 0.17, reach: 130, y: -44, r: 30, dmg: 7, base: 170, kbAngle: 30, strike: B.body }),
+  k4: boxPunch('Lead Uppercut', { chain: 4, su: 0.08, el: 0.17, reach: 110, y: -80, r: 32, dmg: 6, base: 200, kbAngle: 80, wind: B.upWind, strike: B.upper }),
+  k5: boxPunch('Overhand Hook', { chain: 5, su: 0.08, el: 0.17, reach: 130, r: 30, dmg: 7, base: 170, strike: B.hook }),
+  k6: boxPunch('Body Blow', { chain: 6, su: 0.08, el: 0.17, reach: 130, y: -44, r: 30, dmg: 7, base: 180, kbAngle: 30, strike: B.body }),
+  kFinish: boxPunch('HAYMAKER', { chain: CHAIN_LEN, su: 0.16, act: 0.09, el: 0.36, reach: 170, r: 34, dmg: 17, base: 560, growth: 7.6, kbAngle: 40, wind: B.haymWind, strike: B.haymaker, big: true, windUp: true, impactOnHit: true, lunge: 300, lungeFriction: 0.5 }),
+  // ---- the rest of J on the ground ----
+  sideGround: boxPunch('Lunging Cross', { su: 0.1, act: 0.08, el: 0.26, reach: 160, dmg: 10, base: 380, growth: 5.5, kbAngle: 38, charge: true, lunge: 650, lungeFriction: 0.5, wind: B.haymWind, strike: B.cross }),
+  upGround: boxPunch('Uppercut', { su: 0.1, act: 0.1, el: 0.3, reach: 135, y: -55, ang: -0.6, r: 36, dmg: 11, base: 420, growth: 6, kbAngle: 84, charge: true, wind: B.upWind, strike: B.upper }),
+  downGround: boxPunch('Low Body Blow', { su: 0.09, act: 0.08, el: 0.26, reach: 145, y: -34, r: 28, dmg: 9, base: 360, growth: 5, kbAngle: 25, charge: true, strike: B.body }),
+  dashAttack: boxPunch('Superman Punch', { su: 0.09, act: 0.1, el: 0.3, reach: 160, dmg: 11, base: 420, growth: 5.5, kbAngle: 40, lunge: 750, lungeFriction: 0.4, hop: 200, wind: B.haymWind, strike: B.haymaker }),
+  // ---- K on the ground ----
+  sideRanged: boxPunch('Bolo Straight', { su: 0.16, act: 0.08, el: 0.36, reach: 220, r: 30, dmg: 15, base: 520, growth: 7.2, kbAngle: 36, charge: true, lunge: 400, lungeFriction: 0.5, wind: B.haymWind, strike: B.haymaker, big: true, windUp: true }),
+  downRanged: boxPunch('Shovel Hook', { su: 0.12, act: 0.1, el: 0.3, reach: 130, y: -50, ang: -0.6, r: 32, dmg: 12, base: 400, growth: 5.4, kbAngle: 65, charge: true, wind: B.haymWind, strike: B.upper }),
+  // ---- the AIR ----
+  nair: boxFlurry('Air Flurry', { su: 0.06, act: 0.28, el: 0.16, hits: 4, reach: 130, dmg: 2.5, lastDmg: 6, strike: B.airPunch, wind: B.airWind }),
+  fair: boxPunch('Air Jab', { su: 0.06, act: 0.07, el: 0.16, reach: 145, dmg: 6, base: 260, growth: 4, kbAngle: 40, wind: B.airWind, strike: B.airPunch }),
+  bair: boxPunch('Back Fist', { su: 0.07, act: 0.07, el: 0.18, reach: 135, dmg: 8, base: 340, growth: 5.4, kbAngle: 135, back: true, wind: B.airWind, strike: B.backFist }),
+  uair: boxPunch('Sky Uppercut', { su: 0.06, act: 0.1, el: 0.18, reach: 125, y: -70, ang: -1.35, r: 32, dmg: 8, base: 320, growth: 5, kbAngle: 86, wind: B.upWind, strike: B.upper }),
+  dair: boxPunch('Hammer Fist', { su: 0.12, act: 0.1, el: 0.22, landLag: 0.14, reach: 110, y: -40, ang: 1.4, r: 30, dmg: 10, base: 380, growth: 5.5, kbAngle: -80, spike: true, wind: B.hammerUp, strike: B.hammer }),
+  nairR: boxPunch('Spinning Backfist', { su: 0.08, act: 0.1, el: 0.18, reach: 140, r: 32, dmg: 9, base: 360, growth: 5, kbAngle: 45, wind: B.airWind, strike: B.backFist }),
+  fairR: boxPunch('Air Cross', { su: 0.09, act: 0.08, el: 0.2, reach: 170, r: 28, dmg: 10, base: 380, growth: 5.6, kbAngle: 38, wind: B.airWind, strike: B.airPunch, big: true }),
+  bairR: boxPunch('Turning Straight', { su: 0.1, act: 0.08, el: 0.22, reach: 165, r: 28, dmg: 12, base: 420, growth: 6, kbAngle: 135, back: true, wind: B.airWind, strike: B.backFist, big: true }),
+  dairR: boxPunch('Downward Straight', { su: 0.14, act: 0.09, el: 0.24, landLag: 0.14, reach: 140, y: -50, ang: 1.45, r: 30, dmg: 12, base: 400, growth: 5.8, kbAngle: -82, spike: true, wind: B.hammerUp, strike: B.hammer }),
+  // ---- UP K: still his recovery (the knight's heavy rising uppercut) ----
+  upRanged: CHARACTERS.COLTEN.bareMoves.upRanged,
+}; })();
+CHARACTERS.COLTEN.bareMoves = COLTEN_BOXING;
 // AIDEN'S TAUNTS - three little skits (see HEEL_TAUNT / heelTauntStep / drawHeelTauntProps):
 //   UP   : RUM BARREL - hops up onto a barrel of rum, lights a cigar... puffs - and the smoke pours straight out of his
 //          ribcage (he's a SKELETON). Realises, hops down, flicks the cigar at the barrel: KA-BOOM.
@@ -13745,7 +13903,7 @@ function stepGrab(f, a, dt) {
   for (const t of fighters) {
     if (t === f || allies(f, t) || t.respawnTimer > 0 || t.halo > 0) continue;
     const ta = t.action;
-    if (isIntangible(t) || unstoppable(t)) continue;                      // dodges beat grabs (and no grabbing anyone mid-transformation / in THE SUN)
+    if (isIntangible(t) || unstoppable(t) || rockCommitted(t)) continue;  // dodges beat grabs (and Colby's committed ROCK goes through them) (and no grabbing anyone mid-transformation / in THE SUN)
     if (ta && ['grabbed', 'holding', 'clash'].includes(ta.type)) continue;
     // stunned: GRABBABLE in a combo - on the ground any time, in the air once they're past the first 40% of the
     // stun (so a grab can finish a string). Not while they're pinned in place by a move (locked / impaled / crits).
@@ -19598,7 +19756,7 @@ function startAttack(f, inp, btn) {
   }
   if (f.phaseT > 0) { f.phaseT = 0; ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#b06aff' }); }   // (Hailie: attacking pulls her straight back in)
   let key = chooseMove(f, inp, btn);
-  if (f.noScythe && f.char === 'COLBY' && btn === 'spc' && f.ground && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(p1|neutralRanged)$/.test(key)) key = 'jajanken';   // (bare Colby's neutral K: JAJANKEN - his neutral J is the kick string again)
+  if (f.noScythe && f.char === 'COLBY' && btn === 'spc' && !inp.dir && !inp.up && !inp.down && !(f.comboTimer > 0) && /^(p1|neutralRanged|nairR)$/.test(key)) key = 'jajanken';   // (ground OR air)   // (bare Colby's neutral K: JAJANKEN - his neutral J is the kick string again)
   // COLBALIAS: summoning a shadow clone is INSTANT - no attack animation, he keeps running/jumping at full
   // speed. (With a full D-E-M-O-N meter he can summon ONE past his limit - see summonShadowClone.)
   if (key === 'downRanged' && f.look && f.look.demonMeter && !f.minion) {
@@ -20830,6 +20988,7 @@ function updateFighter(f, inp, dt) {
   // ends up below the floor line (any move, any speed) is put straight back on top of it instead of falling forever
   if ((stageDef.pit || wideFloor()) && overX && f.y > STAGE.y) { f.y = STAGE.y; if (f.vy > 0) f.vy = 0; f.ground = true; }
   if (stageDef.ring) ringBoxSides(f, prevX, prevFeet);
+  if (stageDef.tourney && f.y >= grassY() && f.vy >= 0) { f.y = grassY(); f.vy = 0; f.ground = true; f.onPlatform = null; }   // THE MARTIAL ARENA's grass: a real floor
   // THE ARENA's walls, out past the crowd: nobody walks (or jumps) out of the building - only someone LAUNCHED goes through
   // (LAUNCHED out past a wall = OUT: if the hitstun runs out before they reach the KO line, they're not snapped back inside -
   //  they keep going out the side and are KO'd. Only someone who never got LAUNCHED out there - a teleport, a walk - is held.)
@@ -20896,6 +21055,11 @@ function updateFighter(f, inp, dt) {
   if (rootedTf(f) && f.action.rootX !== undefined) { f.x = f.action.rootX; f.y = f.action.rootY; f.vx = f.vy = 0; }   // (transforming: nothing moves them)
   if (stageDef.pit) pitWalls(f, dt);                    // THE PIT: the walls (and wall bounces)
   // Blast zones - and on the MARTIAL ARENA, touching the grass (RING OUT)
+  if (onGrass(f)) {                                     // ON THE GRASS: the countdown (back up on the ring to stop it)
+    const g0 = f.grassT || 0; f.grassT = g0 + dt;
+    if (!f.minion && (g0 === 0 || Math.ceil(TOURNEY.grace - g0) !== Math.ceil(TOURNEY.grace - f.grassT)) && f.grassT < TOURNEY.grace)
+      painTexts.push({ x: f.x, y: f.y - 150, t: 0.8, max: 0.8, text: 'RING OUT IN ' + Math.ceil(TOURNEY.grace - f.grassT) + '...', big: true });
+  } else f.grassT = 0;
   const ringOut = ringedOut(f);
   if (ringOut && !f.minion && !f.ringOutShown) {
     f.ringOutShown = true;
@@ -22004,6 +22168,9 @@ function aiSacrifice(f, ai) {
 // Every frame: get back to the stage if knocked off, and don't run off the edge.
 function aiSafety(f, ai) {
   const a = f.action;
+  if (onGrass(f) && f.ground && !f.minion) {                    // MARTIAL ARENA: down on the grass - back up on the ring, now
+    ai.dir = Math.sign(STAGE.x + STAGE.w / 2 - f.x) || 1; ai.tapJump = true; ai.jumpHold = 0.3; ai.tapAtk = ai.tapSpc = false; ai.block = false; return;
+  }
   if (ai.sac && aiSacrifice(f, ai)) return;                       // Colbalias mid gaze-swap sacrifice (see aiDecide)
   if (a && (a.type === 'hitstun' || a.type === 'dizzy')) return;
   const offLeft = f.x < STAGE.x, offRight = f.x > STAGE.x + STAGE.w;
@@ -22429,7 +22596,8 @@ function updateSim(dt) {
         // SCYTHELESS CHARGED PUNCHES (Colby / Colten bare-handed): charging still adds damage, but NOT knockback -
         // a charged punch launches BARE_CHARGE_KB x what the uncharged one would (they were far too strong up close)
         let hh = crit ? { ...GC.hit } : h;
-        if (f.noScythe && a.mult > 1.001 && !crit) hh = { ...hh, base: hh.base * BARE_CHARGE_KB / a.mult, growth: hh.growth * BARE_CHARGE_KB / a.mult };
+        if (f.noScythe && a.jjKB && !crit) { const kf = (a.mult > 1.001 ? BARE_CHARGE_KB : 1) * a.jjKB / a.mult; hh = { ...hh, base: hh.base * kf, growth: hh.growth * kf }; }   // (JAJANKEN: the overcharge keeps adding knockback)
+        else if (f.noScythe && a.mult > 1.001 && !crit) hh = { ...hh, base: hh.base * BARE_CHARGE_KB / a.mult, growth: hh.growth * BARE_CHARGE_KB / a.mult };
         // RADIAL hits (Lance's Aura Burst): knocked straight away from his center - never pulled across him
         let hitDir = a.pushDir || f.face;
         if (a.move.radial) {
@@ -23252,9 +23420,18 @@ function drawTourneyStage() {
   grass.addColorStop(0, '#4fae45'); grass.addColorStop(1, '#2f7d2c');
   ctx.fillStyle = grass; ctx.fillRect(BLAST.left - 600, gy, BLAST.right - BLAST.left + 1200, 900);
   ctx.fillStyle = 'rgba(255,255,255,0.06)'; for (let x = Math.floor((BLAST.left - 600) / 80) * 80; x < BLAST.right + 600; x += 160) ctx.fillRect(x, gy, 80, 900);   // mowing stripes
-  { const by = s.y + TOURNEY.rim;                                                      // (the ring sits on the lawn as it always did - the ring-out grass is further down, in front)
-    const sh = ctx.createLinearGradient(0, by, 0, by + 22); sh.addColorStop(0, 'rgba(0,0,0,0.28)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sh; ctx.fillRect(s.x - 10, by, s.w + 20, 22); }                      // its shadow on the lawn
+  { const by = s.y + TOURNEY.rim, bh = gy - by;                                        // THE RING'S STONE BASE, standing on the grass
+    const st = ctx.createLinearGradient(0, by, 0, gy); st.addColorStop(0, '#a9b2bc'); st.addColorStop(1, '#7d8792');
+    ctx.fillStyle = st; ctx.fillRect(s.x, by, s.w, bh);
+    ctx.strokeStyle = 'rgba(60,70,85,0.45)'; ctx.lineWidth = 1.5;                       // the stone blocks
+    const rows = Math.max(2, Math.round(bh / 34));
+    for (let r = 1; r < rows; r++) { const y = by + bh * r / rows; ctx.beginPath(); ctx.moveTo(s.x, y); ctx.lineTo(s.x + s.w, y); ctx.stroke(); }
+    for (let r = 0; r < rows; r++) { const y0 = by + bh * r / rows, y1 = by + bh * (r + 1) / rows, off = r % 2 ? 0.5 : 0;
+      for (let x = s.x + (off * s.w / 12); x < s.x + s.w; x += s.w / 12) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke(); } }
+    const sh = ctx.createLinearGradient(0, by, 0, by + 18); sh.addColorStop(0, 'rgba(0,0,0,0.3)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh; ctx.fillRect(s.x, by, s.w, 18);                                 // (in the rim's shadow)
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(s.x - 18, gy - 3, s.w + 36, 6);     // its shadow on the grass
+    ctx.fillStyle = '#7fd06f'; ctx.fillRect(BLAST.left - 600, gy, BLAST.right - BLAST.left + 1200, 3); }   // (the grass's lit edge - the floor you can stand on)
   ctx.fillStyle = '#2a4fa0'; ctx.fillRect(s.x - 6, s.y + 8, s.w + 12, TOURNEY.rim - 8 + 4);   // the rim (front face)
   ctx.fillStyle = '#d7dde3'; ctx.fillRect(s.x, s.y, s.w, 10);                        // the tile surface
   ctx.fillStyle = '#c3ccd5'; ctx.fillRect(s.x, s.y + 10, s.w, TOURNEY.rim - 12);
@@ -27630,7 +27807,7 @@ const COLBY_SECTIONS = {
   k: { title: 'K (SCYTHE SPECIALS)', rows: [
     ['K, K, K', 'Horizontal Slash > Reaping Pull > Diagonal Cleave', 'A 3-hit scythe string with long reach. Hold K on the last one to charge it.'],
     ['SIDE K', "Reaper's Toss", 'Hurls the scythe. It flies, then HOVERS spinning (chips anyone who touches it) - press K to call it back. If not, it drops and sticks: walk over and press K to pick it up.'],
-    ['UP K', "Reaper's Aether", 'His recovery: hurls the scythe straight up (impaling anyone next to him), warps up to it and spins back down with it. On the ground it needs 1.8s before he can use it again; anyone impaled can Z vanish off the blade or MASH to struggle free.'],
+    ['UP K', "Reaper's Aether", 'His recovery: hurls the scythe straight up (impaling anyone next to him), warps up to it and spins back down with it. On the ground it needs 1.1s before he can use it again; anyone impaled can Z vanish off the blade or MASH to struggle free.'],
     ['DOWN K', 'Reaper Whirl', 'A full 360 spin with the scythe out at waist height - hits everything around him.'],
     ['AIR K', 'Crescent Wheel', 'Spins a full circle with the scythe at arm\'s length: a cut, then a launching cut.'],
     ['AIR FWD K', 'Sky Reaper', 'A big diagonal cleave - the very end of the swing SPIKES.'],
@@ -29102,16 +29279,162 @@ function drawDoodleTitle(cx, y, size) {
     x += widths[i];
   });
 }
-function drawDoodleFighters() {
-  const keep = sketch; sketch = true;                             // the fighters, doodled in pen in the corners
-  const list = [['COLBY', 205, 1], ['LANCE', 300, 1], ['AIDEN', 1000, -1], ['COLTEN', 1095, -1]];
-  for (const [ch, x, face] of list) if (CHARACTERS[ch]) drawPortrait(ch, x, 640, 1.5, INK, menuTime * 1.3 + x, face);
-  sketch = keep;
-  sctx.strokeStyle = INK; sctx.lineWidth = 3;                     // a couple of action scribbles between them
-  for (const [x, y] of [[250, 520], [1048, 520]]) {
-    sctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + menuTime; sctx.moveTo(x, y); sctx.lineTo(x + Math.cos(a) * (14 + wob(k + x, 6)), y + Math.sin(a) * (14 + wob(k + y, 6))); } sctx.stroke();
+// ---------------- THE TITLE SCREEN CAST: the whole roster (bar the plain Stickman), each caught mid-signature move ----------------
+// Four down each side of the menu - a big front row on the floor, a smaller back row behind them - all facing in.
+// Each one is posed with one of their own moves, plus a touch of what makes them THEM (Lance's ki ball, Hailie's
+// Rasengan, Hunter's aura, Colbalias's red lightning and his shadow clones...). Drawn in every art style.
+//   key / which = the move whose pose they hold (which: 'strike' or 'wind')     fx = their extra
+const TITLE_CAST = [
+  // the back row: up in the AIR, leaping in over the front row
+  { ch: 'SEVON',     key: 'fair',          which: 'strike', x: 100,  y: 470, s: 1.25, face: 1,  fx: 'flame', air: true },
+  { ch: 'HAILIE',    key: 'neutralRanged', which: 'strike', x: 310,  y: 445, s: 1.25, face: 1,  fx: 'rasengan', air: true },
+  { ch: 'COLBALIAS', key: 'sideGround',    which: 'strike', x: 1180, y: 470, s: 1.3,  face: -1, fx: 'demon', air: true },
+  { ch: 'AIDEN',     key: 'fair',          which: 'strike', x: 965,  y: 450, s: 1.15, face: -1, fx: 'fire', air: true },
+  // the front row: on the floor
+  { ch: 'COLBY',     key: 'upGround',      which: 'strike', x: 150,  y: 706, s: 1.8,  face: 1,  fx: 'reap' },
+  { ch: 'LANCE',     key: 'neutralRanged', which: 'strike', x: 318,  y: 706, s: 1.7,  face: 1,  fx: 'kame' },
+  { ch: 'HUNTER',    key: 'downRanged',    which: 'strike', x: 950,  y: 706, s: 1.55, face: -1, fx: 'aura' },
+  { ch: 'COLTEN',    key: 'upGround',      which: 'strike', x: 1150, y: 706, s: 1.7,  face: -1, fx: 'quake' },
+];
+// where a posed figure's hand is (a = the front arm, b = the back one) - the same skeleton maths as drawFigure
+function titleHand(c, pz, look, arm = 'a') {
+  const S = c.s * (look.scale || 1), f = c.face;
+  const hipY = -(LEG_UP + LEG_LOW - 1) - (pz.bob || 0) * LEG_SCALE;
+  const sh = { x: Math.sin(pz.lean || 0) * TORSO * f, y: hipY - Math.cos(pz.lean || 0) * TORSO };
+  const [th, bend] = (arm === 'a' ? pz.armA : pz.armB) || [0.3, -0.5];
+  const mid = { x: sh.x + Math.sin(th) * 16 * f, y: sh.y + Math.cos(th) * 16 }, a2 = th - bend;
+  const end = { x: mid.x + Math.sin(a2) * 15 * f, y: mid.y + Math.cos(a2) * 15 };
+  return { x: c.x + end.x * S, y: c.y + end.y * S, chest: { x: c.x + sh.x * S, y: c.y + (sh.y + 14) * S } };
+}
+function titlePose(c, t) {
+  const m = CHARACTERS[c.ch] && CHARACTERS[c.ch].moves[c.key], look = lookFor(c.ch, 0);
+  const base = (m && (m[c.which] || m.strike)) || look.idle || pose({});
+  const br = Math.sin(t * 2.4 + c.x * 0.01);
+  const pz = { ...base, bob: (base.bob || 0) + br * 1.2, lean: (base.lean || 0) + br * 0.015 };
+  if (base.sc) pz.sc = { ...base.sc, pitch: base.sc.pitch + br * 0.03 };
+  return { pz, look };
+}
+// little drawing kit for the extras, per art style (theme: 'sketch' | 'cg' | 'pixel')
+function tcGlow(x, y, r, inner, outer, theme, a = 1) {
+  if (theme === 'sketch') {
+    ctx.globalAlpha = 0.55 * a; ctx.fillStyle = outer; ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = a; ctx.strokeStyle = INK; ctx.lineWidth = 2.5;
+    ctx.beginPath(); for (let k = 0; k <= 26; k++) { const an = k / 26 * Math.PI * 2.2, rr = r * (0.75 + 0.1 * Math.sin(k * 2.7 + menuTime * 6)); ctx[k ? 'lineTo' : 'moveTo'](x + Math.cos(an) * rr, y + Math.sin(an) * rr); } ctx.stroke();
+    ctx.globalAlpha = 1; return;
+  }
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.22, inner); g.addColorStop(0.55, outer + '88'); g.addColorStop(1, outer + '00');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function tcBolt(x, y, ang, len, color, theme, seed) {
+  const n = 6; let px = x, py = y;
+  ctx.strokeStyle = theme === 'sketch' ? color : color; ctx.lineWidth = theme === 'sketch' ? 2.5 : 3; ctx.lineCap = 'round';
+  if (theme === 'cg') { ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = 14; }
+  ctx.beginPath(); ctx.moveTo(px, py);
+  for (let k = 1; k <= n; k++) {
+    const u = k / n, j = (hash(seed + k * 3.7 + Math.floor(menuTime * 12)) - 0.5) * len * 0.35;
+    px = x + Math.cos(ang) * len * u - Math.sin(ang) * j; py = y + Math.sin(ang) * len * u + Math.cos(ang) * j; ctx.lineTo(px, py);
+  }
+  ctx.stroke(); if (theme === 'cg') ctx.restore();
+  if (theme !== 'sketch') { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke(); }
+}
+function tcFlames(cx, baseY, w, h, cols, theme, seed, a = 1) {   // licks of fire / aura rising up
+  for (let k = 0; k < 9; k++) {
+    const u = (k + 0.5) / 9, x = cx + (u - 0.5) * w, ph = menuTime * 3 + hash(seed + k) * 6.3;
+    const hh = h * (0.55 + 0.45 * Math.abs(Math.sin(ph))) * (1 - Math.abs(u - 0.5) * 0.9), ww = w / 7;
+    ctx.globalAlpha = (theme === 'sketch' ? 0.6 : 0.75) * a; ctx.fillStyle = cols[k % cols.length];
+    ctx.beginPath(); ctx.moveTo(x - ww, baseY); ctx.quadraticCurveTo(x - ww * 0.6, baseY - hh * 0.6, x + Math.sin(ph) * ww * 0.5, baseY - hh);
+    ctx.quadraticCurveTo(x + ww * 0.6, baseY - hh * 0.6, x + ww, baseY); ctx.closePath(); ctx.fill();
+    if (theme === 'sketch') { ctx.globalAlpha = a; ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+}
+// the extras drawn BEHIND a fighter (auras, clones, the scythe's arc)
+function tcBehind(c, pz, look, theme) {
+  const S = c.s * (look.scale || 1), t = menuTime;
+  if (c.fx === 'aura') {                                           // HUNTER: Gigantic Aura - green flames roaring up round him
+    const cols = theme === 'sketch' ? [MARKERS[3], '#8fdc6a'] : ['#4dff6a', '#b6ff9a', '#1fae3a'];
+    if (theme !== 'sketch') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; }
+    tcFlames(c.x, c.y + 4, 110 * S, 105 * S, cols, theme, 3, 0.55);
+    if (theme !== 'sketch') ctx.restore();
+    if (theme !== 'pixel') for (let k = 0; k < 2; k++) tcBolt(c.x + (k ? 30 : -34) * S, c.y - (90 + 30 * k) * S, k ? -0.9 : -2.3, 34 * S, theme === 'sketch' ? MARKERS[3] : '#b6ff9a', theme, 40 + k);
+  } else if (c.fx === 'demon') {                                   // COLBALIAS: two shadow clones fanned out behind him
+    for (const [dx, dy, a] of [[-46, -10, 0.38], [40, -18, 0.26]]) {
+      ctx.save(); ctx.translate(c.x + dx * c.face * -1, c.y + dy); ctx.scale(S * 0.92, S * 0.92);
+      drawFigure({ x: 0, y: 0, vx: 0, vy: 0, face: c.face, pose: pz, squash: 0, color: '#2a0a10', ink: theme === 'sketch' ? '#9a8fa8' : '#1b1b1b', look, transformed: false }, { alpha: a, tint: theme === 'sketch' ? '#9a8fa8' : '#3a0610' });
+      ctx.restore();
+    }
+    if (theme !== 'sketch') tcGlow(c.x, c.y - 60 * S, 26 * S, '#ff3a3a', '#a00010', theme, 0.35);
+  } else if (c.fx === 'reap') {                                    // COLBY: the white crescent of Reaper's Arc swept round him
+    const r = 76 * S, cx = c.x, cy = c.y - 70 * S;
+    ctx.lineCap = 'round';
+    if (theme === 'sketch') { ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, r, -2.75, -0.45); ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, r - 10, -2.5, -0.7); ctx.stroke(); }
+    else { ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < 6; k++) { ctx.strokeStyle = `rgba(255,255,255,${0.32 - k * 0.05})`; ctx.lineWidth = 12 - k * 1.6; ctx.beginPath(); ctx.arc(cx, cy, r - k * 3, -2.75 + k * 0.08, -0.45); ctx.stroke(); }
+      ctx.restore(); }
+  } else if (c.fx === 'quake') {                                   // COLTEN: the ground cracking under the big swing that's coming
+    ctx.strokeStyle = theme === 'sketch' ? INK : '#ffb04a'; ctx.lineWidth = theme === 'sketch' ? 2.5 : 3;
+    if (theme === 'cg') { ctx.save(); ctx.shadowColor = '#ff8a3c'; ctx.shadowBlur = 12; }
+    for (let k = 0; k < 4; k++) { const d = (k - 1.5) * 26 * S; ctx.beginPath(); ctx.moveTo(c.x + d * 0.3, c.y); ctx.lineTo(c.x + d, c.y - 4 + (k % 2) * 6); ctx.lineTo(c.x + d * 1.6, c.y + 2); ctx.stroke(); }
+    if (theme === 'cg') ctx.restore();
+    if (theme !== 'sketch') tcGlow(c.x - c.face * 40 * S, c.y - 150 * S, 30 * S, '#ffd27a', '#ff8a3c', theme, 0.45 + 0.15 * Math.sin(t * 5));
   }
 }
+// ...and IN FRONT (what's in their hands)
+function tcFront(c, pz, look, theme) {
+  const S = c.s * (look.scale || 1), t = menuTime, pulse = 1 + 0.08 * Math.sin(t * 9 + c.x);
+  if (c.fx === 'kame') {                                           // LANCE: the Kamehameha ball, charged in his hands
+    const h = titleHand(c, pz, look, 'a'), r = 15 * S * pulse;
+    tcGlow(h.x + c.face * 8 * S, h.y, r, '#9fe0ff', theme === 'sketch' ? MARKERS[1] : '#2f9bff', theme);
+    if (theme === 'cg') for (let k = 0; k < 3; k++) tcBolt(h.x + c.face * 8 * S, h.y, k * 2.1 + t * 2, 24 * S, '#bfe8ff', theme, 70 + k);
+  } else if (c.fx === 'rasengan') {                                // HAILIE: the Rasengan spinning in her palm
+    const h = titleHand(c, pz, look, 'a'), r = 13 * S * pulse;
+    tcGlow(h.x + c.face * 6 * S, h.y - 4 * S, r, '#d8f2ff', theme === 'sketch' ? MARKERS[1] : '#5ab8ff', theme);
+    ctx.strokeStyle = theme === 'sketch' ? INK : 'rgba(255,255,255,0.85)'; ctx.lineWidth = theme === 'sketch' ? 1.8 : 1.6;
+    for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(h.x + c.face * 6 * S, h.y - 4 * S, r * (0.45 + 0.2 * k), t * 14 + k * 2, t * 14 + k * 2 + 2.2); ctx.stroke(); }
+  } else if (c.fx === 'demon') {                                   // COLBALIAS: the RED CHIDORI crackling off his hand
+    const h = titleHand(c, pz, look, 'a');
+    if (theme !== 'sketch') tcGlow(h.x, h.y, 12 * S * pulse, '#ffb0b0', '#ff2020', theme);
+    for (let k = 0; k < 4; k++) tcBolt(h.x, h.y, (c.face > 0 ? 0 : Math.PI) + (k - 1.5) * 0.7, (26 + 8 * (k % 2)) * S, theme === 'sketch' ? MARKERS[0] : '#ff4a4a', theme, 90 + k * 5);
+  } else if (c.fx === 'fire') {                                    // AIDEN: his lariat arm on fire
+    const h = titleHand(c, pz, look, 'a');
+    if (theme !== 'sketch') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; }
+    tcFlames(h.x, h.y + 10 * S, 34 * S, 40 * S, theme === 'sketch' ? [MARKERS[2], MARKERS[0]] : ['#ff8a3c', '#ffd23f', '#ff4a20'], theme, 7, 0.9);
+    if (theme !== 'sketch') ctx.restore();
+  } else if (c.fx === 'flame') {                                   // SEVON: Flame Draw - fire trailing off the blade
+    const h = titleHand(c, pz, look, 'a');
+    if (theme !== 'sketch') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; }
+    for (let k = 0; k < 5; k++) {
+      const u = k / 4, x = h.x + c.face * (10 + 60 * u) * S, y = h.y - (6 + 22 * u) * S;
+      tcFlames(x, y + 10 * S, 22 * S, (18 + 10 * Math.sin(t * 7 + k)) * S, theme === 'sketch' ? [MARKERS[0], MARKERS[2]] : ['#ff5a20', '#ffd23f', '#ff8a3c'], theme, 20 + k, 0.8);
+    }
+    if (theme !== 'sketch') ctx.restore();
+  }
+}
+// the whole cast (ctx = wherever it's being drawn; theme picks the look of the extras)
+function drawTitleCast(theme) {
+  const keep = sketch; sketch = theme === 'sketch';
+  for (const c of TITLE_CAST) {
+    if (!CHARACTERS[c.ch]) continue;
+    const { pz, look } = titlePose(c, menuTime);
+    const S = c.s;
+    if (theme !== 'sketch' && !c.air) {                             // a soft shadow on the floor
+      ctx.fillStyle = theme === 'pixel' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.5)';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y + 2, 44 * S, 7 * S, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    tcBehind(c, pz, look, theme);
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(S, S);
+    if (theme === 'cg') { ctx.shadowColor = (CHAR_INFO[c.ch] && CHAR_INFO[c.ch].a) || '#ffffff'; ctx.shadowBlur = 18; }
+    drawFigure({ x: 0, y: 0, vx: 0, vy: 0, face: c.face, pose: pz, squash: 0, color: look.body || '#e8e8e8', ink: theme === 'sketch' ? INK : '#1b1b1b', look, transformed: false });
+    ctx.restore();
+    tcFront(c, pz, look, theme);
+  }
+  sketch = keep;
+}
+
+function drawDoodleFighters() { drawTitleCast('sketch'); }
 function drawHomeSketch() {
   withMenuDrawing(() => {
     drawNotebook();
@@ -29295,12 +29618,7 @@ function drawHomeCG() {
   withMenuDrawing(() => {
     drawCGBackground();
     // the fighters, glowing, two on each side
-    const list = [['COLBY', 190, 1, '#ff3a3a'], ['LANCE', 310, 1, '#4aa8ff'], ['AIDEN', 985, -1, '#ff8a3c'], ['COLTEN', 1095, -1, '#5fe07a']];
-    for (const [ch, x, face, glow] of list) if (CHARACTERS[ch]) {
-      sctx.save(); sctx.shadowColor = glow; sctx.shadowBlur = 24;
-      drawPortrait(ch, x, 650, 2.0, '#ffffff', menuTime * 1.2 + x, face);
-      sctx.restore();
-    }
+    drawTitleCast('cg');                                            // (the whole cast, mid-signature move - see TITLE_CAST)
     // title on a red brush slash
     const shake = Math.sin(menuTime * 40) * 0.6;
     cgSlash(W / 2 - 470, 108, 980, 150, 'rgba(168,20,20,0.9)', 1);
@@ -29374,7 +29692,7 @@ function drawHomePX() {
     pxText('STICKMAN BRAWLER', PXW / 2, 66, 6, '#ff5ac8');
     // little pixel fighters in the corners (drawn small onto the low-res canvas)
     const keep = ctx; ctx = pxc;
-    for (const [ch, fx, face] of [['COLBY', 46, 1], ['LANCE', 74, 1], ['AIDEN', 246, -1], ['COLTEN', 274, -1]]) if (CHARACTERS[ch]) drawPortrait(ch, fx, 162, 0.42, '#ffffff', menuTime * 1.3 + fx, face);
+    pxc.save(); pxc.scale(PXW / W, PXH / H); drawTitleCast('pixel'); pxc.restore();   // (the whole cast, shrunk onto the pixel canvas)
     ctx = keep;
     if (home.phase === 'title') { if (Math.floor(menuTime * 2.5) % 2 === 0) pxText('PRESS START', PXW / 2, 120, 8, '#ffffff'); }
     else homeItems().forEach((it, k) => {
