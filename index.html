@@ -7201,7 +7201,7 @@ function smashClone(hero, c) {
   painTexts.push({ x: c.x, y: c.y - 120, t: 0.45, max: 0.45, text: 'POOF!', big: false });
   sfx.hit(0.8);
 }
-let REAL_FIGHTERS = 2;                                   // fighters[0..N-1] are the players (2-6); anything after is a clone
+let REAL_FIGHTERS = 2;                                   // fighters[0..N-1] are the players (2-8); anything after is a clone
 const teamOf = f => (f && f.owner) || f;
 // on the same side: the same fighter (or his clones), or - in a TEAMS match - the same team
 const allies = (a, b) => {
@@ -10046,7 +10046,7 @@ function stepHailieComeback(f, a, dt) {
 //      and it STICKS - they're pinned. Then she TELEPORTS to each one in turn and drives a FULLY CHARGED RASENGAN into them.
 const H_KULT = { wind: 0.3, speed: 1500, turn: 7, life: 1.4, hitR: 30, waitMax: 1.6, gap: 0.32, pin: 2.5 };
 function startHailieKunaiUlt(f) {
-  const foes = fighters.filter(t => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !t.out && !t.dead && !(t.poofT > 0) && !(t.minion && t.strikeClone));
+  const foes = fighters.filter(t => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !t.out && !t.dead && !(t.poofT > 0) && !t.minion);   // (every real opponent - 8 players: all 7 - never Colbalias's clones)
   f.action = { type: 'hKunaiUlt', t: 0, ph: 'wind', foes, kunai: [], stuck: [], y0: f.y };
   f.vx = f.vy = 0; f.invuln = Math.max(f.invuln || 0, 0.5);
 }
@@ -12877,7 +12877,7 @@ function setCharacter(f, charName, alt = 0) {
 }
 function resetFighter(f, atSpawn) {
   Object.assign(f, {
-    x: atSpawn ? SPAWN.x + (f.startX < W / 2 ? -40 : 40) : stageDef.ring ? clamp(f.startX, ringL() + 70, ringR() - 70) : f.startX,
+    x: atSpawn ? SPAWN.x + (f.startX < W / 2 ? -40 : 40) : stageDef.ring ? clamp(f.startX, ringL() + 70, ringR() - 70) : Math.max(STAGE.x + 50, Math.min(f.startX, STAGE.x + STAGE.w - 50)),   // (P7 / P8 start out wide: kept on narrow stages)
     y: atSpawn ? SPAWN.y : stageDef.ring ? ringTop() : STAGE.y,          // (the wrestling arena: everyone starts IN the ring)
     vx: 0, vy: 0, face: f.startX < W / 2 ? 1 : -1,
     ground: !atSpawn, onPlatform: null,
@@ -12893,8 +12893,8 @@ function resetFighter(f, atSpawn) {
   });
 }
 
-// UP TO 6 PLAYERS: one fighter per player slot (P1-P6). A match only uses the slots that are switched on.
-const MAX_PLAYERS = 6;
+// UP TO 8 PLAYERS: one fighter per player slot (P1-P8). A match only uses the slots that are switched on.
+const MAX_PLAYERS = 8;
 const FIGHTER_INIT = [               // (online matches rebuild the fighters from these, so nothing left over differs)
   { name: 'P1',  color: '#f0a818', energy: '#ffd23f', x: 440, controller: 'keyboard', char: 'COLBY' },
   { name: 'CPU', color: '#45b6e8', energy: '#a8ecff', x: 840, controller: 'dummy',    char: 'LANCE' },
@@ -12902,6 +12902,8 @@ const FIGHTER_INIT = [               // (online matches rebuild the fighters fro
   { name: 'P4',  color: '#e85ad6', energy: '#ffb3f3', x: 980, controller: 'dummy',    char: 'STICKMAN' },
   { name: 'P5',  color: '#ff6a3d', energy: '#ffc2a8', x: 560, controller: 'dummy',    char: 'STICKMAN' },
   { name: 'P6',  color: '#9b7bff', energy: '#d6c9ff', x: 720, controller: 'dummy',    char: 'STICKMAN' },
+  { name: 'P7',  color: '#2fd4c0', energy: '#b5fff5', x: 200, controller: 'dummy',    char: 'STICKMAN' },
+  { name: 'P8',  color: '#e8e3d8', energy: '#ffffff', x: 1080, controller: 'dummy',   char: 'STICKMAN' },
 ];
 const fighterPool = FIGHTER_INIT.map((o, i) => { const f = makeFighter(o); f.slot = i; return f; });
 const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active slots at the start of every match)
@@ -16334,13 +16336,12 @@ function startUltSequence(u, v, def) {
   // keeps fighting. The Guanyin's targets can even move while its palms hit them (they still have to PERFECT BLOCK the
   // beam); It's My Turn still has hold of the one it's beating on (locked = the ones the match leaves to the ultimate).
   if (U.statue || U.rush) { ult.live = true; ult.locked = new Set(U.statue ? [u] : [u, v]); if (U.statue) v.action = null; }
-  // COLBALIAS - THE RAID BOSS: the 100-Type Guanyin and the Shadow Clone Rush take EVERY opponent on screen at once
+  // COLBALIAS - THE RAID BOSS: the 100-Type Guanyin and the Shadow Clone Rush take EVERY opponent in the match at once (8 players,
+  // free-for-all: all 7 of them - wherever they are; the camera pulls back to fit them all). Teammates never.
   ult.extras = [];
   if (U.statue || U.legion) {
-    const vb = viewBounds();
     for (const o of fighters) {
       if (o === u || o === v || o.minion || allies(u, o) || o.respawnTimer > 0 || o.dead || o.out || o.halo > 0 || isIntangible(o)) continue;
-      if (o.x < vb.l - 20 || o.x > vb.r + 20 || o.y < vb.t - 40 || o.y > vb.b + 40) continue;
       const pl = o.onPlatform || ((o.x > STAGE.x && o.x < STAGE.x + STAGE.w && o.y <= STAGE.y + 1) ? STAGE : null);
       ult.extras.push({ t: o, baseX: o.x, baseY: pl ? pl.y : o.y, dir: Math.sign(o.x - u.x) || u.face, jolt: 0 });
       if (ult.live) continue;                                    // (the Guanyin: they stay free to move)
@@ -17087,7 +17088,9 @@ function drawHunterL2Cut(f) {
 //   44 - 47    calm: he hangs in a green sphere of his aura - and it bursts when this ends
 // STRAY KI BLASTS fly off him all through it - each one fired ON a blast sound in the clip (H_L3_CUT.blasts).
 // Like Lance's cutscenes it runs in REAL seconds, so it stays on the sound.
-const H_L3_CUT = { from: 0, len: 47.0, fadeOut: 1.2, vol: 1.0, hairFrom: 6, hairFull: 33, flash1: 3.04, flash2: 27.08,
+// (from: it STARTS this far in - the first 10s, the straining build-up, are cut; the song starts there too)
+const H_L3_CUT = { from: 10, len: 45.0, fadeOut: 1.2,   // (len: 47 -> 45: the calm sphere at the end cut short - it bursts 2s sooner)
+                   vol: 1.0, hairFrom: 6, hairFull: 33, flash1: 3.04, flash2: 27.08,
   screams: [[6, 11], [17, 20], [28, 33]], eyes: [[11, 14], [20, 23]], redEyes: 21.4, dome: [14, 17.5], orb: [23, 27.08], pillar: [33, 44], cross: [40.8, 42.6], sphere: 44,
   blasts: [1.2, 3.04, 7.72, 8.04, 8.72, 11.56, 12.16, 15.68, 16.0, 16.68, 17.48, 18.44, 19.4, 20.0, 23.12, 23.4, 27.08, 32.12, 35.44, 41.68],
   bigBlasts: [3.04, 12.16, 27.08] };
@@ -17095,7 +17098,10 @@ let hL3SongEl = null;
 let liveCutDraw = false;                                        // (a transformation drawn over a LIVE match: light, no letterbox)                                           // (a fresh element each time - see playHunterL3Song)
 function startHunterL3Cut(f) {
   f.ultBuf = 0; f.vx = f.vy = 0; f.atkBuf = f.spcBuf = f.jumpBuf = f.grabBuf = 0; f.shielding = false;
-  f.action = { type: 'hL3Cut', t: 0, songT: 0, waveT: 0, rockT: 0, ev: new Set(), y0: f.y, cam: { x: f.x, y: f.y - 70, z: 1.2, speed: 3 } };
+  const C = H_L3_CUT, ev = new Set();
+  if (C.flash1 < C.from) ev.add('flash1');                       // (everything in the cut part counts as done - so none of it fires all at once)
+  C.blasts.forEach((bt, i) => { if (bt < C.from) ev.add('blast' + i); });
+  f.action = { type: 'hL3Cut', t: 0, songT: C.from, waveT: 0, rockT: 0, ev, y0: f.y, cam: { x: f.x, y: f.y - 70, z: 1.2, speed: 3 } };
   f.hairGrow = 0;
   playHunterL3Song(f);
 }
@@ -17105,6 +17111,8 @@ function playHunterL3Song(f) {
   let el; try { el = hL3SongEl = new Audio('sounds/battle/hunter-l3-broly.mp3'); } catch (e) { return null; }
   el.preload = 'auto';
   el.volume = clamp(H_L3_CUT.vol * settings.master * settings.music * 1.6, 0, 1);
+  const from = H_L3_CUT.from || 0;                               // (start the song where the scene starts)
+  if (from) { try { el.currentTime = from; } catch (e) {} el.addEventListener('loadedmetadata', () => { if (el.currentTime < from - 0.5) el.currentTime = from; }, { once: true }); }
   el.play().catch(() => {});
   const h = { el, at: performance.now() }; f.l3Song = h;
   return h;
@@ -25503,6 +25511,14 @@ function drawSmear(p) {
   ctx.restore();
 }
 
+// CLONE CROWDS (big lobbies full of Colbalias): past CLONE_CROWD clones on screen, each one is drawn LITE (see drawFighter)
+const CLONE_CROWD = 8;
+let cloneCrowdFrame = -1, cloneCrowdOn = false;
+const cloneCrowd = () => { if (cloneCrowdFrame !== time) { cloneCrowdFrame = time; let n = 0; for (const f of fighters) if (f.minion) n++; cloneCrowdOn = n > CLONE_CROWD; } return cloneCrowdOn; };
+const cloneLite = new WeakMap();
+const cloneLiteLook = L => { if (!L) return L; let q = cloneLite.get(L); if (!q) { q = { ...L, madara: false, smoke: false }; cloneLite.set(L, q); } return q; };
+const cloneRim = new WeakMap();
+const cloneRimLook = L => { if (!L) return L; let q = cloneRim.get(L); if (!q) { q = { ...L, madara: false, smoke: false, longHair: false, demonEyes: false, sage: false }; cloneRim.set(L, q); } return q; };
 function drawFighter(p) {
   const a = p.action;
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return;   // (Lance mid-Embodied-Light: gone - just the streak of light)
@@ -25573,8 +25589,11 @@ function drawFighter(p) {
     // of every attack - the tell that a hit is coming.
     const windup = a && a.type === 'attack' && a.phase === 'startup';
     const fadeIn = p.strikeClone ? 1 : clamp((CLONE.life - p.life) / 0.15, 0, 1), fadeOut = clamp(p.life / 0.6, 0, 1);   // (J-string clones pop in at once)
-    if (!sketch && !pixelMode) drawFigure(figureOf(p), { alpha: alpha * 0.8 * Math.min(fadeIn, fadeOut), tint: '#5a0a0a', outline: FIG_OUTLINE });   // dark red rim
-    drawFigure(figureOf(p), { alpha: alpha * 0.92 * Math.min(fadeIn, fadeOut), tint: tint || (sketch ? '#333333' : '#140404'),
+    // (A CROWD of them - big lobbies, lots of Colbalias: drawn LITE - no coat, no smoke. On a pitch-black silhouette you can't
+    //  see the coat anyway, and it's most of the cost of drawing one. A handful of clones: full detail, as always.)
+    const fig = figureOf(p), crowd = cloneCrowd(); if (crowd) fig.look = cloneLiteLook(fig.look);
+    if (!sketch && !pixelMode) drawFigure(crowd ? { ...fig, look: cloneRimLook(fig.look) } : fig, { alpha: alpha * 0.8 * Math.min(fadeIn, fadeOut), tint: '#5a0a0a', outline: FIG_OUTLINE });   // dark red rim (a crowd: round the bare body only)
+    drawFigure(fig, { alpha: alpha * 0.92 * Math.min(fadeIn, fadeOut), tint: tint || (sketch ? '#333333' : '#140404'),
       eye: windup ? (Math.floor(p.anim * 30) % 2 ? '#ffffff' : '#ffb0b0') : '#ff2020' });
     if (windup && !sketch) {                                 // + a little glint over its head
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -26265,7 +26284,7 @@ function drawUltHUD() {
   }
 }
 
-const hudK = () => REAL_FIGHTERS > 4 ? 0.8 : 1;                                     // (5-6 fighters: the damage cards shrink to fit)
+const hudK = () => REAL_FIGHTERS > 4 ? Math.min(0.8, (W - 30) / (REAL_FIGHTERS * 250 - 40)) : 1;   // (5-8 fighters: the damage cards shrink to fit)
 const hudCardX = i => W / 2 - (REAL_FIGHTERS * 250 - 40) * hudK() / 2 + i * 250 * hudK();   // left edge of player i's damage card
 function drawHUD() {
   if (ult && ult.phase === 'cutscene') { drawUltHUD(); return; }   // cinematic: hide the HUD
@@ -26954,8 +26973,9 @@ function setWatchMode(on) {
 }
 const SEL_COLORS = [{ main: '#f0a818', dark: '#6b3f06' }, { main: '#45b6e8', dark: '#123e5c' },
                     { main: '#5fd068', dark: '#1d4d22' }, { main: '#e85ad6', dark: '#5a1752' },
-                    { main: '#ff6a3d', dark: '#5e2210' }, { main: '#9b7bff', dark: '#2e1f66' }];
-// 6 player slots. P3 - P6 start switched OFF (click their ADD strip to add them).
+                    { main: '#ff6a3d', dark: '#5e2210' }, { main: '#9b7bff', dark: '#2e1f66' },
+                    { main: '#2fd4c0', dark: '#0e4a43' }, { main: '#e8e3d8', dark: '#4a463e' }];
+// 8 player slots. P3 - P8 start switched OFF (click their ADD strip to add them).
 // team: 0 = RED, 1 = BLUE (only used when TEAMS is on)
 const players = [
   { name: 'P1', dev: 'keyboard', cpu: false, char: null, level: 'AI NORMAL', cur: { x: 330, y: 260 }, carry: 0, team: 0 },
@@ -26964,6 +26984,8 @@ const players = [
   { name: 'P4', dev: null,       cpu: true,  off: true, char: null, level: 'AI NORMAL', cur: { x: 950, y: 300 }, carry: 3, team: 1 },
   { name: 'P5', dev: null,       cpu: true,  off: true, char: null, level: 'AI NORMAL', cur: { x: 330, y: 340 }, carry: 4, team: 0 },
   { name: 'P6', dev: null,       cpu: true,  off: true, char: null, level: 'AI NORMAL', cur: { x: 950, y: 340 }, carry: 5, team: 1 },
+  { name: 'P7', dev: null,       cpu: true,  off: true, char: null, level: 'AI NORMAL', cur: { x: 330, y: 380 }, carry: 6, team: 0 },
+  { name: 'P8', dev: null,       cpu: true,  off: true, char: null, level: 'AI NORMAL', cur: { x: 950, y: 380 }, carry: 7, team: 1 },
 ];
 const activePlayers = () => players.filter(p => !p.off);
 // a player sitting at THIS computer (has a cursor here) - online, other people's players are "remote"
@@ -27465,7 +27487,7 @@ function startMatch() {
     delete f.ai; delete f.odmGas;
   }
   applyStage(gameOptions.stage >= 0 ? gameOptions.stage : (voteStage ?? 0)); voteStage = null;   // (VOTE: the stage that won the vote)
-  // the fighters for this match: one per switched-on player slot (2-6)
+  // the fighters for this match: one per switched-on player slot (2-8)
   fighters.length = 0;
   players.forEach((pl, i) => { if (!pl.off) fighters.push(fighterPool[i]); });
   REAL_FIGHTERS = fighters.length;

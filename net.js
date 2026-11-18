@@ -1,9 +1,9 @@
 // =====================================================================
-//  DOODLE BROTHERS - ONLINE PLAY (up to 6 players, teams, couch players + online friends together)
+//  DOODLE BROTHERS - ONLINE PLAY (up to 8 players, teams, couch players + online friends together)
 //
 //  Peer-to-peer: one player HOSTS (gets a 5-letter code), friends JOIN with that code. Everyone connects
 //  to the host (WebRTC, through PeerJS's free matchmaking server). The online lobby IS the normal character
-//  select screen: the 6 player cards are the room's 6 seats. Each computer can bring more than one player
+//  select screen: the 8 player cards are the room's 8 seats. Each computer can bring more than one player
 //  (couch players: press A on another controller), friends online fill the other seats, and the host
 //  fills any empty seat with a CPU. The host picks stage / stocks / TEAMS.
 //
@@ -26,7 +26,7 @@
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // (no I / O, they look like 1 / 0)
   const HASH_EVERY = 120;                          // compare fight checksums every 120 steps (1 second)
   const STALL_DROP = 10;                           // seconds of waiting for a player before giving up
-  const SLOTS = 6;
+  const SLOTS = 8;
   const RB = { delay: 2, maxBack: 18 };          // ROLLBACK: our own input delay (steps), how far back it can rewind (steps)
 
   // Which version of the game this is: everyone must run the same one (any change to the game
@@ -103,7 +103,7 @@
   }
   const simRngState = () => (netplay && netplay.rng ? netplay.rng.state() : 0);
 
-  // ---------- the room: 6 seats ----------
+  // ---------- the room: 8 seats ----------
   // slot = { kind: 'human' | 'cpu' | 'empty', owner (which computer: 0 = host), name, char, team, level, build, ping }
   const emptySlot = i => ({ kind: 'empty', owner: null, name: 'P' + (i + 1), char: null, alt: 0, team: i % 4, level: 'AI NORMAL', build: null, ping: 0 });
   function newState(role) {
@@ -352,7 +352,7 @@
     if (!N || !m || typeof m !== 'object') return;
     switch (m.k) {
       case 'welcome': N.mid = m.mid; N.inRoom = true; ui.show('room'); menuSfx('pick'); flash('YOU JOINED ROOM ' + N.code + ' - PICK YOUR FIGHTER'); break;
-      case 'full': fail(m.why === 'busy' ? 'That room is in the middle of a match - try again in a minute.' : 'That room is full (6 players).'); break;
+      case 'full': fail(m.why === 'busy' ? 'That room is in the middle of a match - try again in a minute.' : 'That room is full (8 players).'); break;
       case 'roster': N.slots = m.slots; N.opts = m.opts; if (N.inRoom && !N.active) roomChanged(); break;
       case 'flash': flash(m.text); break;
       case 'ping': toHost({ k: 'pong', t: m.t }); break;
