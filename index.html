@@ -668,6 +668,9 @@ const STAGE_LIST = [
   // both sides and the hall behind. RING OUT RULES: touch the grass outside the ring and you're OUT (it's a KO). No
   // platforms, nowhere to hide - stay on the tiles.
   { name: 'MARTIAL ARENA', tourney: true, platforms: [], scale: 0.92 },
+  // FINAL VALLEY: COLBY and LANCE carved as giant stone statues facing each other across the waterfall - and the fight is
+  // down at the bottom, on a big flat rock in the river, with a stepping stone either side
+  { name: 'FINAL VALLEY', valley: true, platforms: [{ x: 160, y: 390, w: 200 }, { x: 920, y: 390, w: 200 }], scale: 1.125 },
 ];
 const TOURNEY = { rim: 26, grace: 2.0 };   // (rim: the ring's own thin stone edge; grace: seconds you can stand on the grass before it's a RING OUT)
 // THE GRASS is a real floor, right at the foot of the ring (the ring is a raised stone platform standing on it). Land on it
@@ -24765,7 +24768,104 @@ function drawTourneyBackground() {
     ctx.fillStyle = '#b03a2e'; ctx.fillRect(x0, 482, x1 - x0, 12);             // the barrier in front of the stands
   }
 }
+// ---------------- FINAL VALLEY (the Valley of the End) ----------------
+// Two GIANT STONE STATUES face each other across a roaring waterfall - COLBY on the left, LANCE on the right, each with
+// one hand raised in a seal - standing on the cliff tops, green with trees. The fight is down at the BOTTOM: a big flat
+// rock in the river at the foot of the falls, with two stepping stones.
+const valleyClouds = Array.from({ length: 8 }, (_, i) => ({ x: i * 200 + rnd() * 120, y: 30 + rnd() * 130, w: 140 + rnd() * 170, s: 3 + rnd() * 6 }));
+const valleyRidge = Array.from({ length: 22 }, (_, i) => ({ x: i * 70 - 60, h: 40 + rnd() * 70 }));
+const valleyTrees = Array.from({ length: 40 }, () => ({ u: rnd(), r: 14 + rnd() * 16, d: rnd() * 10 }));
+const VALLEY_SEAL = pose({ lean: 0, bob: 0, armA: [0.95, -2.2], armB: [0.12, -0.15], legA: [0.12, 0], legB: [-0.12, 0] });   // (one hand raised in a seal)
+const VALLEY = { fallW: 175, cliffTop: 290, river: 548, statue: 2.2 };
+// one STATUE: the character, carved in stone - a shadow side, the body, a pedestal
+function drawValleyStatue(char, x, y, face) {
+  const C = CHARACTERS[char]; if (!C) return;
+  const fig = { x, y, vx: 0, vy: 0, face, pose: VALLEY_SEAL, squash: 0, color: '#8f8b7c', ink: '#3b382f', look: C.look, transformed: false, noScythe: true, sizeMul: VALLEY.statue / ((C.look && C.look.scale) || 1) };
+  ctx.fillStyle = '#5e5a4e'; ctx.fillRect(snap(x - 70), snap(y), 140, 26);                 // the pedestal
+  ctx.fillStyle = '#7b776a'; ctx.fillRect(snap(x - 70), snap(y), 140, 6);
+  drawFigure({ ...fig, x: x - face * 7, y: y + 2 }, { tint: '#47443a' });                  // (the side in shadow)
+  drawFigure(fig, { tint: '#8f8b7c' });
+  ctx.save(); ctx.globalAlpha = 0.25; drawFigure({ ...fig, x: x + face * 3, y: y - 2 }, { tint: '#c9c4b2' }); ctx.restore();   // (sunlit edge)
+}
+function drawValleyBackground() {
+  const par = cam.x - W / 2, V = VALLEY, mid = W / 2 - par * 0.06;
+  // sky: deep blue up top, pale near the horizon
+  const g = ctx.createLinearGradient(0, -OY, 0, V.river);
+  g.addColorStop(0, '#3f8fdc'); g.addColorStop(0.55, '#8cc6f2'); g.addColorStop(1, '#dbeeff');
+  ctx.fillStyle = g; ctx.fillRect(-OX, -OY, SW, SH);
+  for (const c of valleyClouds) {                                   // drifting clouds
+    const x = ((c.x + time * c.s) % (W + c.w + 200)) - c.w - 100;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.ellipse(x, c.y, c.w * 0.5, 18, 0, 0, Math.PI * 2); ctx.ellipse(x + c.w * 0.18, c.y - 12, c.w * 0.28, 20, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#9fb4c8';                                        // far hazy ridge
+  ctx.beginPath(); ctx.moveTo(-OX - 100, 360);
+  for (const r of valleyRidge) ctx.lineTo(r.x - par * 0.03, 360 - r.h);
+  ctx.lineTo(W + OX + 100, 360); ctx.lineTo(W + OX + 100, V.river); ctx.lineTo(-OX - 100, V.river); ctx.fill();
+  // THE CLIFFS (both sides), green on top, falling sheer to the river
+  for (const side of [-1, 1]) {
+    const inner = mid + side * V.fallW, outer = side < 0 ? -OX - 200 : W + OX + 200, top = V.cliffTop;
+    const cg = ctx.createLinearGradient(0, top, 0, V.river + 40); cg.addColorStop(0, '#7a7464'); cg.addColorStop(1, '#3f3b32');
+    ctx.fillStyle = cg; ctx.beginPath();
+    ctx.moveTo(outer, top - 10); ctx.lineTo(inner + side * 30, top); ctx.lineTo(inner + side * 8, top + 40); ctx.lineTo(inner + side * 16, top + 110);
+    ctx.lineTo(inner, top + 170); ctx.lineTo(inner + side * 12, V.river + 40); ctx.lineTo(outer, V.river + 40); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,36,30,0.45)'; ctx.lineWidth = 3;     // strata
+    for (let k = 1; k < 6; k++) { const yy = top + k * 40; ctx.beginPath(); ctx.moveTo(inner + side * 20, yy); ctx.lineTo(outer, yy + side * 6); ctx.stroke(); }
+    for (const t of valleyTrees) {                                  // the forest along the top
+      const x = side < 0 ? lerp(outer, inner + side * 34, t.u) : lerp(inner + side * 34, outer, t.u);
+      ctx.fillStyle = t.d > 5 ? '#2f6b2a' : '#3e8a35';
+      ctx.beginPath(); ctx.arc(x, top - 6 - t.d, t.r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // THE WATERFALL between them
+  const fx0 = mid - V.fallW + 10, fx1 = mid + V.fallW - 10, ftop = V.cliffTop + 8;
+  const wg = ctx.createLinearGradient(fx0, 0, fx1, 0); wg.addColorStop(0, '#7fb6dd'); wg.addColorStop(0.5, '#e8f6ff'); wg.addColorStop(1, '#7fb6dd');
+  ctx.fillStyle = wg; ctx.fillRect(fx0, ftop, fx1 - fx0, V.river - ftop + 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let k = 0; k < 18; k++) {                                    // the water pouring down
+    const x = fx0 + (k + 0.5) * (fx1 - fx0) / 18, len = 40 + (k * 37) % 50, y = ftop + ((time * 420 + k * 97) % (V.river - ftop));
+    ctx.fillRect(x - 2, y, 4, len);
+  }
+  ctx.fillStyle = '#d6efff'; ctx.fillRect(fx0 - 6, ftop - 4, fx1 - fx0 + 12, 8);   // the lip
+  for (let k = 0; k < 9; k++) {                                     // the MIST at the bottom
+    const x = fx0 + (k / 8) * (fx1 - fx0), r = 30 + 10 * Math.sin(time * 3 + k);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.ellipse(x, V.river - 4, r * 1.4, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // THE STATUES: Colby (left) and Lance (right), facing each other over the falls
+  drawValleyStatue('COLBY', mid - V.fallW - 95, V.cliffTop - 26, 1);
+  drawValleyStatue('LANCE', mid + V.fallW + 95, V.cliffTop - 26, -1);
+  // the river at the bottom
+  const rg = ctx.createLinearGradient(0, V.river, 0, H + OY); rg.addColorStop(0, '#5aa2d6'); rg.addColorStop(1, '#1d4c78');
+  ctx.fillStyle = rg; ctx.fillRect(-OX, V.river, SW, H + OY - V.river);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  for (let k = 0; k < 14; k++) { const x = ((k * 131 + time * 30) % (W + 200)) - 100, y = V.river + 12 + (k % 5) * 18; ctx.fillRect(x, y, 60 + (k % 3) * 30, 2); }
+}
+// THE FIGHT, at the bottom: a big flat rock in the river (two stepping stones), water lapping round it
+function drawValleyStage() {
+  const s = STAGE, wy = s.y + 58;
+  const wg = ctx.createLinearGradient(0, wy, 0, wy + 700); wg.addColorStop(0, '#4f98cf'); wg.addColorStop(1, '#0f2f4f');
+  ctx.fillStyle = wg; ctx.fillRect(BLAST.left - 800, wy, BLAST.right - BLAST.left + 1600, 1400);   // the river (behind the rock)
+  for (let y = 0; y < s.h; y += 3) {                                // the rock
+    const inset = snap((y / s.h) * 26);
+    ctx.fillStyle = y < 14 ? '#9a9382' : y < 50 ? '#7a7466' : y < 95 ? '#615c50' : '#4a463c';
+    ctx.fillRect(s.x + inset, s.y + y, s.w - inset * 2, 3);
+  }
+  ctx.fillStyle = '#b2ab98'; ctx.fillRect(s.x, s.y, s.w, 4);
+  ctx.fillStyle = '#4f7f3a';                                        // moss on the edges
+  for (let k = 0; k < 9; k++) { const x = s.x + 20 + k * (s.w - 40) / 8; ctx.beginPath(); ctx.ellipse(x, s.y + 3, 22 + (k % 3) * 8, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.strokeStyle = '#3e3a31'; ctx.lineWidth = 3;                   // cracks
+  for (let k = 0; k < 6; k++) { const x = s.x + 90 + k * (s.w - 180) / 5; ctx.beginPath(); ctx.moveTo(x, s.y + 12); ctx.lineTo(x + 12, s.y + 40); ctx.lineTo(x + 2, s.y + 64); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(79,152,207,0.55)'; ctx.fillRect(BLAST.left - 800, wy, BLAST.right - BLAST.left + 1600, s.h);   // (the water over the bottom of it)
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';                          // foam where the water laps the rock
+  for (let k = 0; k < 24; k++) { const x = s.x - 30 + ((k * 61 + time * 40) % (s.w + 60)); ctx.fillRect(x, wy - 2 + Math.sin(time * 4 + k) * 2, 26, 3); }
+  for (const p of PLATFORMS) {                                      // the stepping stones
+    ctx.fillStyle = '#6e685b'; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(p.x, p.y, p.w, 26, 10); else ctx.rect(p.x, p.y, p.w, 26); ctx.fill();
+    ctx.fillStyle = '#a39c8b'; ctx.fillRect(p.x + 6, p.y, p.w - 12, 4);
+    ctx.fillStyle = '#4f7f3a'; ctx.beginPath(); ctx.ellipse(p.x + p.w * 0.3, p.y + 2, 18, 4, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
 function drawBackground() {
+  if (stageDef.valley) return drawValleyBackground();
   if (stageDef.tourney) return drawTourneyBackground();
   if (stageDef.ring) return drawRingBackground();
   if (stageDef.tower) return drawTowerBackground();
@@ -25206,6 +25306,7 @@ function drawTourneyStage() {
   ctx.globalAlpha = 1;
 }
 function drawStage() {
+  if (stageDef.valley) return drawValleyStage();
   if (stageDef.tourney) return drawTourneyStage();
   if (stageDef.ring) return drawRingStage();
   if (stageDef.tower) return drawTowerStage();
@@ -28503,6 +28604,7 @@ function drawStageThumb(k, r) {
   else if (st.tower) { sky.addColorStop(0, '#0b1030'); sky.addColorStop(0.6, '#2a2a5e'); sky.addColorStop(1, '#f39a5a'); }
   else if (st.ring) { sky.addColorStop(0, '#07070d'); sky.addColorStop(1, '#1d1a2e'); }
   else if (st.tourney) { sky.addColorStop(0, '#3d8ff0'); sky.addColorStop(1, '#bfe6ff'); }
+  else if (st.valley) { sky.addColorStop(0, '#3f8fdc'); sky.addColorStop(1, '#dbeeff'); }
   else { sky.addColorStop(0, '#1a1716'); sky.addColorStop(1, '#56493f'); }
   c.fillStyle = sky; c.fillRect(r.x, r.y, r.w, r.h);
   if (st.walkoff) {                                                 // hills + the endless checkered ground
@@ -28529,6 +28631,15 @@ function drawStageThumb(k, r) {
     c.fillStyle = '#9aa0ab'; for (const p of fl) c.fillRect(sx(p.x), sy(p.y), sx(p.x + p.w) - sx(p.x), 3);
     c.fillStyle = '#4a5160'; c.fillRect(sx(50), sy(500), sx(1230) - sx(50), r.y + r.h - sy(500));
     const rf = fl[fl.length - 1], ax = sx(rf.x + rf.w / 2); c.fillStyle = '#5c6372'; c.fillRect(ax - 1, sy(rf.y) - 26, 2, 26); c.fillStyle = '#ff3030'; c.fillRect(ax - 2, sy(rf.y) - 29, 4, 4);
+  } else if (st.valley) {                                           // the cliffs, the falls, the two statues, the rock in the river
+    const m = r.x + r.w / 2, ct = r.y + r.h * 0.34;
+    c.fillStyle = '#6f6a5c'; c.fillRect(r.x, ct, r.w * 0.38, gy - ct); c.fillRect(r.x + r.w * 0.62, ct, r.w * 0.38, gy - ct);
+    c.fillStyle = '#3e8a35'; c.fillRect(r.x, ct - 6, r.w * 0.38, 8); c.fillRect(r.x + r.w * 0.62, ct - 6, r.w * 0.38, 8);
+    c.fillStyle = '#e8f6ff'; c.fillRect(m - r.w * 0.12, ct, r.w * 0.24, gy - ct);
+    c.fillStyle = '#8f8b7c';
+    for (const sx of [m - r.w * 0.26, m + r.w * 0.26]) { c.fillRect(sx - 5, ct - 46, 10, 34); c.beginPath(); c.arc(sx, ct - 52, 8, 0, 7); c.fill(); c.fillRect(sx - 8, ct - 12, 16, 6); }
+    c.fillStyle = '#4f98cf'; c.fillRect(r.x, gy, r.w, r.y + r.h - gy);
+    c.fillStyle = '#8c8576'; c.fillRect(r.x + r.w * 0.14, gy - 6, r.w * 0.72, 14);
   } else if (st.pit) {                                              // stone walls both sides
     c.fillStyle = '#3d3a36'; c.fillRect(r.x, r.y, 18, r.h); c.fillRect(r.x + r.w - 18, r.y, 18, r.h);
     c.fillStyle = '#5a5248'; c.fillRect(r.x + 18, gy, r.w - 36, r.h);
