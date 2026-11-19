@@ -1,7 +1,7 @@
 {
   "name": "stickman-brawl",
   "productName": "Doodle Brothers",
-  "version": "0.7.89",
+  "version": "0.7.90",
   "description": "Doodle Brothers - a Smash-style stickman platform fighter with online play",
   "author": "Colbalias",
   "repository": { "type": "git", "url": "https://github.com/Colbalias/Doodle-Brothers.git" },
@@ -31,6 +31,8 @@
       "sounds/*.js",
       "sounds/menu-mix-*.mp3",
       "sounds/battle/*.mp3",
+      "sounds/battle/*.mp4",
+      "sounds/battle/*.wav",
       "build/icon.png"
     ],
     "extraResources": [{ "from": "pads/bin", "to": "pads", "filter": ["sdlpads.exe", "SDL3.dll"] }],

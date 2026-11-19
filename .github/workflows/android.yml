@@ -41,7 +41,7 @@ jobs:
           cp -r lib $W/
           cp sounds/*.js $W/sounds/
           cp sounds/menu-mix-*.mp3 $W/sounds/ 2>/dev/null || true
-          cp sounds/battle/*.mp3 $W/sounds/battle/ 2>/dev/null || true
+          cp sounds/battle/*.mp3 sounds/battle/*.mp4 sounds/battle/*.wav $W/sounds/battle/ 2>/dev/null || true
           cp build/icon.png android/app/src/main/res/mipmap/ic_launcher.png
       - name: Build
         env:
