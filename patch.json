@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.88",
+    "version":  "0.7.89",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "c63786475a5f9f311a5ed1d01608153ed3892407d6f42083b0381b5b2d654574",
-                                     "size":  2238449
+                                     "hash":  "e07a16f42978afbddb9c72039a7cc7bcf31932d69ee40608470a14388ecef5e2",
+                                     "size":  2287329
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -175,6 +175,18 @@
                                                                   "hash":  "7bde976c7b420ff91c4fffc0c695d94706fe3cf6053ef7bc590cfd81c7cf4429",
                                                                   "size":  326464
                                                               },
+                  "sounds/battle/lance-kaioken.mp3":  {
+                                                          "hash":  "2b6c691215a32deb7bb75086a3c523e86126b3cc0c42c95c884f171a3810f27e",
+                                                          "size":  87465
+                                                      },
+                  "sounds/battle/lance-kame-blast.mp3":  {
+                                                             "hash":  "caea067fb8e47fb06a58002c735f549a386b4c8b2d662baa6c882ec6c7eae9c4",
+                                                             "size":  66042
+                                                         },
+                  "sounds/battle/lance-kame-voice.mp3":  {
+                                                             "hash":  "d05c588bfcc646bbec938f5c8a0bbf48a59171ce7d1906e336c3b1f6b7c0a1aa",
+                                                             "size":  105190
+                                                         },
                   "sounds/battle/lance-ssg-song.mp3":  {
                                                            "hash":  "0119b26cdbfe9d50ea59685ae5fb7a1084e224ff27bfedea30975685e5487ce4",
                                                            "size":  274583
@@ -231,6 +243,10 @@
                                                         "hash":  "bebd92fcb96bd76ee7b4c6200ff49f742643b0dd800e0b4fda1ad52527dcf1fd",
                                                         "size":  5152583
                                                     },
+                  "sounds/battle/sevon-megazord.mp3":  {
+                                                           "hash":  "3ca752644b9c9373ee534fb5fd46d9e945d91f523a7ccf770c94386a9bbadd57",
+                                                           "size":  975948
+                                                       },
                   "sounds/battle/shame.mp3":  {
                                                   "hash":  "5bddc74fd517ceffe689fac4135be2edae3eafc30696b4c6325b4fd482983b03",
                                                   "size":  3968189
