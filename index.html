@@ -772,7 +772,7 @@ function updateCamera(dt) {
   camPunch = Math.max(0, camPunch - dt * 4.5);
   const steady = steadyCam();
   const l3 = fighters.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut'));   // (Hunter's Legendary 3 cutscene: the camera's on him)
-  const alive = l3 ? [l3] : fighters.filter(f => f.respawnTimer <= 0 && !f.minion);
+  const alive = l3 ? [l3] : fighters.filter(f => f.respawnTimer <= 0 && !f.minion && !f.hbPinned);   // (Hunter Ball: not the ones sitting the round out)
   let tx = STAGE.x + STAGE.w / 2, ty = STAGE.y - 110, tz = CAM_ZOOM_MAX;
   if (alive.length) {
     const xs = alive.map(f => clamp(f.x, BLAST.left + 200, BLAST.right - 200));
@@ -23053,7 +23053,44 @@ function padInput(i, binds = bindings) {                  // (binds = that playe
   ps.prev = s;
   return inp;
 }
+// HUNTER BALL CPUs (party / watch): keep away from the ball when it isn't after them; when it IS, face it and - right as it
+// arrives - PERFECT BLOCK it (or dodge it). How often they get it right depends on their level, and gets harder the faster it is.
+const HB_SKILL = { EASY: 0.4, NORMAL: 0.62, HARD: 0.8, MASTER: 0.9, IMPOSSIBLE: 0.985 };
+function hbCpuInput(f) {
+  const inp = emptyInput(), B = hb.ball, ai = f.hbAi || (f.hbAi = { wander: 0, goal: null, plan: null, armed: true, rel: 0 });
+  if (f.hbOut || f.respawnTimer > 0) return inp;
+  const L = STAGE.x + 90, R = STAGE.x + STAGE.w - 90, lvl = (f.cpuLevel || 'AI NORMAL').slice(3), skill = HB_SKILL[lvl] ?? 0.62;
+  if (ai.rel > 0) { ai.rel -= STEP; inp.blockHeld = !!ai.hold; if (ai.down) inp.down = true; return inp; }   // (holding it through the moment it arrives)
+  if (B && B.target === f) {
+    const cy = f.y - 45, d = Math.hypot(B.x - f.x, B.y - cy), closing = ((f.x - B.x) * B.vx + (cy - B.y) * B.vy) / Math.max(1, d), tti = closing > 0 ? Math.max(0, d - (HB.r + 26)) / closing : 9;   // (time till it TOUCHES them)
+    if (d > 260 || closing <= 0) ai.armed = true;                 // (a fresh approach: decide again)
+    if (ai.armed && closing > 0 && d < 260) {
+      ai.armed = false;
+      const sp = clamp((B.speed - HB.speed0) / (HB.cap - HB.speed0), 0, 1), good = skill * (1 - 0.35 * sp), r = Math.random();
+      ai.plan = r < good ? 'parry' : r < good + (1 - good) * 0.45 ? 'dodge' : 'late';
+      ai.lead = 0.035 + Math.random() * 0.04;
+    }
+    if (!f.action && f.ground) f.face = Math.sign(B.x - f.x) || f.face;
+    if (ai.plan && tti < ai.lead) {
+      if (ai.plan === 'parry' || (ai.plan === 'dodge' && !f.ground)) { inp.blockTap = inp.blockHeld = true; ai.rel = 0.1; ai.hold = true; ai.down = false; }
+      else if (ai.plan === 'dodge') { inp.blockTap = inp.blockHeld = true; inp.down = true; inp.dirTap = true; ai.rel = 0.15; ai.hold = true; ai.down = true; }
+      else if (tti < ai.lead * 0.3) { inp.blockTap = inp.blockHeld = true; ai.rel = 0.3; ai.hold = true; ai.down = false; }   // (too late - a held block)
+      ai.plan = null;
+    }
+    return inp;
+  }
+  // not after them: stay well clear of it, drift about, the odd hop
+  ai.wander -= STEP;
+  if (ai.wander <= 0 || ai.goal === null) { ai.wander = 0.6 + Math.random() * 1.2; ai.goal = L + Math.random() * (R - L); }
+  let gx = ai.goal;
+  if (B && Math.abs(B.x - f.x) < 320 && Math.abs(B.y - (f.y - 45)) < 260) gx = B.x < f.x ? R : L;   // (get out of its way)
+  if (Math.abs(gx - f.x) > 30) inp.dir = Math.sign(gx - f.x);
+  if (f.ground && Math.random() < 0.004) { inp.jumpTap = inp.jumpHeld = true; }
+  if (f.x < STAGE.x + 20 || f.x > STAGE.x + STAGE.w - 20) { inp.dir = Math.sign(STAGE.x + STAGE.w / 2 - f.x); if (!f.ground && f.vy > 0 && Math.random() < 0.2) inp.jumpTap = inp.jumpHeld = true; }   // (back to the stage)
+  return inp;
+}
 function inputFor(f) {
+  if (hb && hb.active && hbParty() && f.controller === 'dummy' && !f.minion) return hbCpuInput(f);   // (HUNTER BALL party / watch CPUs)
   if (f.controller === 'net') return netInputFor(f);       // online: this tick's inputs from both players (net.js)
   if (f.controller === 'minion') return f.strikeClone ? emptyInput() : minionInput(f);   // (strike clones just do their one hit)
   if (f.controller === 'keyboard') return keyboardInput(f.binds || bindings);                 // (each player's own preset)
@@ -26976,6 +27013,7 @@ const cloneLiteLook = L => { if (!L) return L; let q = cloneLite.get(L); if (!q)
 const cloneRim = new WeakMap();
 const cloneRimLook = L => { if (!L) return L; let q = cloneRim.get(L); if (!q) { q = { ...L, madara: false, smoke: false, longHair: false, demonEyes: false, sage: false }; cloneRim.set(L, q); } return q; };
 function drawFighter(p) {
+  if (p.hbPinned) return;                                          // (Hunter Ball party: OUT this round)
   const a = p.action;
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return;   // (Lance mid-Embodied-Light: gone - just the streak of light)
   if (a && a.type === 'cOnePunch') return;                         // (Colten's One Punch draws him itself - the close-up, the GIANT)
@@ -30711,7 +30749,7 @@ function drawArcade() {
 const MINIGAMES = [
   { id: 'bossPractice', name: 'BOSS PRACTICE', desc: 'Fight the arcade FINAL BOSS - Colbalias on Hellfire - on any difficulty. No stars, just practice.', color: '#ff2a2a',
     open(dev) { openArcade(dev, true); } },
-  { id: 'hunterBall', name: 'HUNTER BALL', desc: 'A ki blast that HUNTS you. Perfect block it back, dodge it, lead it into someone. Solo vs Hunter for the top 20 - or 2-player VERSUS.', color: '#3fae2a',
+  { id: 'hunterBall', name: 'HUNTER BALL', desc: 'A ki blast that HUNTS you. Perfect block it back, dodge it, lead it into someone. Solo vs Hunter for the top 20, 2-player VERSUS, PARTY for up to 8 (with CPUs) - or WATCH the CPUs play.', color: '#3fae2a',
     open(dev) { openHunterBall(dev); } },
 ];
 // ---------------- HUNTER BALL ----------------
@@ -30724,9 +30762,15 @@ const MINIGAMES = [
 // SOLO: Hunter hovers off the stage knocking it back at you; your best rallies go on the TOP 20 board.
 // VERSUS: two players head to head, no Hunter - the blast just appears in the middle and picks a random target. Getting hit
 // loses the round; first to 3 rounds wins. The rally count is shared.
+// PARTY: 2 to 8 players - anyone on a controller (or the keyboard) joins, and you can fill the rest with CPUs. Get caught and
+// you're OUT for the round; perfect block it and it goes after someone else who's still in. Last one standing wins the round,
+// first to 3 rounds wins.
+// WATCH: the same, with nothing but CPUs - pick how many (2-8) and how good they are, and watch them go at it.
 const HB = { speed0: 650, upMine: 1.05, upHis: 1.03, cap: 2600, parry: 0.12, r: 16, turn: 3.0, firstWait: 1.0, overT: 1.6,
              spotX: 140, spotY: 70, board: 20, key: 'db-hunterball-board', vsKey: 'db-hunterball-vsbest', grace: 0.3, toWin: 3,
-             dodges: ['air', 'roll', 'spot'] };
+             dodges: ['air', 'roll', 'spot'], outPin: 0.6 };
+const HB_LEVELS = ['AI EASY', 'AI NORMAL', 'AI HARD', 'AI MASTER', 'AI IMPOSSIBLE'];
+const HB_MODES = ['solo', 'vs', 'party', 'watch'];
 let hb = null;   // { phase: 'pick' | 'result' | 'vsResult', mode: 'solo' | 'vs', sel, dev, p2, active, score, ball, board, wins, ... }
 // THE ONLINE TOP 20 (a Supabase table: hunterball_scores - name, score, char). Fill in url + key (the project's PUBLIC "anon"
 // key) to switch it on; left empty, the board is just this computer's. If it can't be reached, it falls back to the local one.
@@ -30754,17 +30798,21 @@ const hbName = () => { try { return (localStorage.getItem('stickman-brawl-name')
 function openHunterBall(dev) {
   const picks = arcadePicks();
   hb = { phase: 'pick', mode: hb ? hb.mode : 'solo', sel: hb ? hb.sel : Math.max(0, picks.indexOf('COLBY')), dev: dev || 'keyboard', p2: null, ready: false,
-         active: false, score: 0, board: hbLoadBoard(), t: 0, wins: [0, 0] };
+         active: false, score: 0, board: hbLoadBoard(), t: 0, wins: [0, 0],
+         party: [], cpus: hb ? hb.cpus : 2, watchN: hb ? hb.watchN : 4, cpuLvl: hb ? hb.cpuLvl : 1 };   // (PARTY: who's joined + how many CPUs; WATCH: how many CPUs, how good)
   scene = 'hunterball';
   hbFetchBoard();                                                 // (the online top 20, if it's switched on)
 }
 const hbVs = () => !!(hb && hb.mode === 'vs');
-// the players in it (SOLO: just you; VERSUS: both)
-const hbPlayers = () => hbVs() ? [fighters[0], fighters[1]].filter(Boolean) : [fighters[0]].filter(Boolean);
+const hbParty = () => !!(hb && (hb.mode === 'party' || hb.mode === 'watch'));   // (PARTY and WATCH: everyone for themselves, last one standing)
+const hbWatch = () => !!(hb && hb.mode === 'watch');
+// the players in it (SOLO: just you; VERSUS: both; PARTY / WATCH: everyone still IN this round)
+const hbPlayers = () => hbParty() ? fighters.filter(f => !f.minion && !f.hbOut) : hbVs() ? [fighters[0], fighters[1]].filter(Boolean) : [fighters[0]].filter(Boolean);
 function hbStart(fresh = true) {
   const A = hb, picks = arcadePicks();
   if (!A.saved) A.saved = { players: players.map(q => ({ off: q.off, cpu: q.cpu, char: q.char, level: q.level, dev: q.dev, team: q.team, name: q.name, profile: q.profile })),
                             stage: gameOptions.stage, stocks: gameOptions.stocks, teams: gameOptions.teams, watch: watchMode };
+  if (hbParty()) { hbStartParty(fresh); return; }
   Object.assign(players[0], { off: false, cpu: false, dev: A.dev, char: picks[A.sel], team: 0, name: hbVs() ? 'P1' : 'YOU' });
   if (hbVs()) Object.assign(players[1], { off: false, cpu: false, dev: A.p2.dev, char: picks[A.p2.sel], team: 1, name: 'P2' });
   else Object.assign(players[1], { off: false, cpu: true, dev: null, char: 'HUNTER', level: 'STAND', team: 1, name: 'HUNTER' });
@@ -30775,13 +30823,47 @@ function hbStart(fresh = true) {
   Object.assign(A, { active: true, score: 0, ball: null, wait: HB.firstWait, over: false, overT: 0, newBest: false, rank: -1, loser: -1 });
   if (!hbVs()) { hbPinHunter(); fighters[0].x = STAGE.x + STAGE.w * 0.4; }
 }
+function hbStartParty(fresh) {
+  const A = hb, picks = arcadePicks();
+  const humans = hbWatch() ? [] : [{ dev: A.dev, sel: A.sel }, ...A.party.map(q => ({ dev: q.dev, sel: q.sel }))];
+  const nC = hbWatch() ? A.watchN : Math.min(MAX_PLAYERS - humans.length, A.cpus);
+  if (fresh || !A.cpuChars || A.cpuChars.length !== nC) {         // (the CPUs: random fighters, kept for the whole match)
+    const pool = picks.slice(); A.cpuChars = [];
+    for (let k = 0; k < nC; k++) { if (!pool.length) pool.push(...picks); A.cpuChars.push(pool.splice(Math.floor(realRandom() * pool.length), 1)[0]); }
+  }
+  players.forEach(q => { q.off = true; });
+  humans.forEach((h, i) => Object.assign(players[i], { off: false, cpu: false, dev: h.dev, char: picks[h.sel], team: i, name: 'P' + (i + 1) }));
+  for (let k = 0; k < nC; k++) Object.assign(players[humans.length + k], { off: false, cpu: true, dev: null, char: A.cpuChars[k], level: HB_LEVELS[A.cpuLvl], team: humans.length + k, name: 'CPU ' + (k + 1) });
+  gameOptions.stage = 0; gameOptions.stocks = 0; gameOptions.teams = false; watchMode = hbWatch();   // (no stocks to lose: being OUT is the ball's job)
+  if (fresh) A.wins = new Array(humans.length + nC).fill(0);
+  startMatch(); scene = 'fight';
+  for (const f of fighters) { f.hbOut = false; f.hbOutT = 0; f.hbAi = null; }
+  A.names = fighters.map(f => f.name); A.chars = fighters.map(f => f.char);   // (for the result screen - the player slots get put back first)
+  Object.assign(A, { active: true, score: 0, ball: null, wait: HB.firstWait, over: false, overT: 0, newBest: false, rank: -1, loser: -1, winner: -1 });
+}
+// PARTY / WATCH: someone's OUT for the round. Last one standing wins it.
+function hbEliminate(p, why) {
+  if (!hb || !hb.active || hb.over || p.hbOut) return;
+  p.hbOut = true; p.hbOutT = HB.outPin;
+  hbPop();
+  painTexts.push({ x: p.x, y: p.y - 170, t: 1.0, max: 1.0, text: (p.name || '') + ' IS OUT!', big: true });
+  const alive = hbPlayers();
+  if (alive.length <= 1) {
+    const w = alive[0] || null;
+    hb.over = true; hb.overT = 0; hb.why = why; hb.winner = w ? fighters.indexOf(w) : -1;
+    if (w) hb.wins[hb.winner]++;
+    hb.matchBest = Math.max(hb.matchBest || 0, hb.score);
+    sfx.ko ? sfx.ko() : sfx.slam();
+  } else { hb.wait = 0.9; sfx.slam(); }
+}
+const hbLabel = t => !t ? '' : hbParty() ? (t.name || '') : t === fighters[0] ? 'P1' : 'P2';
 function hbRestore() {
   const S = hb && hb.saved; if (!S) return;
   S.players.forEach((q, i) => Object.assign(players[i], q));
   gameOptions.stage = S.stage; gameOptions.stocks = S.stocks; gameOptions.teams = S.teams; watchMode = S.watch;
   hb.saved = null;
 }
-const hbHunter = () => hbVs() ? null : fighters.find(f => f.char === 'HUNTER' && !f.minion && f.controller !== 'keyboard' && !f.controller.startsWith('pad'));
+const hbHunter = () => hbVs() || hbParty() ? null : fighters.find(f => f.char === 'HUNTER' && !f.minion && f.controller !== 'keyboard' && !f.controller.startsWith('pad'));
 const hbHand = h => ({ x: h.x - 30, y: h.y - 62 });
 function hbPinHunter() {                                          // he hovers there, untouchable, facing the stage
   const h = hbHunter(); if (!h) return;
@@ -30806,7 +30888,7 @@ function hbSpawnCenter() {                                        // VERSUS: it 
   const ps = hbPlayers(), t = ps[Math.floor(realRandom() * ps.length)], x = STAGE.x + STAGE.w / 2, y = STAGE.y - 250;
   hbFire({ x, y }, t, HB.speed0);
   burst(x, y, ['#86e63c', '#e6ff86', '#ffffff'], 40, 0, Math.PI, 600, { grav: 0 }); ring(x, y); ring(x, y - 20);
-  painTexts.push({ x: t.x, y: t.y - 170, t: 0.9, max: 0.9, text: "IT'S AFTER " + (t === fighters[0] ? 'P1' : 'P2') + '!', big: true });
+  painTexts.push({ x: t.x, y: t.y - 170, t: 0.9, max: 0.9, text: "IT'S AFTER " + hbLabel(t) + '!', big: true });
   sfx.blast ? sfx.blast() : sfx.whoosh(true);
 }
 function hbGameOver(why) {                                        // SOLO: the rally's over
@@ -30832,6 +30914,7 @@ function hbPop() { if (hb.ball) { burst(hb.ball.x, hb.ball.y, ['#86e63c', '#e6ff
 function hbLeaveFight(phase = 'result') {                         // back out of the fight to the Hunter Ball screen
   hbRestore(); removeAllMinions(); paused = false; matchOver = null;
   for (const f of fighters) { stopKameCharge(f); stopShotCharge(f); }
+  for (const f of fighters) { f.hbOut = false; f.hbPinned = false; }
   hb.active = false; hb.phase = phase; hb.t = 0; scene = 'hunterball';
 }
 function hbQuit() {                                               // (the pause menu: leave it altogether)
@@ -30846,17 +30929,26 @@ function updateHunterBall(dt) {
   hbPinHunter();
   const ps = hbPlayers();
   for (const p of fighters) { p.ult = 0; p.rage = 0; p.l2Pending = p.l3Pending = false; }   // (no ULT METER or Hunter's RAGE in here - nobody powers up or transforms)
+  if (hbParty()) for (const f of fighters) {                      // PARTY: the ones who are OUT sit the round out (off up above, unseen)
+    if (!f.hbOut) continue;
+    if (f.hbOutT > 0) { f.hbOutT -= dt; continue; }               // (a moment to see them get hit first)
+    f.hbPinned = true; f.x = STAGE.x + STAGE.w / 2; f.y = BLAST.top + 240; f.vx = f.vy = 0; f.action = null; f.invuln = 9; f.ground = false; f.onPlatform = null; f.shielding = false;
+  }
   if (hb.over) {
     if ((hb.overT += dt) < HB.overT) return;
+    if (hbParty()) {
+      if (Math.max(...hb.wins) >= HB.toWin) { hbLeaveFight('partyResult'); return; }
+      const mb = hb.matchBest; hbStart(false); hb.matchBest = mb; return;   // (the next round)
+    }
     if (!hbVs()) { hbLeaveFight('result'); return; }
     if (Math.max(...hb.wins) >= HB.toWin) { hbLeaveFight('vsResult'); return; }
     const matchBest = hb.matchBest; hbStart(false); hb.matchBest = matchBest; return;   // (the next round)
   }
-  for (const p of ps) if (p.respawnTimer > 0 || p.out) { if (hbVs()) hbRoundOver(p, 'ko'); else hbGameOver('ko'); return; }
+  for (const p of ps) if (p.respawnTimer > 0 || p.out) { if (hbParty()) hbEliminate(p, 'ko'); else if (hbVs()) hbRoundOver(p, 'ko'); else hbGameOver('ko'); return; }
   if (readyT > 0) return;
-  if (!hb.ball) { if ((hb.wait -= dt) <= 0) { if (hbVs()) hbSpawnCenter(); else hbThrow(); } return; }
+  if (!hb.ball) { if ((hb.wait -= dt) <= 0) { if (hbVs() || hbParty()) hbSpawnCenter(); else hbThrow(); } return; }
   const B = hb.ball;
-  if (B.target !== 'hunter' && (!B.target || !fighters.includes(B.target))) B.target = ps[0];
+  if (B.target !== 'hunter' && (!B.target || !fighters.includes(B.target) || B.target.hbOut)) B.target = ps[0];
   // HUNTING: it turns toward its target - at a fixed rate, so at speed it swings wide
   const aim = hbAim(B.target);
   if (aim) {
@@ -30890,7 +30982,8 @@ function updateHunterBall(dt) {
     if (p.shielding && p.shieldAge <= HB.parry) {                 // PERFECT BLOCK: it goes after the other side - a point
       hb.score++;
       perfectBlockFx(p, B.x, B.y);
-      const next = hbVs() ? ps.find(q => q !== p) || p : 'hunter';
+      const others = ps.filter(q => q !== p);
+      const next = hbParty() ? others[Math.floor(realRandom() * others.length)] || p : hbVs() ? ps.find(q => q !== p) || p : 'hunter';
       hbFire({ x: B.x, y: B.y }, next, Math.min(HB.cap, B.speed * HB.upMine));
       hb.ball.grace = p; hb.ball.graceT = HB.grace;
       painTexts.push({ x: p.x, y: p.y - 180, t: 0.6, max: 0.6, text: String(hb.score), big: true });
@@ -30900,7 +30993,7 @@ function updateHunterBall(dt) {
     applyHit(p, { dmg: 6, base: 420, growth: 0, angle: 80 }, Math.sign(B.vx) || 1, 1, B.x, B.y, { fighter: hbHunter() || ps.find(q => q !== p) });
     for (const q of fighters) { q.ult = 0; q.rage = 0; }          // (no meter from it)
     const why = p.shielding ? 'held' : B.target === p ? 'hit' : 'led';
-    if (hbVs()) hbRoundOver(p, why); else hbGameOver(why);
+    if (hbParty()) hbEliminate(p, why); else if (hbVs()) hbRoundOver(p, why); else hbGameOver(why);
     return;
   }
   if (B.dodged && Math.hypot(B.x - B.dodged.x, B.y - (B.dodged.y - 45)) > 140) B.dodged = null;
@@ -30934,6 +31027,17 @@ function drawHunterBall() {
 function drawHunterBallHUD() {
   if (!hb || !hb.active) return;
   text('RALLY ' + hb.score, W / 2, 70, 26, '#e6ff86', 'center');
+  if (hbParty()) {                                                 // PARTY / WATCH: everyone's round wins, and who's out
+    const n = hb.wins.length, w = Math.min(150, (W - 80) / n);
+    fighters.slice(0, n).forEach((f, i) => {
+      const x = W / 2 + (i - (n - 1) / 2) * w, out = f.hbOut;
+      text((f.name || '') + ' ' + '*'.repeat(hb.wins[i] || 0), x, 96, 9, out ? '#6a6a72' : i === hb.winner && hb.over ? '#ffd23f' : '#ffffff', 'center');
+      if (out) text('OUT', x, 110, 8, '#ff6a6a', 'center');
+    });
+    text('LAST ONE STANDING  -  FIRST TO ' + HB.toWin, W / 2, 128, 8, '#b4b4bb', 'center');
+    if (hb.over) { const wf = fighters[hb.winner]; text(wf ? wf.name + (hb.wins[hb.winner] >= HB.toWin ? ' WINS THE MATCH!' : ' WINS THE ROUND!') : 'NOBODY LEFT!', W / 2, 160, 16, '#ffd23f', 'center'); }
+    return;
+  }
   if (hbVs()) {
     const [a, b] = [fighters[0], fighters[1]];
     text('P1 ' + charName(a ? a.char : '') + '  ' + hb.wins[0] + ' - ' + hb.wins[1] + '  ' + charName(b ? b.char : '') + ' P2', W / 2, 96, 11, '#ffffff', 'center');
@@ -30958,15 +31062,34 @@ function hunterBallUpdate(dt) {
     if (hb.phase === 'pick') {
       const isP1 = d.dev === hb.dev || (d.dev === 'keyboard' && !hb.p2), isP2 = hb.p2 && d.dev === hb.p2.dev;
       if (isP1 && !isP2) {
-        if ((d.tap.up || d.tap.down || d.tap.alt) && !hb.ready) { hb.mode = hbVs() ? 'solo' : 'vs'; if (!hbVs()) hb.p2 = null; menuSfx('move'); }
+        if ((d.tap.up || d.tap.down || (d.tap.alt && !hbParty())) && !hb.ready) {
+          const k = HB_MODES.indexOf(hb.mode); hb.mode = HB_MODES[(k + (d.tap.up ? HB_MODES.length - 1 : 1)) % HB_MODES.length];
+          hb.p2 = null; hb.party = []; menuSfx('move');
+        }
+        if (hbWatch()) {                                           // WATCH: how many CPUs (left / right), how good (Tab / Y)
+          if (d.tap.left) { hb.watchN = Math.max(2, hb.watchN - 1); menuSfx('move'); }
+          if (d.tap.right) { hb.watchN = Math.min(MAX_PLAYERS, hb.watchN + 1); menuSfx('move'); }
+          if (d.tap.alt) { hb.cpuLvl = (hb.cpuLvl + 1) % HB_LEVELS.length; menuSfx('move'); }
+          if (d.tap.ok || d.tap.start) { hb.dev = d.dev; menuSfx('go'); hbStart(); return; }
+          if (d.tap.back || d.tap.esc) { hb = null; openMinigames(); menuSfx('back'); return; }
+          continue;
+        }
+        if (hb.mode === 'party' && d.tap.alt && !hb.ready) { hb.cpus = (hb.cpus + 1) % (MAX_PLAYERS - hb.party.length); menuSfx('move'); }   // (PARTY: Tab / Y = how many CPUs)
         if (!hb.ready && d.tap.left) { hb.sel = (hb.sel + n - 1) % n; menuSfx('move'); }
         if (!hb.ready && d.tap.right) { hb.sel = (hb.sel + 1) % n; menuSfx('move'); }
         if (d.tap.ok || d.tap.start) {
           hb.dev = d.dev;
-          if (!hbVs()) { menuSfx('go'); hbStart(); return; }
+          if (!hbVs() && !hbParty()) { menuSfx('go'); hbStart(); return; }
           hb.ready = true; menuSfx('pick');
         }
         if (d.tap.back || d.tap.esc) { if (hb.ready) { hb.ready = false; menuSfx('back'); } else { hb = null; openMinigames(); menuSfx('back'); return; } }
+      } else if (hb.mode === 'party') {                            // PARTY: anyone else joins (up to 8 with the CPUs)
+        let q = hb.party.find(e => e.dev === d.dev);
+        if (!q) { if ((d.tap.ok || d.tap.start) && 1 + hb.party.length < MAX_PLAYERS) { hb.party.push({ dev: d.dev, sel: (hb.sel + 1 + hb.party.length) % n, ready: false }); hb.cpus = Math.min(hb.cpus, MAX_PLAYERS - 1 - hb.party.length); menuSfx('pick'); } continue; }
+        if (!q.ready && d.tap.left) { q.sel = (q.sel + n - 1) % n; menuSfx('move'); }
+        if (!q.ready && d.tap.right) { q.sel = (q.sel + 1) % n; menuSfx('move'); }
+        if (d.tap.ok || d.tap.start) { q.ready = true; menuSfx('pick'); }
+        if (d.tap.back || d.tap.esc) { if (q.ready) q.ready = false; else hb.party.splice(hb.party.indexOf(q), 1); menuSfx('back'); }
       } else if (hbVs()) {                                         // VERSUS: anyone else is P2
         if (!hb.p2) { if (d.tap.ok || d.tap.start) { hb.p2 = { dev: d.dev, sel: (hb.sel + 1) % n, ready: false }; menuSfx('pick'); } continue; }
         if (!isP2) continue;
@@ -30976,12 +31099,13 @@ function hunterBallUpdate(dt) {
         if (d.tap.back || d.tap.esc) { if (hb.p2.ready) hb.p2.ready = false; else hb.p2 = null; menuSfx('back'); }
       }
       if (hbVs() && hb.ready && hb.p2 && hb.p2.ready) { hb.ready = false; hb.p2.ready = false; menuSfx('go'); hbStart(); return; }
-    } else if (hb.phase === 'result' || hb.phase === 'vsResult') {
+      if (hb.mode === 'party' && hb.ready && hb.party.every(q => q.ready) && 1 + hb.party.length + hb.cpus >= 2) { hb.ready = false; hb.party.forEach(q => { q.ready = false; }); menuSfx('go'); hbStart(); return; }
+    } else if (hb.phase === 'result' || hb.phase === 'vsResult' || hb.phase === 'partyResult') {
       if ((d.tap.ok || d.tap.start) && hb.t > 0.5) { menuSfx('go'); hbStart(); return; }
       if ((d.tap.back || d.tap.esc) && hb.t > 0.3) { hb.phase = 'pick'; hb.t = 0; hb.ready = false; if (hb.p2) hb.p2.ready = false; menuSfx('back'); }
     }
   }
-  if (mouse.click && hb.phase === 'pick' && !hb.ready) picks.forEach((c, k) => { if (inRect(mouse, arcadeTileRect(k))) { if (hb.sel === k && !hbVs()) { hb.dev = 'keyboard'; hbStart(); } else { hb.sel = k; menuSfx('move'); } } });
+  if (mouse.click && hb.phase === 'pick' && !hb.ready && !hbWatch()) picks.forEach((c, k) => { if (inRect(mouse, arcadeTileRect(k))) { if (hb.sel === k && !hbVs() && !hbParty()) { hb.dev = 'keyboard'; hbStart(); } else { hb.sel = k; menuSfx('move'); } } });
   if (mouse.right) { if (hb.phase !== 'pick') hb.phase = 'pick'; else { hb = null; openMinigames(); } }
   mouse.click = mouse.right = mouse.moved = false;
 }
@@ -31010,15 +31134,28 @@ function drawHunterBallMenu() {
     if (hb.phase === 'pick') {
       title('HUNTER BALL', 62, 52, green);
       // the mode tabs
-      [['solo', 'SOLO vs HUNTER'], ['vs', 'VERSUS (2 PLAYERS)']].forEach(([m, label], k) => {
-        const r = { x: W / 2 - 300 + k * 310, y: 82, w: 290, h: 34 }, on = hb.mode === m;
+      [['solo', 'SOLO vs HUNTER'], ['vs', 'VERSUS (2)'], ['party', 'PARTY (2-8)'], ['watch', 'WATCH CPUs']].forEach(([m, label], k) => {
+        const r = { x: W / 2 - 500 + k * 250, y: 82, w: 236, h: 34 }, on = hb.mode === m;
         if (sk) { if (on) { sctx.fillStyle = 'rgba(160,230,120,0.7)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 90, INK, on ? 3 : 1.5); }
         else slantRect(r.x, r.y, r.w, r.h, 8, on ? '#3fae2a' : 'rgba(20,16,18,0.85)');
         sctx.textAlign = 'center'; sctx.font = F(16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(label, r.x + r.w / 2, r.y + 23);
       });
       sctx.textAlign = 'center'; sctx.font = F(14); sctx.fillStyle = dim;
       sctx.fillText('It HUNTS its target. PERFECT BLOCK it to send it at the other side (+1 rally) - DODGE it to make it turn round - lead it into your opponent!', W / 2, 140);
-      if (!hbVs()) {
+      if (hbParty()) {                                             // PARTY / WATCH: the line-up
+        const humans = hbWatch() ? [] : [{ sel: hb.sel, ready: hb.ready, label: 'P1' }, ...hb.party.map((q, i) => ({ sel: q.sel, ready: q.ready, label: 'P' + (i + 2) }))];
+        const nC = hbWatch() ? hb.watchN : Math.min(MAX_PLAYERS - humans.length, hb.cpus), tot = humans.length + nC, sw = Math.min(150, (W - 80) / Math.max(1, tot));
+        sctx.textAlign = 'center'; sctx.font = F(18, true); sctx.fillStyle = green;
+        sctx.fillText(hbWatch() ? 'CPUs: ' + hb.watchN + '   -   LEVEL: ' + HB_LEVELS[hb.cpuLvl].slice(3) + '   -   FIRST TO ' + HB.toWin + ' ROUNDS'
+                                : tot + ' PLAYERS (' + humans.length + ' + ' + nC + ' CPU)   -   CPU LEVEL: ' + HB_LEVELS[hb.cpuLvl].slice(3) + '   -   FIRST TO ' + HB.toWin, W / 2, 178);
+        for (let i = 0; i < tot; i++) {
+          const x = W / 2 + (i - (tot - 1) / 2) * sw, h = humans[i];
+          sctx.font = F(18, true); sctx.fillStyle = h ? SEL_COLORS[i].main : dim; sctx.fillText(h ? h.label : 'CPU', x, 222);
+          if (h) { portrait(picks[h.sel], x, 400, 0.8); sctx.font = F(13, true); sctx.fillStyle = ink; sctx.fillText(charName(picks[h.sel]), x, 420); sctx.font = F(14, true); sctx.fillStyle = h.ready ? '#ffd23f' : dim; sctx.fillText(h.ready ? 'READY!' : 'J / A', x, 244); }
+          else { sctx.font = F(40, true); sctx.fillStyle = dim; sctx.fillText('?', x, 360); sctx.font = F(12); sctx.fillText('RANDOM', x, 420); }
+        }
+        if (hb.mode === 'party' && 1 + hb.party.length < MAX_PLAYERS) { sctx.font = F(15); sctx.fillStyle = dim; sctx.fillText('MORE PLAYERS: press J / A on another controller (or the keyboard) to join', W / 2, 455); }
+      } else if (!hbVs()) {
         drawBoard(W / 2, 172);
         portrait(picks[hb.sel], W / 2, 440, 1.25);
       } else {                                                     // VERSUS: P1 and P2, side by side
@@ -31034,14 +31171,26 @@ function drawHunterBallMenu() {
         slot(W / 2 + 260, 'P2', blue, hb.p2 ? hb.p2.sel : 0, !!hb.p2, hb.p2 && hb.p2.ready);
         sctx.font = F(60, true); sctx.fillStyle = '#ff6a6a'; sctx.textAlign = 'center'; sctx.fillText('VS', W / 2, 360);
       }
-      picks.forEach((c, k) => {
+      if (!hbWatch()) picks.forEach((c, k) => {
         const r = arcadeTileRect(k), on = k === hb.sel, on2 = hbVs() && hb.p2 && k === hb.p2.sel;
         if (sk) { if (on || on2) { sctx.fillStyle = on ? 'rgba(160,230,120,0.7)' : 'rgba(120,170,255,0.6)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 20, INK, on || on2 ? 3 : 1.5); }
         else { slantRect(r.x, r.y, r.w, r.h, 10, on ? '#3fae2a' : on2 ? '#1f6fd6' : 'rgba(20,16,18,0.85)'); if (on && on2) { sctx.fillStyle = '#1f6fd6'; sctx.fillRect(r.x + r.w / 2, r.y + r.h - 8, r.w / 2 - 6, 6); } }
         sctx.textAlign = 'center'; sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on || on2 ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 38);
       });
       sctx.textAlign = 'center'; sctx.font = F(15); sctx.fillStyle = dim;
-      sctx.fillText('UP / DOWN = SOLO / VERSUS   -   LEFT / RIGHT = FIGHTER   -   J / ENTER = ' + (hbVs() ? 'READY' : 'PLAY') + '   -   K / ESC = BACK', W / 2, H - 16);
+      sctx.fillText(hbWatch() ? 'UP / DOWN = MODE   -   LEFT / RIGHT = HOW MANY CPUs   -   TAB / Y = CPU LEVEL   -   J / ENTER = WATCH   -   K / ESC = BACK'
+                    : hb.mode === 'party' ? 'UP / DOWN = MODE   -   LEFT / RIGHT = FIGHTER   -   TAB / Y = ADD CPUs   -   J / ENTER = READY   -   K / ESC = BACK'
+                    : 'UP / DOWN = MODE   -   LEFT / RIGHT = FIGHTER   -   J / ENTER = ' + (hbVs() ? 'READY' : 'PLAY') + '   -   K / ESC = BACK', W / 2, H - 16);
+    } else if (hb.phase === 'partyResult') {                       // PARTY / WATCH: who won it all
+      const w = hb.wins.indexOf(Math.max(...hb.wins)), nm = hb.names || [], wc = (hb.chars || [])[w] || picks[0];
+      title((nm[w] || '?') + ' WINS!', 90, 60, green);
+      sctx.textAlign = 'center'; sctx.font = F(20, true); sctx.fillStyle = ink;
+      sctx.fillText(hb.wins.map((n, i) => (nm[i] || '?') + ' ' + n).join('    '), W / 2, 146);
+      sctx.font = F(18); sctx.fillStyle = dim; sctx.fillText('Longest rally this match: ' + (hb.matchBest || 0), W / 2, 180);
+      portrait(wc, W / 2, 520, 1.8);
+      sctx.font = F(26, true); sctx.fillStyle = ink; sctx.fillText(charName(wc), W / 2, 548);
+      sctx.font = F(18); sctx.fillStyle = dim;
+      if (hb.t > 0.5) sctx.fillText('J / ENTER = ' + (hbWatch() ? 'WATCH AGAIN' : 'REMATCH') + '   -   K / ESC = BACK', W / 2, H - 24);
     } else if (hb.phase === 'vsResult') {
       const w = hb.wins[0] >= HB.toWin ? 0 : 1, wc = w === 0 ? picks[hb.sel] : picks[hb.p2 ? hb.p2.sel : 0];
       title('P' + (w + 1) + ' WINS!', 90, 66, w === 0 ? green : blue);
