@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.93",
+    "version":  "0.7.94",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "ee397a3119154f4f9a83ebcd270761927dadd55f11f294e06095f67d47e1e807",
-                                     "size":  2388644
+                                     "hash":  "7ab09f247f15e27b7e006051a5dd332dabeddabba3a006c58b80e16ea1cd0fac",
+                                     "size":  2508622
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -227,6 +227,10 @@
                                                               "hash":  "6134fd66d14c3af114303975a0645c11a3f2fb10dc7c935a856b0dbb4c677734",
                                                               "size":  5903605
                                                           },
+                  "sounds/battle/oldman-comeback.wav":  {
+                                                            "hash":  "e6f105855a63570edd975c080b3b5f6f4f6425ff297781e640f6b25951fabac8",
+                                                            "size":  2293244
+                                                        },
                   "sounds/battle/one-step-closer.mp3":  {
                                                             "hash":  "355566e25c8dca4f7299c4d88629fd6ee1c1b99200659114014a07f205c54d08",
                                                             "size":  3503216

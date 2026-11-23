@@ -796,7 +796,7 @@ function updateCamera(dt) {
   if (shipF) {                                       // Aiden's pirate ship: pull out to show the whole ship
     const a = shipF.action; tx = a.x + a.dir * (a.t < SHIP.holdEnd ? 0 : SHIP.L * 0.45); ty = a.gy - 210; tz = 0.72; speed = 3;
   }
-  const uiF = alive.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'cOnePunch' || f.action.type === 'mzUlt' || f.action.type === 'hakai' || f.action.type === 'reaperGod') && f.action.cam);   // (+ Colten's One Punch)   // (+ Hunter's Legendary 3)
+  const uiF = alive.find(f => f.action && (f.action.type === 'fxSac' || (f.action.type === 'leeUlt' && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'cOnePunch' || f.action.type === 'mzUlt' || f.action.type === 'hakai' || f.action.type === 'reaperGod' || f.action.type === 'omKameCb') && f.action.cam);   // (+ Colten's One Punch)   // (+ Hunter's Legendary 3)
   if (uiF) { const c = uiF.action.cam; tx = c.x; ty = c.y; tz = c.z; speed = c.speed; }   // Lance's Ultra Instinct: the cutscene's own camera
   if (typeof ult !== 'undefined' && ult) {          // ultimate: push in close on the action
     const u = ult.user, v = ult.target;
@@ -7695,15 +7695,29 @@ const COLTEN_GANON = {
     wind: pose({ lean: 0.3, bob: -10, legA: [0.9, 0.7], legB: [-0.8, 0.2], armA: [-1.3, -0.4], armB: [0.4, -1.2], sw: -1.5 }),     // blade back behind him
     strike: pose({ lean: -0.1, bob: -4, legA: [0.6, 0.4], legB: [-0.6, 0.2], armA: [1.7, 0.05], armB: [-0.5, -0.8], sw: 1.75 }),  // whipped round flat
     fire() { sfx.slash(1.1); } },
-  // SIDE J (forward smash): DREAD CLEAVER - the sword raised all the way behind his head, then brought down in
-  // a giant diagonal arc in front of him. Slow. Charge it.
-  sideGround: { name: 'Dread Cleaver', startup: 0.24, active: 0.12, endlag: 0.42, charge: true, sweep: true, lunge: 160, lungeFriction: 0.5,
-    hitboxes: [...bladeHits(30, -150, 90, -170, 3, { dmg: 15, base: 520, growth: 7.6, angle: 38 }, { from: 0, to: 0.04 }),
-               ...bladeHits(50, -110, 155, -90, 4, { dmg: 16, base: 540, growth: 7.8, angle: 38 }, { from: 0.03, to: 0.08 }),
-               ...bladeHits(45, -68, 165, -64, 5, { dmg: 16, base: 540, growth: 7.8, angle: 38 }, { from: 0.06, to: 0.12 })],   // ends dead level
-    wind: pose({ lean: -0.35, bob: -4, legA: [0.8, 0.6], legB: [-0.7, 0.2], armA: [3.0, -0.4], armB: [2.6, -0.5], sw: 3.7 }),
-    strike: pose({ lean: 0.5, bob: -12, legA: [1.1, 0.7], legB: [-0.95, 0.1], armA: [1.55, 0], armB: [1.2, -0.4], sw: 1.58 }),     // blade out flat
-    fire(f) { sfx.slash(1.3); dust(f.x + f.face * 120, f.y, 10, 1.6); shake = Math.max(shake, 7); } },
+  // SIDE J (forward smash): GIANT SLAM - he hoists the greatsword straight up over his head (CHARGE it up there), then brings it
+  // down in front of him like a falling tree: it hits all the way down the arc, SLAMS into the floor, and a shockwave tears
+  // along the ground the way he's facing.
+  sideGround: { name: 'Giant Slam', startup: 0.24, active: 0.12, endlag: 0.44, charge: true, sweep: true, noPush: true,   // (he stays PLANTED - no forward momentum)
+    hitboxes: [...bladeHits(10, -150, 50, -205, 3, { dmg: 14, base: 480, growth: 7, angle: 70 }, { from: 0, to: 0.04 }),
+               ...bladeHits(45, -115, 145, -125, 4, { dmg: 16, base: 520, growth: 7.6, angle: 50 }, { from: 0.03, to: 0.07 }),
+               ...bladeHits(45, -55, 160, -6, 5, { dmg: 18, base: 560, growth: 8, angle: 62 }, { from: 0.06, to: 0.12 })],   // (the SLAM - it bounces them up off the floor)
+    wind: pose({ lean: -0.2, bob: -2, legA: [0.75, 0.5], legB: [-0.7, 0.2], armA: [3.0, -0.15], armB: [2.8, -0.25], sw: 3.14 }),   // (sword straight UP above him)
+    strike: pose({ lean: 0.65, bob: -18, legA: [1.15, 0.8], legB: [-1.0, 0.1], armA: [1.15, 0], armB: [0.95, -0.2], sw: 0.75 }),   // (driven down into the floor ahead)
+    fire() { sfx.slash(1.3); },
+    step(f, a) {
+      if (a.phase === 'active' && a.t >= a.move.active * 0.5 && !a.slammed && f.ground) {   // THE SLAM: the floor takes it
+        a.slammed = true;
+        const x = f.x + f.face * 150, cf = clamp((a.mult - 1) / CHARGE_BONUS, 0, 1);
+        shake = Math.max(shake, 12 + 10 * cf); hitstop = Math.max(hitstop, 0.05); sfx.slam(); if (cf > 0.5 && sfx.huge) sfx.huge();
+        dust(x, f.y, 18 + 12 * cf, 2.4); ring(x, f.y - 8);
+        burst(x, f.y - 6, ['#b9b0a3', '#8e857a', '#d6cec2', '#806b5a'], 22 + 16 * cf, -Math.PI / 2, 1.1, 600, { grav: 900 });
+        cracks.push({ x, y: f.y, life: 3, max: 3, seed: Math.random() * 1000, size: 1 + 0.8 * cf });
+        spawnShot(f, { x: 160, y: -16, vx: 950 + 350 * cf, vy: 0, r: 20 + 10 * cf, dmg: 7, base: 320, growth: 4.2, angle: 65, life: 0.32 + 0.18 * cf, kind: 'wave', pierce: true }, a.mult);
+        projectiles[projectiles.length - 1].color = '#cfd8e6';
+      }
+      return false;
+    } },
   // UP J (up smash): HEAVEN CLEAVER - a huge arc from in front of him, up over his head, and down behind
   upGround: { name: 'Heaven Cleaver', startup: 0.2, active: 0.16, endlag: 0.4, charge: true, sweep: true,
     hitboxes: [...bladeHits(60, -80, 150, -100, 3, { dmg: 15, base: 520, growth: 7.4, angle: 80 }, { from: 0, to: 0.06 }),
@@ -7712,14 +7726,19 @@ const COLTEN_GANON = {
     wind: pose({ lean: 0.3, bob: -12, legA: [0.85, 0.8], legB: [-0.7, 0.3], armA: [1.3, -0.2], armB: [0.9, -0.5], sw: 1.2 }),
     strike: pose({ lean: -0.4, bob: -4, legA: [0.6, 0.4], legB: [-0.6, 0.3], armA: [-2.6, 0.1], armB: [-2.2, -0.2], sw: -2.3 }),
     fire() { sfx.slash(1.2); } },
-  // DOWN J (down smash): GROUND REAPER - sweeps the blade along the floor in front, then behind
-  downGround: { name: 'Ground Reaper', startup: 0.18, active: 0.2, endlag: 0.4, charge: true,
-    hitboxes: [...bladeHits(40, -14, 150, -10, 4, { dmg: 14, base: 470, growth: 6.8, angle: 30 }, { from: 0, to: 0.08, group: 0 }),
-               ...bladeHits(-40, -14, -150, -10, 4, { dmg: 14, base: 470, growth: 6.8, angle: 150 }, { from: 0.1, to: 0.2, group: 1 })],
-    wind: pose({ lean: 0.1, bob: -18, legA: [1.0, 1.2], legB: [-0.8, 0.5], armA: [-0.8, -0.4], armB: [-0.6, -0.5], sw: -1.4 }),
-    strike: pose({ lean: 0.4, bob: -26, legA: [1.2, 1.4], legB: [-0.9, 0.6], armA: [1.2, 0.1], armB: [0.8, -0.3], sw: 1.5 }),
-    strike2: pose({ lean: -0.3, bob: -26, legA: [1.1, 1.3], legB: [-0.9, 0.6], armA: [-1.2, 0.1], armB: [-0.8, -0.3], sw: -1.5 }), strike2At: 0.1,
-    fire(f) { sfx.slash(1.1); dust(f.x, f.y, 12, 1.8); } },
+  // DOWN J (down smash): CYCLONE REAPER - crouched low, he SPINS with the greatsword held out flat along the floor: it swipes
+  // low on BOTH sides at once, round and round - a quick catching swipe, then the full-power one. Charge it.
+  downGround: { name: 'Cyclone Reaper', startup: 0.18, active: 0.26, endlag: 0.4, charge: true, mirrorSpin: 0.045,
+    hitboxes: [...[1, -1].flatMap(sd => bladeHits(40 * sd, -16, 150 * sd, -10, 4, { dmg: 6, base: 150, growth: 0.8, angle: sd > 0 ? 75 : 105 }, { from: 0, to: 0.12, group: 0 })),
+               ...[1, -1].flatMap(sd => bladeHits(40 * sd, -16, 155 * sd, -10, 4, { dmg: 12, base: 470, growth: 6.8, angle: sd > 0 ? 30 : 150 }, { from: 0.12, to: 0.26, group: 1 }))],
+    wind: pose({ lean: 0.1, bob: -18, legA: [1.0, 1.2], legB: [-0.8, 0.5], armA: [-0.8, -0.4], armB: [-0.6, -0.5], sw: -1.4 }),          // (blade drawn back, low)
+    strike: pose({ lean: 0.35, bob: -28, legA: [1.25, 1.45], legB: [-1.0, 0.7], armA: [1.25, 0.05], armB: [1.0, -0.2], sw: 1.5 }),        // (crouched, blade out flat along the floor)
+    fire(f) { sfx.slash(1.1); dust(f.x, f.y, 14, 2); },
+    step(f, a, dt) {                                                 // (the blade's sweep throws up a ring of dust and sparks)
+      if (a.phase === 'active' && Math.random() < dt * 50) { const sd = Math.random() < 0.5 ? 1 : -1;
+        dust(f.x + sd * (60 + Math.random() * 90), f.y, 1, 1.4); if (Math.random() < 0.3) burst(f.x + sd * 140, f.y - 10, ['#ffffff', '#cfd8e6'], 2, sd > 0 ? 0 : Math.PI, 0.8, 300, { grav: 400 }); }
+      return false;
+    } },
   // RUNNING ATTACK: CHARGING THRUST - runs the sword straight through them
   dashAttack: { name: 'Charging Thrust', startup: 0.12, active: 0.14, endlag: 0.34, lunge: 760, lungeFriction: 0.4,
     hitboxes: bladeHits(40, -64, 160, -64, 5, { dmg: 12, base: 420, growth: 5.6, angle: 35, r: 24 }),
@@ -7882,7 +7901,7 @@ COLTEN_MOVES.upRanged = { name: 'Air Slash', startup: 0.1, active: 99, endlag: 0
   fire(f, mult, c, a) {
     const A = AIR_SLASH;
     a.st = 'rise'; a.t0 = 0; a.carry = []; a.tried = new Set();
-    if (!f.upSpecialUsed) { f.vy = -A.rise; f.vx = f.face * A.riseVx; }   // (already used it this jump: just the cut, no lift) f.ground = false; f.y -= 2; a.air = true; f.upSpecialUsed = true;
+    if (!f.upSpecialUsed) { f.vy = -A.rise * (f.furyT > 0 ? COLTEN_FURY.rise : 1); f.vx = f.face * A.riseVx; }   // (FURY: it climbs much higher)   // (already used it this jump: just the cut, no lift) f.ground = false; f.y -= 2; a.air = true; f.upSpecialUsed = true;
     burst(f.x, f.y, A.purple, 16, -Math.PI / 2, 0.6, 450); slashLine(f.x + f.face * 40, f.y - 60, -Math.PI / 2 + f.face * 0.5, 180, 0.2); sfx.slash(1.1);
   },
   step(f, a, dt, inp) {
@@ -7937,9 +7956,182 @@ COLTEN_MOVES.upRanged = { name: 'Air Slash', startup: 0.1, active: 99, endlag: 0
   } };
 // SIDE K: GATE THROW - whatever weapon he's holding goes spinning across the stage (it hovers, K calls it back, or it drops
 // and he walks over and picks it up). A STOLEN weapon: his own Dragonslayer falls back into his hand out of the Gate.
-COLTEN_MOVES.sideRanged = { name: 'Gate Throw', startup: 0.16, active: 0.06, endlag: 0.36, landLag: 0.16, throwScythe: true,
+COLTEN_MOVES.neutralRanged = { name: 'Gate Throw', startup: 0.16, active: 0.06, endlag: 0.36, landLag: 0.16, throwScythe: true,   // (NEUTRAL K now)
   wind: COLTEN_GANON.sideGround.wind, strike: COLTEN_GANON.sideGround.strike,
   fire(f) { throwScythe(f); } };
+// SIDE K: FLAME CROSS SLASH (Cloud's Cross Slash) - a string of greatsword cuts, ONE PER PRESS of side K. Every cut STUNS them
+// for a moment and paints one stroke of the kanji 火 (FIRE) in the air beside him; the 4th cut completes it - the kanji
+// FLASHES and that last cut hits much harder and launches. The stun only just lasts until the next cut IF he presses
+// straight away (or during the cut) - be slow at all and they're free to get out of the way.
+const CK = { strokes: 4, slashT: 0.15, hitAt: 0.06, window: 0.45, stun: 0.34, lunge: 520, reach: 80, r: 62, endlag: 0.3,
+             hit: { dmg: 3.5, base: 60, growth: 0, angle: 45 }, final: { dmg: 10, base: 540, growth: 7.4, angle: 38 } };
+// 火, stroke by stroke, in a 100 x 100 box: the left dot, the right flick, the long left sweep, then the right sweep
+const CK_STROKES = [[[22, 30], [33, 54]], [[78, 28], [66, 52]], [[52, 6], [51, 46], [16, 94]], [[51, 50], [88, 94]]];
+const CK_POSES = () => [COLTEN_GANON.jab, COLTEN_GANON.jab2, COLTEN_GANON.counter, COLTEN_GANON.sideGround];
+COLTEN_MOVES.sideRanged = { name: 'Flame Cross Slash', startup: 0.05, active: 0.1, endlag: CK.endlag, landLag: 0.12, ckSlash: true,
+  wind: COLTEN_GANON.jab.wind, strike: COLTEN_GANON.jab.strike,
+  step(f, a, dt) {
+    const P = CK_POSES(), sc = (figureOf(f).look.scale || 1);
+    if (a.fx === undefined) { a.fx = 'slash'; a.n = 0; a.t = 0; a.phase = 'active'; a.struck = false; f.ck = { n: 0, t: 0, flashT: 0, life: 1 }; f.spcBuf = 0; sfx.whoosh(true); }
+    if (a.fx === 'slash') {
+      const Q = P[a.n]; a.poseOverride = lerpPose(Q.wind, Q.strike, easeOut(clamp(a.t / CK.slashT, 0, 1)));
+      if (f.ground) f.vx = a.t < CK.hitAt + 0.03 ? f.face * CK.lunge * (f.furyT > 0 ? COLTEN_FURY.ckLunge : 1) : approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 60);
+      if (a.t >= CK.hitAt && !a.struck) {                              // THE CUT - and a stroke of the kanji
+        a.struck = true; f.ck.n = a.n + 1; f.ck.t = 0;
+        const last = a.n === CK.strokes - 1, g = 's' + a.n;
+        fxHit(f, a, f.x + f.face * CK.reach * sc, f.y - 60 * sc, CK.r * sc, last ? CK.final : CK.hit, f.face, g);
+        for (const t of (a.hitG && a.hitG[g]) || []) {
+          if (!last && t.action && t.action.type === 'hitstun') {        // STUNNED - just long enough for the next cut, if he's quick
+            t.action.dur = t.action.t + CK.stun; t.action.locked = true; t.vx = 0; t.vy = t.ground ? 0 : -20;
+            for (let k = 0; k < 3; k++) bolt(t.x, t.y - 50, Math.random() * Math.PI * 2, 30, 0.1, '#ff7a1a');
+          }
+        }
+        if (last) {                                                    // 火 COMPLETE: it FLASHES - and this one sends them flying
+          f.ck.flashT = 0.6; shake = Math.max(shake, 16); hitstop = Math.max(hitstop, 0.1); sfx.huge ? sfx.huge() : sfx.slam();
+          impactFrame = Math.max(impactFrame, 0.07); impactAt = { x: f.x + f.face * CK.reach * sc, y: f.y - 60 * sc, ang: 0, all: false, focus: true };
+          burst(f.x + f.face * CK.reach * sc, f.y - 60 * sc, ['#ff5a1a', '#ffb02e', '#ffe066', '#ffffff'], 30, 0, Math.PI, 700, { grav: 0 });
+        } else sfx.slash(1.1);
+      }
+      if (a.t >= CK.slashT) { if (a.n >= CK.strokes - 1) { a.fx = 'end'; a.phase = 'end'; a.t = 0; } else { a.fx = 'wait'; a.t = 0; } }
+      return true;
+    }
+    if (a.fx === 'wait') {                                             // waiting for the next press of side K
+      a.poseOverride = P[a.n].strike;
+      if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 120);
+      if (f.spcBuf > 0) { f.spcBuf = 0; a.n++; a.fx = 'slash'; a.t = 0; a.struck = false; ghosts.push({ fig: figureOf(f), life: 0.16, max: 0.16, color: '#ff7a1a' }); sfx.whoosh(true); return true; }
+      if (a.t >= CK.window) { a.fx = 'end'; a.phase = 'end'; a.t = 0; }
+      return true;
+    }
+    a.poseOverride = null;
+    if (a.t >= CK.endlag) f.action = null;
+    return true;
+  } };
+// DOWN K: FURY. HOLD it to build his FURY meter (he plants the sword and roars - wide open while he does). It also builds on
+// its own, slowly, while he's taking damage. FULL: down K sets it off - for a while every move he makes carries him further
+// forward with more momentum, hits a bit harder, and his up K recovery climbs much higher. (The meter drains while it lasts.)
+const COLTEN_FURY = { max: 100, hold: 28, perDmg: 0.5, dur: 10, power: 1.15, push: 300, lunge: 1.45, rise: 1.35, ckLunge: 1.5 };
+COLTEN_MOVES.downRanged = { name: 'Fury', startup: 0, active: 99, endlag: 0.15, landLag: 0.1, cFury: true,
+  wind: COLTEN_GANON.downRanged.wind, strike: COLTEN_GANON.downRanged.strike,
+  step(f, a, dt, inp) {
+    const C = COLTEN_FURY;
+    if (a.fx === undefined) {
+      a.t = 0; a.phase = 'active';
+      if ((f.fury || 0) >= C.max && !(f.furyT > 0)) {                     // SET IT OFF
+        a.fx = 'roar'; f.furyT = C.dur; f.fury = C.max;
+        ultBanner = { t: 1.0, title: 'FURY', name: 'COLTEN', color: '#ff3a1a', who: f };
+        for (let k = 0; k < 3; k++) auraWaves.push({ x: f.x, y: f.y - 60, t: -k * 0.07, dur: 0.5, max: 130 + k * 60, color: k % 2 ? '#ffb02e' : '#ff3a1a' });
+        burst(f.x, f.y - 60, ['#ff3a1a', '#ffb02e', '#ffffff'], 40, 0, Math.PI, 760, { grav: 0 }); ring(f.x, f.y - 60);
+        shake = Math.max(shake, 16); hitstop = Math.max(hitstop, 0.12); sfx.clash(true); if (sfx.huge) sfx.huge();
+        painTexts.push({ x: f.x, y: f.y - 190, t: 1.0, max: 1.0, text: 'FURY!', big: true, ult: true });
+      } else a.fx = f.furyT > 0 ? 'end' : 'charge';
+    }
+    if (a.fx === 'roar') {
+      a.poseOverride = pose({ lean: -0.35, bob: -14, legA: [0.9, 0.7], legB: [-0.85, 0.3], armA: [2.4, -0.2], armB: [-2.3, -0.2], sw: 2.6 });
+      if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 60);
+      if (a.t >= 0.45) f.action = null;
+      return true;
+    }
+    if (a.fx === 'charge') {                                              // HOLDING: sword planted, building it up
+      a.poseOverride = pose({ ...COLTEN_GANON.downRanged.strike, lean: 0.2 + Math.sin(a.t * 40) * 0.02 });
+      if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 120);
+      const was = f.fury || 0; f.fury = Math.min(C.max, was + C.hold * dt);
+      if (Math.random() < dt * 30) burst(f.x + (Math.random() - 0.5) * 60, f.y - Math.random() * 20, ['#ff3a1a', '#ff8a1a', '#ffd23f'], 1, Math.PI / 2, 0.5, 200 + Math.random() * 200, { grav: -200 });
+      if (was < C.max && f.fury >= C.max) { ring(f.x, f.y - 60); sfx.parry(); painTexts.push({ x: f.x, y: f.y - 170, t: 0.8, max: 0.8, text: 'FURY READY', big: false }); }
+      if (!inp.spcHeld && a.t > 0.12) { a.fx = 'end'; a.phase = 'end'; a.t = 0; }
+      return true;
+    }
+    a.poseOverride = null; a.phase = 'end';
+    if (a.t >= 0.15) f.action = null;
+    return true;
+  } };
+// (per frame - from fkAmbient) his FURY: builds slowly while he takes damage; while it's set off, it counts down
+function coltenFuryTick(f, dt) {
+  const C = COLTEN_FURY;
+  if (f.furyT > 0) {
+    f.furyT -= dt; f.fury = C.max * Math.max(0, f.furyT) / C.dur;
+    if (Math.random() < dt * 26) burst(f.x + (Math.random() - 0.5) * 50, f.y - 20 - Math.random() * 90, ['#ff3a1a', '#ff8a1a'], 1, Math.PI / 2, 0.6, 160, { grav: -260 });
+    if (f.furyT <= 0) { f.furyT = 0; f.fury = 0; painTexts.push({ x: f.x, y: f.y - 150, t: 0.6, max: 0.6, text: 'FURY OVER', big: false }); }
+  } else if (f.damage > (f.furyDmg0 ?? f.damage)) f.fury = Math.min(C.max, (f.fury || 0) + (f.damage - f.furyDmg0) * C.perDmg);   // (hurt: it builds)
+  f.furyDmg0 = f.damage;
+}
+// his FURY meter, over his head: red-orange - flashing while it's set off
+function drawColtenFury() {
+  for (const f of fighters) {
+    if (f.char !== 'COLTEN' || f.minion || f.respawnTimer > 0 || !((f.fury || 0) > 0 || f.furyT > 0)) continue;
+    const sc = (figureOf(f).look.scale || 1), w = 54, h = 6, x = f.x - w / 2, y = f.y - 132 * sc - 18;
+    const k = clamp((f.fury || 0) / COLTEN_FURY.max, 0, 1), on = f.furyT > 0, full = k >= 1 && !on;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,6,4,0.75)'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = on ? (Math.floor(time * 10) % 2 ? '#ffd23f' : '#ff3a1a') : full ? (Math.floor(time * 6) % 2 ? '#ffffff' : '#ff6a1a') : '#ff4a1a';
+    ctx.fillRect(x, y, w * k, h);
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd0b0';
+    ctx.fillText(on ? 'FURY!' : full ? 'FURY READY' : 'FURY', f.x, y - 3);
+    ctx.restore();
+  }
+}
+// THE KANJI 火, Power Rangers Samurai style: BRUSH strokes (fat where the brush presses down, tapering off to a point - the
+// long left sweep, the right sweep flaring out at its foot), dark crimson with a burning orange edge, and real FIRE licking
+// up off every stroke he's cut. The ones still to come wait as faint shadows; the newest one sweeps itself in. Complete,
+// it FLASHES white-gold and the fire roars up - then it all burns away.
+// (each stroke: a centre line in a 100 x 100 box, and how wide the brush is along it, 0 -> 1)
+const CK_BRUSH = [
+  { pts: [[19, 33], [23, 46], [31, 60]], w: t => 6 + 8 * t },                                            // 丶 the left dot (heaviest at its foot)
+  { pts: [[81, 28], [76, 41], [66, 57]], w: t => 13 - 9 * t },                                            // 丿 the right flick (presses in, flicks away)
+  { pts: [[50, 3], [50, 28], [48, 52], [34, 76], [10, 97]], w: t => t < 0.45 ? 12 : 12 * (1 - (t - 0.45) / 0.55) + 0.8 },   // 丿 the long left sweep
+  { pts: [[49, 55], [61, 69], [75, 83], [94, 97]], w: t => t < 0.88 ? 5 + 11 * Math.sin(t / 0.88 * Math.PI / 2) : 16 * (1 - (t - 0.88) / 0.12) + 2 },   // ㇏ the right sweep, flaring at its foot
+];
+// the brush's outline (as far as `frac` along it): a smooth curve through the points, offset either side by half the width
+function ckBrushPoly(st, frac) {
+  const P = st.pts, N = 28, c = [];
+  const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t;
+    return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
+  for (let i = 0; i <= N; i++) {
+    const u = (i / N) * frac * (P.length - 1), s = Math.min(P.length - 2, Math.floor(u)), t = u - s;
+    const a = P[Math.max(0, s - 1)], b = P[s], d = P[s + 1], e = P[Math.min(P.length - 1, s + 2)];
+    c.push({ x: cr(a[0], b[0], d[0], e[0], t), y: cr(a[1], b[1], d[1], e[1], t), w: st.w((i / N) * frac) });
+  }
+  const L = [], R = [];
+  for (let i = 0; i < c.length; i++) {
+    const q0 = c[Math.max(0, i - 1)], q1 = c[Math.min(c.length - 1, i + 1)];
+    let tx = q1.x - q0.x, ty = q1.y - q0.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    L.push([c[i].x - ty * c[i].w / 2, c[i].y + tx * c[i].w / 2]); R.push([c[i].x + ty * c[i].w / 2, c[i].y - tx * c[i].w / 2]);
+  }
+  return { poly: [...L, ...R.reverse()], c };
+}
+function drawColtenKanji() {
+  for (const f of fighters) {
+    const K = f.ck; if (!K) continue;
+    if (f.respawnTimer > 0) { f.ck = null; continue; }
+    K.t += 1 / 60;
+    const live = f.action && f.action.type === 'attack' && f.action.move && f.action.move.ckSlash && f.action.fx !== 'end';
+    if (K.flashT > 0) K.flashT -= 1 / 60; else if (!live) { K.life -= 1 / 60 * 1.8; if (K.life <= 0) { f.ck = null; continue; } }
+    const sc = (figureOf(f).look.scale || 1), S = 84 * sc, fl = Math.max(0, K.flashT) / 0.6, grow = 1 + 0.3 * fl, k = grow * S / 100;
+    const cx = f.x - f.face * 92 * sc, cy = f.y - 170 * sc, al = Math.max(0, Math.min(1, K.life));
+    const toW = (x, y) => ({ x: cx + (x - 50) * k, y: cy + (y - 50) * k });
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-50, -50); ctx.globalAlpha = al;
+    const fillPoly = poly => { ctx.beginPath(); ctx.moveTo(poly[0][0], poly[0][1]); for (const q of poly) ctx.lineTo(q[0], q[1]); ctx.closePath(); };
+    // (a red-hot glow behind the whole thing once he's started it)
+    const g = ctx.createRadialGradient(50, 52, 4, 50, 52, 70); g.addColorStop(0, 'rgba(255,90,20,' + (0.28 + 0.4 * fl) + ')'); g.addColorStop(1, 'rgba(255,40,10,0)');
+    ctx.fillStyle = g; ctx.fillRect(-25, -25, 150, 150);
+    for (let i = 0; i < CK_BRUSH.length; i++) {
+      const st = CK_BRUSH[i], done = i < K.n, frac = !done ? 1 : i === K.n - 1 ? clamp(K.t / 0.1, 0.02, 1) : 1;
+      const { poly, c } = ckBrushPoly(st, frac);
+      if (!done) { fillPoly(poly); ctx.fillStyle = 'rgba(20,4,2,0.28)'; ctx.fill(); continue; }   // (still to come: a faint shadow)
+      // BURNING EDGE: orange fire glowing round the stroke, then the dark crimson ink on top
+      ctx.shadowColor = fl > 0 ? '#fff3a8' : '#ff5a12'; ctx.shadowBlur = 14 + 26 * fl;
+      fillPoly(poly); ctx.strokeStyle = fl > 0.35 ? '#fff6d0' : '#ff7a1a'; ctx.lineWidth = 4.5 + Math.sin(time * 18 + i) * 1.2; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.shadowBlur = 0;
+      const ink = ctx.createLinearGradient(0, 0, 100, 100); ink.addColorStop(0, fl > 0.35 ? '#ffe9a0' : '#5a0c06'); ink.addColorStop(1, fl > 0.35 ? '#ffb02e' : '#2a0402');
+      fillPoly(poly); ctx.fillStyle = ink; ctx.fill();
+      // real fire licking up off it (more when it's complete)
+      if (typeof fkEmit === 'function' && al > 0.2) for (let n = fkRate((fl > 0 ? 160 : 50) * (frac), 1 / 60); n--;) {
+        const q = c[Math.floor(Math.random() * c.length)], side = Math.random() < 0.5 ? -1 : 1, w = toW(q.x + side * q.w * 0.4 * Math.random(), q.y - q.w * 0.3);
+        fkEmit(w.x, w.y, (Math.random() - 0.5) * 50, -90 - Math.random() * 120, (4 + Math.random() * 4) * sc * (1 + fl), 0.16 + Math.random() * 0.12);
+      }
+    }
+    ctx.restore();
+  }
+}
 // COLBY'S SCYTHE, toned down (he was the strongest character): every scythe move is a bit slower to start and to
 // recover, and so is the scythe throw (which also flies a little slower). Colby only - Colten keeps his own speeds.
 const COLBY_NERF = { scythe: 1.17, recover: 1.14, throwStart: 1.3, throwRecover: 1.2, throwSpeed: 0.88 };
@@ -10634,6 +10826,1111 @@ const HAILIE_MOVES = {
     fire(f) { hailiePortal(f); } },
 };
 
+// =====================================================================
+//  FLAME KING - a white stickman wreathed in a pro hero's flames (beard, brows and shoulders on fire)
+//  up K = FLAME DASH (charge up in place, then rocket any way you hold), neutral K = FIREBALL (charge it - BLOCK stores
+//  the charge, a full one stores itself - K again fires it), side K = FIRE BOLT (wherever it lands, a pillar of flame
+//  traps them in place, burning), down K = FLAME REFLECTOR (hold it as long as you like: shots that touch the aura fly
+//  straight back at whoever threw them), neutral J = UPPERCUT > LOW KICK > HEADBUTT (drives them into the ground: buried)
+// =====================================================================
+const FK_DUNK = { wind: 0.08, rise: 1150, riseVx: 220, riseT: 0.34, dive: 1500, diveVx: 260, endlag: 0.28,
+                  upper: { dmg: 5, base: 120, growth: 0, angle: 88 },
+                  dunk: { dmg: 11, base: 430, growth: 5.4, angle: -72 } };
+const FK = {
+  fox: { charge: 0.42, speed: 1550, fly: 0.3, endlag: 0.32 },
+  ball: { chargeTime: 1.3, endlag: 0.22 },
+  refl: { r: 78, min: 0.2, endlag: 0.16 },
+  pillar: { w: 74, h: 150, life: 1.0, every: 0.1, tick: { dmg: 1.1, base: 30, growth: 0, angle: 90, noStop: true }, final: { dmg: 4, base: 320, growth: 3.4, angle: 80 } },
+  bury: { sink: 34, min: 0.5, max: 1.6, per: 1 / 150 },
+  // FALCON KICK (down K): a flaming kick that rockets him forward (diagonally down in the air). A STORED FIREBALL charge gets
+  // poured into it: up to +35% speed, +70% distance and +70% damage at a full one (and it's used up)
+  kick: { wind: 0.14, speed: 1250, dur: 0.26, dmg: 10, base: 360, growth: 5.2, endlag: 0.3 },
+  // FIRE RAIN (side K): three fireballs lobbed up in arcs - near, far, middle - that rain down and leave PATCHES OF FIRE that
+  // burn ANYONE standing in them (Flame King too)
+  rain: { g: 2400, dist: [150, 330, 240], time: [0.55, 0.8, 0.68] },
+  patch: { w: 90, life: 4, every: 0.25, dmg: 1.2, max: 6 },
+  noReflect: ['beam', 'disc', 'dragon', 'tiger', 'batarang', 'fkPillar', 'tile'],
+};
+const fkMid = f => f.y - 50 * ((f.look && f.look.scale) || 1);
+// one hit of a custom move on everyone in a circle (each group hits a fighter once)
+function fxHit(f, a, x, y, r, h, dir, grp) {
+  a.hitG = a.hitG || {}; const set = a.hitG[grp] || (a.hitG[grp] = new Set());
+  for (const t of fighters) {
+    if (t === f || allies(f, t) || set.has(t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0) continue;
+    if (!circleHitsFighter(x, y, r, t)) continue;
+    set.add(t); a.hit.add(t);
+    applyHit(t, h, dir, (a.mult || 1) * powerOf(f), x, y, { fighter: f });
+  }
+}
+function fkFlames(x, y, n, spread, sp) {                         // (a burst of real fire - see fkFire)
+  for (let i = 0; i < Math.round(n * 1.6); i++) {
+    const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2 * spread, v = sp * (0.25 + 0.75 * Math.random());
+    fkEmit(x + (Math.random() - 0.5) * 8, y + (Math.random() - 0.5) * 8, Math.cos(ang) * v, Math.sin(ang) * v, 5 + Math.random() * 6, 0.3 + Math.random() * 0.25);
+  }
+}
+const FK_BASE = {};
+for (const [k, m] of Object.entries(STICKMAN_MOVES)) FK_BASE[k] = { ...m };
+for (const k of ['nairR', 'fairR', 'bairR', 'dairR']) delete FK_BASE[k];   // (his K moves are the same in the air)
+const FLAMEKING_MOVES = {
+  ...FK_BASE,
+  // SIDE J: POWER DUNK (Terry Bogard) - a rising LEFT UPPERCUT carries them up into the air with him... then at the top he
+  // brings the RIGHT down in a flying superman punch that crashes them into the ground
+  sideGround: { name: 'Power Dunk', startup: 0.08, active: 0.6, endlag: 0.28, landLag: 0.2, fkDunk: true,
+    wind: pose({ bob: -14, lean: 0.25, legA: [0.8, 1.0], legB: [-0.6, 0.5], armB: [0.2, -2.2], armA: [-0.4, -1.4] }),
+    strike: pose({ bob: 0, lean: -0.15, legA: [0.3, 0.6], legB: [-0.4, 1.0], armB: [2.9, -0.1], armA: [-0.6, -1.0] }),
+    step(f, a, dt) {
+      const D = FK_DUNK, sc = (f.look && f.look.scale) || 1;
+      if (a.fx === undefined) { a.fx = 'wind'; a.t = 0; a.phase = 'startup'; }
+      const fist = () => { const J = fkJoints(f); return J && J.hA ? J.hA : { x: f.x + f.face * 30, y: f.y - 80 * sc }; };
+      if (a.fx === 'wind') {
+        if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 60);
+        if (a.t >= D.wind) { a.fx = 'rise'; a.t = 0; a.phase = 'active'; f.vy = -D.rise; f.vx = f.face * D.riseVx; f.ground = false; f.y -= 2; a.air = true; sfx.whoosh(true); }
+        return true;
+      }
+      if (a.fx === 'rise') {                                         // THE LEFT UPPERCUT: up he goes - and them with him
+        a.poseOverride = pose({ bob: 0, lean: -0.2, legA: [0.2, 0.5], legB: [-0.5, 1.1], armB: [-0.5, -1.0], armA: [2.95, -0.05] });
+        const h = fist();
+        for (let i = fkRate(120, dt); i--;) fkEmit(h.x, h.y, (Math.random() - 0.5) * 40, 60 + Math.random() * 80, 5 + Math.random() * 3, 0.16);
+        if (!a.v) {
+          fxHit(f, a, h.x, h.y, 30 * sc, D.upper, f.face, 'up');
+          const got = a.hitG && a.hitG.up && [...a.hitG.up].find(t => t.action && t.action.type === 'hitstun');
+          if (got) { a.v = got; burst(h.x, h.y, FIRE, 12, 0, Math.PI, 360, { grav: 0 }); }
+        }
+        if (a.v && fighters.includes(a.v) && a.v.action && a.v.action.type === 'hitstun') {   // (carried up on his fist)
+          const v = a.v; v.x = f.x + f.face * 34 * sc; v.y = f.y - 70 * sc; v.vx = f.vx; v.vy = f.vy; v.action.dur = Math.max(v.action.dur, v.action.t + 0.2); v.action.locked = true;
+        } else a.v = null;
+        if (a.t >= D.riseT || f.vy > -120) { a.fx = 'dunk'; a.t = 0; f.vy = D.dive; f.vx = f.face * D.diveVx; sfx.whoosh(true);
+          if (a.v) {                                                 // THE RIGHT: a superman punch straight down through them
+            const v = a.v; ultHitCtx = false;
+            applyHit(v, D.dunk, f.face, powerOf(f), v.x, v.y - 50, { fighter: f });
+            fkFlames(v.x, v.y - 40, 24, Math.PI, 520); shake = Math.max(shake, 12); hitstop = Math.max(hitstop, 0.1);
+            impactFrame = Math.max(impactFrame, 0.06); impactAt = { x: v.x, y: v.y - 40, ang: Math.PI / 2, all: false, focus: true };
+            a.dunked = true;
+          }
+        }
+        return true;
+      }
+      if (a.fx === 'dunk') {                                         // diving down behind the punch
+        a.poseOverride = pose({ bob: 0, lean: 0.9, legA: [-0.5, 0.3], legB: [-0.8, 0.4], armB: [0.4, 0], armA: [-1.2, -0.5] });
+        f.vy = Math.max(f.vy, D.dive * 0.8);
+        const h = fist();
+        for (let i = fkRate(160, dt); i--;) fkEmit(h.x, h.y, -f.face * 60 + (Math.random() - 0.5) * 40, -120 - Math.random() * 80, 6 + Math.random() * 4, 0.18);
+        if (!a.dunked) fxHit(f, a, h.x, h.y, 30 * sc, D.dunk, f.face, 'dunk');   // (missed the uppercut: the punch still hits on the way down)
+        if (f.ground || a.t > 0.8) {                                 // CRASH: the ground takes it
+          a.fx = 'end'; a.t = 0; a.phase = 'end'; a.poseOverride = null;
+          if (f.ground) { dust(f.x + f.face * 20, f.y, 16, 2.2); cracks.push({ x: f.x + f.face * 20, y: f.y, life: 2.5, max: 2.5, seed: Math.random() * 1000, size: 1.2 });
+            fkFlames(f.x + f.face * 24, f.y - 6, 22, 1.2, 460); ring(f.x + f.face * 20, f.y - 8); shake = Math.max(shake, 14); sfx.slam(); }
+        }
+        return true;
+      }
+      if (a.t >= D.endlag) f.action = null;
+      return true;
+    } },
+  upGround: { name: 'Blast Arc', startup: 0.09, active: 0.1, endlag: 0.22,
+    // a fan of explosions from one side of him, over his head, to the other - short, but VERY wide (a juggle catcher)
+    hitboxes: [-150, -125, -100, -80, -55, -30].map(deg => {
+      const r = deg * Math.PI / 180;
+      return { x: Math.cos(r) * 62, y: -60 + Math.sin(r) * 62, r: 26, dmg: 7, base: 290, growth: 3.6, angle: 88 };
+    }),
+    wind: pose({ bob: -14, lean: 0.1, legA: [0.8, 0.8], legB: [-0.7, 0.5], armA: [0.5, -2.4], armB: [0.3, -2.2] }),
+    strike: pose({ bob: -4, lean: -0.05, legA: [0.6, 0.3], legB: [-0.55, 0.2], armA: [2.5, 0], armB: [-2.5, 0] }),
+    fire(f) {                                                        // the blasts: a fan of explosions over his head, side to side
+      for (let i = 0; i < 9; i++) {
+        const r = (-160 + i * 17.5) * Math.PI / 180, x = f.x + Math.cos(r) * 62, y = f.y - 60 + Math.sin(r) * 62;
+        fkFlames(x, y, 7, 1.4, 360);
+        burst(x, y, ['#ffffff', '#ffd23f', '#ff8a1a'], 4, r, 0.6, 520, { grav: 0 });
+      }
+      ring(f.x, f.y - 90); shake = Math.max(shake, 9); sfx.blast ? sfx.blast() : sfx.huge();
+    } },
+  downGround: { ...FK_BASE.downGround, name: 'Ground Burn' },
+  // ---- AIR NEUTRAL J: FIREBALL SPIN - he whirls round with a fireball blazing in each hand: they reach well past his fists
+  //      (both sides at once) - two quick hits that keep them in, then a bigger burst that sends them off ----
+  nair: { name: 'Fireball Spin', startup: 0.06, active: 0.34, endlag: 0.14, landLag: 0.1, mirrorSpin: 0.05, fkSpin: true,
+    hitboxes: [0, 1, 2].flatMap(g => [1, -1].map(sd => ({ x: 52 * sd, y: -58, r: 24, from: g * 0.115, to: g * 0.115 + 0.11, group: g,
+      ...(g < 2 ? { dmg: 2.5, base: 140, growth: 0.4, angle: sd > 0 ? 75 : 105 } : { dmg: 4.5, base: 330, growth: 4.6, angle: sd > 0 ? 45 : 135 }) }))),
+    wind: pose({ lean: 0.05, legA: [0.9, 1.6], legB: [0.5, 1.4], armA: [0.6, -1.4], armB: [-0.4, -1.4] }),
+    strike: pose({ lean: 0, legA: [0.5, 1.2], legB: [-0.4, 1.0], armA: [1.57, 0], armB: [-1.57, 0] }),
+    onHit(f, t, a, h) { fkFlames(t.x, t.y - 55, h && h.group === 2 ? 14 : 5, Math.PI, 320); } },
+  // ---- NEUTRAL J: UPPERCUT > LOW KICK > HEADBUTT (the last one BURIES them) ----
+  jab: { name: 'Rising Uppercut', startup: 0.06, active: 0.07, endlag: 0.14, lunge: 260, combo: 'jab2',
+    hitboxes: [{ x: 26, y: -78, r: 20, dmg: 4, base: 120, growth: 0.5, angle: 72 }],
+    wind: pose({ bob: -10, lean: 0.2, armA: [0.3, -2.2], armB: [-0.3, -1.4], legA: [0.6, 0.8], legB: [-0.5, 0.3] }),
+    strike: pose({ bob: 2, lean: -0.1, armA: [2.8, -0.2], armB: [-0.4, -1.0], legA: [0.2, 0.1], legB: [-0.3, 0.1] }) },
+  jab2: { name: 'Low Leg Kick', startup: 0.05, active: 0.07, endlag: 0.14, lunge: 220, combo: 'jab3',
+    hitboxes: [{ x: 38, y: -22, r: 20, dmg: 3.5, base: 110, growth: 0.4, angle: 50 }],
+    wind: pose({ bob: -6, lean: -0.15, legA: [-0.5, 1.2], armA: [0.6, -1.6], armB: [-0.4, -1.4] }),
+    strike: pose({ bob: -12, lean: -0.3, legA: [1.45, 0.05], legB: [-0.5, 0.6], armA: [-0.8, -0.6], armB: [0.9, -1.2] }) },
+  jab3: { name: 'Burying Headbutt', startup: 0.1, active: 0.08, endlag: 0.26, lunge: 320,
+    hitboxes: [{ x: 28, y: -72, r: 24, dmg: 7, base: 200, growth: 1.4, angle: -70 }],
+    wind: pose({ lean: -0.45, bob: -4, armA: [-0.6, -0.8], armB: [-0.9, -0.6], legA: [0.5, 0.4], legB: [-0.5, 0.2] }),
+    strike: pose({ lean: 0.75, bob: -14, armA: [-1.2, -0.3], armB: [-1.4, -0.2], legA: [0.9, 0.8], legB: [-0.8, 0.2] }),
+    onHit(f, t) {
+      if (t.minion || !t.action || t.action.type !== 'hitstun') return;
+      if (!f.ground || Math.abs(t.y - f.y) > 60) return;              // (only on the ground: in the air it just spikes them)
+      fkBury(t, f.y);
+    } },
+  // ---- NEUTRAL K: FIREBALL (charge / store / fire) ----
+  neutralRanged: { name: 'Fireball', startup: 0.08, active: 0.05, endlag: FK.ball.endlag, landLag: 0.08, fkBall: true,
+    wind: pose({ armA: [0.4, -2.2], armB: [0.6, -2.0], lean: -0.15, legA: [0.6, 0.5], legB: [-0.5, 0.2] }),
+    strike: pose({ armA: [1.57, 0], armB: [1.4, -0.2], lean: 0.15, legA: [0.6, 0.4], legB: [-0.6, 0.1] }),
+    step(f, a, dt, inp) {
+      if (a.fx === undefined) {
+        a.fx = 'charge'; a.phase = 'charge'; a.t = 0; a.c = f.fkStore || 0; f.fkStore = 0;
+        if (a.c >= 1) { fkFireBall(f, a); return true; }            // (a stored full one: out it goes)
+      }
+      if (a.fx === 'charge') {
+        if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else { f.vy = Math.min(f.vy, 120); f.vx *= Math.exp(-dt * 4); }
+        a.c = Math.min(1, a.c + dt / FK.ball.chargeTime);
+        if (Math.random() < dt * (20 + 50 * a.c)) fkFlames(f.x + f.face * 38, f.y - 62, 1, 2.5, 120 + 160 * a.c);
+        if (a.c >= 1) {                                               // FULL: it stores itself
+          f.fkStore = 1; f.action = null; ring(f.x + f.face * 38, f.y - 62); sfx.parry();
+          painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'FULL CHARGE', big: false });
+          return true;
+        }
+        if (inp.blockTap || f.dodgeBuf > 0) {                          // BLOCK: keep the charge for later
+          f.fkStore = a.c; f.dodgeBuf = 0; f.action = null;
+          painTexts.push({ x: f.x, y: f.y - 130, t: 0.5, max: 0.5, text: 'STORED', big: false });
+          return true;
+        }
+        if (!inp.spcHeld && a.t > 0.1) fkFireBall(f, a);
+        return true;
+      }
+      if (a.t >= FK.ball.endlag) f.action = null;
+      return true;
+    } },
+  // ---- SIDE K: FIRE RAIN - three fireballs in arcs, raining down into patches of fire ----
+  sideRanged: { name: 'Fire Rain', startup: 0.16, active: 0.06, endlag: 0.32, landLag: 0.12,
+    wind: pose({ armA: [-0.9, -1.0], armB: [0.5, -1.6], lean: -0.25, legA: [0.6, 0.4], legB: [-0.6, 0.2] }),
+    strike: pose({ armA: [2.4, 0], armB: [-0.6, -0.8], lean: 0.15, legA: [0.6, 0.4], legB: [-0.5, 0.1] }),
+    fire(f, mult) {
+      const R = FK.rain;
+      for (let k = 0; k < 3; k++) {
+        const T = R.time[k];
+        spawnShot(f, { x: 24, y: -70, vx: R.dist[k] / T, vy: (70 - 0.5 * R.g * T * T) / T, r: 10, dmg: 4, base: 200, growth: 2.5, angle: 60, life: 2.5, grav: R.g }, mult);
+        const sh = projectiles[projectiles.length - 1]; sh.fkRain = true; sh.fkBall = true; sh.color = '#ff6a1a';
+      }
+      fkFlames(f.x + f.face * 24, f.y - 72, 10, 0.8, 300); sfx.whoosh(true);
+    } },
+  // ---- UP K: FLAME DASH - burn in place, then rocket whichever way you hold ----
+  upRanged: { name: 'Flame Dash', startup: FK.fox.charge, active: FK.fox.fly, endlag: FK.fox.endlag, landLag: 0.14,
+    wind: pose({ bob: -10, lean: 0.3, legA: [1.2, 1.9], legB: [0.8, 1.7], armA: [0.9, -2.2], armB: [0.6, -2.2] }),
+    strike: pose({ lean: 0.55, armA: [-0.7, -0.2], armB: [-0.9, -0.2], legA: [-0.4, 0.2], legB: [-0.6, 0.3] }),
+    step(f, a, dt, inp) {
+      const C = FK.fox;
+      if (a.fx === undefined) { a.fx = 'charge'; a.phase = 'startup'; a.t = 0; a.can = f.ground || !f.upSpecialUsed; if (!f.ground) f.upSpecialUsed = true; }
+      if (a.fx === 'charge') {
+        if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else { f.vy = Math.min(f.vy, 40); f.vx *= Math.exp(-dt * 8); }
+        if (Math.random() < dt * 90) fkFlames(f.x + (Math.random() - 0.5) * 50, f.y - Math.random() * 90, 1, 1.4, 220);
+        fxHit(f, a, f.x, fkMid(f), 48, { dmg: 1.5, base: 60, growth: 0, angle: 90, noStop: true }, f.face, 'c' + Math.floor(a.t / 0.1));
+        if (a.t >= C.charge) {
+          if (!a.can) { a.fx = 'end'; a.phase = 'end'; a.t = 0; return true; }
+          let dx = inp.dir || 0, dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+          if (f.ground && dy > 0) dy = 0;
+          if (!dx && !dy) dy = -1;
+          const n = Math.hypot(dx, dy); a.vx = dx / n * C.speed; a.vy = dy / n * C.speed;
+          if (dx) f.face = Math.sign(dx);
+          a.ang = dy < 0 && Math.abs(dx) < 0.5 ? 82 : dy > 0 ? -55 : 40;
+          a.fx = 'fly'; a.phase = 'active'; a.t = 0; f.ground = false; f.y -= 2; a.air = true; f.upSpecialUsed = true;
+          ring(f.x, fkMid(f)); fkFlames(f.x, fkMid(f), 24, Math.PI, 520); shake = Math.max(shake, 6); sfx.whoosh(true);
+        }
+        return true;
+      }
+      if (a.fx === 'fly') {
+        f.vx = a.vx; f.vy = a.vy;
+        a.ghostT = (a.ghostT || 0) - dt;
+        if (a.ghostT <= 0) { a.ghostT = 0.02; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#ff7a1a' }); }
+        if (Math.random() < dt * 120) fkFlames(f.x + (Math.random() - 0.5) * 30, fkMid(f) + (Math.random() - 0.5) * 60, 1, 1, 160);
+        fxHit(f, a, f.x, fkMid(f), 36, { dmg: 9, base: 330, growth: 5, angle: a.ang }, Math.sign(a.vx) || f.face, 'fly');
+        if (a.t >= C.fly) { a.fx = 'end'; a.phase = 'end'; a.t = 0; f.vx *= 0.3; f.vy *= 0.2; }
+        return true;
+      }
+      if (a.t >= C.endlag) f.action = null;
+      return true;
+    } },
+  // ---- DOWN K: FALCON KICK - powered up by a stored fireball ----
+  downRanged: { name: 'Falcon Kick', startup: FK.kick.wind, active: FK.kick.dur, endlag: FK.kick.endlag, landLag: 0.16, fkKick: true,
+    wind: pose({ lean: -0.2, bob: -10, legA: [0.3, 1.6], legB: [-0.4, 0.3], armA: [-0.6, -1.0], armB: [0.8, -1.4] }),
+    strike: pose({ lean: -0.45, bob: -16, legA: [1.6, 0], legB: [-0.4, 1.3], armA: [-1.3, -0.3], armB: [2.3, -0.4] }),
+    step(f, a, dt) {
+      const K = FK.kick;
+      if (a.fx === undefined) {
+        a.fx = 'wind'; a.phase = 'startup'; a.t = 0; a.boost = clamp(f.fkStore || 0, 0, 1); f.fkStore = 0;
+        if (a.boost > 0) { painTexts.push({ x: f.x, y: f.y - 130, t: 0.6, max: 0.6, text: 'POWERED UP!', big: a.boost >= 1 }); ring(f.x + f.face * 38, f.y - 62); sfx.parry(); }
+      }
+      const J = fkJoints(f), foot = J && J.fA ? J.fA : { x: f.x + f.face * 30, y: f.y - 20 };
+      if (a.fx === 'wind') {
+        if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else { f.vy = Math.min(f.vy, 60); f.vx *= Math.exp(-dt * 6); }
+        for (let i = fkRate(60 + 160 * a.boost, dt); i--;) fkEmit(foot.x + (Math.random() - 0.5) * 12, foot.y + (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 60, -80 - Math.random() * 100, 5 + 4 * a.boost, 0.2 + Math.random() * 0.1);
+        if (a.t >= K.wind) { a.fx = 'go'; a.phase = 'active'; a.t = 0; sfx.whoosh(true); fkFlames(foot.x, foot.y, 10 + 14 * a.boost, 1.2, 380); }
+        return true;
+      }
+      if (a.fx === 'go') {
+        const b = a.boost, sp = K.speed * (1 + 0.35 * b), dur = K.dur * (1 + 0.7 * b);
+        if (f.ground) {
+          f.vx = f.face * sp; f.vy = 0;
+          if (!f.onPlatform && !wideFloor()) { const e = f.face > 0 ? STAGE.x + STAGE.w - 14 : STAGE.x + 14; if ((f.x - e) * f.face > 0) { f.x = e; a.t = dur; } }   // (skids to a stop at the edge)
+        } else { f.vx = f.face * sp * 0.8; f.vy = sp * 0.75; }
+        a.ghostT = (a.ghostT || 0) - dt;
+        if (a.ghostT <= 0) { a.ghostT = 0.025; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#ff7a1a' }); }
+        for (let i = fkRate(200 + 200 * b, dt); i--;) fkEmit(foot.x + (Math.random() - 0.5) * 16, foot.y + (Math.random() - 0.5) * 16, -f.face * (60 + Math.random() * 120), -60 - Math.random() * 120, 7 + 5 * b, 0.22 + Math.random() * 0.12);
+        fxHit(f, a, foot.x, foot.y, 30, { dmg: K.dmg * (1 + 0.7 * b), base: K.base + 150 * b, growth: K.growth, angle: f.ground ? 32 : 25 }, f.face, 'kick');
+        if (a.hit.size) {                                                // CONNECTS: he rebounds off them in a blast of fire
+          a.fx = 'end'; a.phase = 'end'; a.t = 0; f.vx = -f.face * 260; f.vy = f.ground ? 0 : -420;
+          fkFlames(foot.x, foot.y, 24 + 24 * b, Math.PI, 520); ring(foot.x, foot.y); shake = Math.max(shake, 8 + 10 * b);
+          if (b > 0.5) { impactFrame = Math.max(impactFrame, 0.05); impactAt = { x: foot.x, y: foot.y, ang: 0, all: false, focus: true }; }
+          return true;
+        }
+        if (a.t >= dur) { a.fx = 'end'; a.phase = 'end'; a.t = 0; f.vx *= 0.25; }
+        return true;
+      }
+      if (a.t >= K.endlag) f.action = null;
+      return true;
+    } },
+};
+function fkFireBall(f, a) {
+  const c = clamp(a.c || 0, 0, 1);
+  spawnShot(f, { x: 38, y: -62, vx: 820 + 380 * c, vy: 0, r: 9 + 20 * c, dmg: 3 + 15 * c, base: 240 + 300 * c, growth: 2.5 + 5 * c, angle: 38, life: 1.4 }, 1);
+  const s = projectiles[projectiles.length - 1]; s.color = '#ff6a1a'; s.fkBall = true; s.trailLen = 10;
+  fkFlames(f.x + f.face * 40, f.y - 62, Math.round(8 + 20 * c), 0.9, 300 + 300 * c);
+  if (c > 0.8) { shake = Math.max(shake, 8); ring(f.x + f.face * 40, f.y - 62); sfx.blast ? sfx.blast() : sfx.whoosh(true); } else sfx.whoosh(true);
+  a.fx = 'end'; a.phase = 'end'; a.t = 0;
+}
+// THE HEADBUTT'S BURY: stuck in the floor up to their waist (longer the more damage they have) - any hit pops them out
+function fkBury(t, floorY) {
+  const B = FK.bury;
+  t.buryT = clamp(B.min + t.damage * B.per, B.min, B.max);
+  t.buryFloor = floorY; t.buryDmg = t.damage; t.vx = 0; t.vy = 0;
+  t.action = { type: 'hitstun', t: 0, dur: t.buryT + 0.2, locked: true }; t.buryAct = t.action;
+  dust(t.x, floorY, 14, 1.8); burst(t.x, floorY - 4, ['#806b5a', '#5a4a3a', '#b4a08a'], 18, Math.PI / 2, 1.2, 420, { grav: 900 });
+  cracks.push({ x: t.x, y: floorY, life: 2, max: 2, seed: (t.x * 1.7) % 1000, size: 0.7 });
+  shake = Math.max(shake, 10); hitstop = Math.max(hitstop, 0.1); sfx.slam();
+  painTexts.push({ x: t.x, y: t.y - 120, t: 0.7, max: 0.7, text: 'BURIED!', big: true });
+}
+function fkBuryStep(f, dt) {
+  if (!(f.buryT > 0)) return false;
+  if (f.action !== f.buryAct || f.damage > f.buryDmg + 0.01) { f.buryT = 0; f.buryAct = null; f.y = Math.min(f.y, f.buryFloor - 1); return false; }   // (hit again: popped out)
+  f.buryT -= dt; f.vx = 0; f.vy = 0; f.y = f.buryFloor + FK.bury.sink; f.ground = true;
+  if (Math.random() < dt * 5) dust(f.x, f.buryFloor, 1, 0.6);
+  if (f.buryT <= 0) {                                                // (climbs out)
+    f.y = f.buryFloor - 2; f.vy = -520; f.ground = false; f.action = null; f.buryAct = null;
+    dust(f.x, f.buryFloor, 10, 1.4); burst(f.x, f.buryFloor - 4, ['#806b5a', '#5a4a3a'], 10, Math.PI / 2, 1, 320, { grav: 900 });
+  }
+  return true;
+}
+// the pillar of fire the Fire Bolt leaves - holds anyone inside it, burning, then throws them up out of it
+function fkPillar(s) {
+  const tgt = [...s.hit][0];
+  const y = s.fkFloor ? STAGE.y : tgt ? tgt.y : s.y + 40;
+  projectiles.push({ kind: 'fkPillar', fkZone: true, owner: s.owner, x: tgt ? tgt.x : s.x, y, r: FK.pillar.w / 2, vx: 0, vy: 0, life: FK.pillar.life, max: FK.pillar.life,
+                     tickT: 0, mult: s.mult, hit: new Set(), trail: [], color: '#ff6a1a' });
+  fkFlames(tgt ? tgt.x : s.x, y - 10, 20, 1.2, 420); sfx.blast ? sfx.blast() : sfx.hit(0.6);
+}
+function fkPatch(s) {
+  const tgt = [...s.hit][0];
+  const y = s.fkFloor ? (s.landY ?? STAGE.y) : tgt && tgt.ground ? tgt.y : null;
+  if (y === null) return;
+  const P = FK.patch, mine = projectiles.filter(q => q.kind === 'fkPatch' && q.owner === s.owner);
+  if (mine.length >= P.max) projectiles.splice(projectiles.indexOf(mine[0]), 1);   // (oldest one goes out)
+  projectiles.push({ kind: 'fkPatch', fkZone: true, owner: s.owner, x: tgt && !s.fkFloor ? tgt.x : s.x, y, r: P.w / 2, vx: 0, vy: 0, life: P.life, max: P.life,
+                     tickT: 0, mult: 1, hit: new Set(), trail: [], color: '#ff6a1a' });
+  fkFlames(s.x, y - 6, 12, 1.2, 320); dust(s.x, y, 4, 1);
+}
+// a PATCH OF FIRE on the floor: burns anyone standing in it a little at a time - nobody's safe in it, Flame King included
+function updateFkPatch(s, dt) {
+  const P = FK.patch;
+  s.life -= dt; s.tickT -= dt;
+  const k = Math.min(1, s.life / 0.6);
+  for (let i = fkRate(80 * k, dt); i--;) fkEmit(s.x + (Math.random() - 0.5) * P.w * 0.8, s.y - 2, (Math.random() - 0.5) * 30, -120 - Math.random() * 140, 6 + Math.random() * 4, 0.16 + Math.random() * 0.1);
+  if (s.tickT <= 0) {
+    s.tickT = P.every;
+    for (const t of fighters) {
+      if (t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0 || t.out || isIntangible(t) || t.shielding) continue;
+      if (Math.abs(t.x - s.x) > P.w / 2 + 6 || t.y < s.y - 30 || t.y > s.y + 8) continue;
+      t.damage += P.dmg; t.hitFlash = 0.06;
+      if (s.owner && t !== s.owner && fighters.includes(s.owner)) { t.lastHitBy = s.owner; t.lastHitAt = time; }
+      if (t.minion && t.owner && t.owner.respawnTimer <= 0) t.owner.damage += P.dmg * cloneLink(t.owner);
+      fkFlames(t.x, t.y - 20, 3, 0.8, 200);
+    }
+  }
+  return s.life <= 0;
+}
+function drawFkPatch(s) {
+  const k = Math.min(1, s.life / 0.6) * Math.min(1, (s.max - s.life) / 0.15 + 0.3), g = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, 56);
+  g.addColorStop(0, 'rgba(255,190,70,' + (0.6 * k) + ')'); g.addColorStop(1, 'rgba(255,70,20,0)');
+  ctx.save(); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(s.x, s.y, 56, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+}
+function updateFkPillar(s, dt) {
+  const P = FK.pillar, o = s.owner;
+  if (!o || !fighters.includes(o)) return true;
+  s.life -= dt; s.tickT -= dt;
+  { const k = Math.min(1, (s.max - s.life) / 0.1) * Math.min(1, s.life / 0.2 + 0.3);   // THE PILLAR: a roaring column of fire
+    for (let i = fkRate(320 * k, dt); i--;) fkEmit(s.x + (Math.random() - 0.5) * P.w * 0.7, s.y - Math.random() * 16, (Math.random() - 0.5) * 40, -360 - Math.random() * 360, 10 + Math.random() * 8, 0.24 + Math.random() * 0.12); }
+  const last = s.life <= 0;
+  if (s.tickT <= 0 || last) {
+    s.tickT = P.every;
+    for (const t of fighters) {
+      if (t === o || allies(o, t) || t.respawnTimer > 0 || t.halo > 0 || t.dead || t.poofT > 0 || isIntangible(t)) continue;
+      if (Math.abs(t.x - s.x) > P.w / 2 + t.w * 0.3 || t.y < s.y - P.h || t.y - hurtH(t) > s.y + 10) continue;
+      const ok = applyHit(t, last ? P.final : P.tick, Math.sign(t.x - s.x) || o.face, s.mult, t.x, t.y - 50, { by: o });
+      if (!last && ok && t.action && t.action.type === 'hitstun') {
+        t.action.dur = Math.max(t.action.dur, t.action.t + P.every + 0.08); t.action.locked = true;
+        t.vx = (s.x - t.x) * 8; t.vy = t.ground ? 0 : -40;
+      }
+    }
+  }
+  return last;
+}
+function drawFkPillar(s) {                                        // (the fire is particles - this is the glow on the floor at its base)
+  const k = Math.min(1, s.life / 0.2 + 0.3), g = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, 60);
+  g.addColorStop(0, 'rgba(255,200,80,' + (0.7 * k) + ')'); g.addColorStop(1, 'rgba(255,80,20,0)');
+  ctx.save(); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(s.x, s.y, 60, 14, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+}
+// his reflector aura, the fireball growing in his hand, and a stored one glowing there
+function drawFkAuras() {
+  for (const f of fighters) {
+    if (f.respawnTimer > 0 || f.hbPinned) continue;
+    const a = f.action, m = a && a.type === 'attack' && a.move;
+    if (m && m.fkReflect && a.fx === 'on') {
+      const cy = fkMid(f), R = FK.refl.r;
+      ctx.save();
+      ctx.globalAlpha = 0.22 + 0.08 * Math.sin(time * 30); ctx.fillStyle = '#ff7a1a';
+      ctx.beginPath(); ctx.arc(f.x, cy, R, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = '#ffb02e'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(f.x, cy, R + Math.sin(time * 40) * 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    if (m && m.fkSpin && a.phase !== 'end') {                       // (the two fireballs' white-hot hearts)
+      const J = fkJoints(f);
+      if (J) for (const h of [J.hA, J.hB]) { const r = 9 + Math.sin(time * 40) * 1.2, g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, r * 1.8);
+        g.addColorStop(0, '#fffbe6'); g.addColorStop(0.45, 'rgba(255,200,70,0.9)'); g.addColorStop(1, 'rgba(255,90,20,0)');
+        ctx.save(); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, r * 1.8, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    }
+    const charging = m && m.fkBall && a.fx === 'charge';
+    const c = charging ? a.c : (f.fkStore || 0);
+    if (c > 0 && f.look && f.look.flameKing) {                     // (the fireball's white-hot heart - the fire round it is particles)
+      const x = f.x + f.face * 38, y = f.y - 62, r = 4 + 10 * c + Math.sin(time * 30) * 1.2;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.8);
+      g.addColorStop(0, '#fffbe6'); g.addColorStop(0.45, 'rgba(255,200,70,0.9)'); g.addColorStop(1, 'rgba(255,90,20,0)');
+      ctx.save(); ctx.globalAlpha = charging ? 1 : 0.8; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 1.8, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+  }
+}
+// FLAME KING'S FIRE: real particle fire - soft glowing blobs that rise, cool from white-hot through yellow and orange to deep
+// red, and fade. They're left behind in the world, so the fire STREAMS off him when he moves. (Drawn over the fighters:
+// a normal pass for the body of the flame, then an additive pass for the hot cores.)
+const fkFire = [];
+const FK_FIRE_COLS = ['#fff7d6', '#ffd23f', '#ff8a1a', '#e8360e', '#8a1a0a'];
+let fkSprites = null;
+function fkSpriteSet() {
+  return FK_FIRE_COLS.map(col => {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    const n = parseInt(col.slice(1), 16), rgb = (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
+    gr.addColorStop(0, 'rgba(' + rgb + ',1)'); gr.addColorStop(0.35, 'rgba(' + rgb + ',0.75)'); gr.addColorStop(0.7, 'rgba(' + rgb + ',0.25)'); gr.addColorStop(1, 'rgba(' + rgb + ',0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c;
+  });
+}
+function fkEmit(x, y, vx, vy, r, life) {
+  if (fkFire.length > 1400) return;
+  fkFire.push({ x, y, vx, vy, r, life, max: life, seed: Math.random() * 9 });
+}
+const fkRate = (k, dt) => { const c = k * dt; if (!(c > 0)) return 0; return Math.floor(c) + (Math.random() < c % 1 ? 1 : 0); };   // (never negative - a loop counting down from -1 never ends)
+function updateFkFire(dt) {
+  for (let i = fkFire.length - 1; i >= 0; i--) {
+    const q = fkFire[i]; q.life -= dt;
+    if (q.life <= 0) { fkFire[i] = fkFire[fkFire.length - 1]; fkFire.pop(); continue; }
+    q.vx = q.vx * Math.exp(-dt * 3) + Math.sin(time * 9 + q.seed) * 90 * dt;   // (a little lick side to side)
+    q.vy -= 380 * dt;                                                         // (fire rises)
+    q.x += q.vx * dt; q.y += q.vy * dt;
+  }
+}
+function drawFkFire() {
+  if (!fkFire.length && !fighters.some(f => f.look && f.look.flameKing)) return;
+  if (!fkSprites) fkSprites = fkSpriteSet();
+  ctx.save();
+  for (const f of fighters) {                                                // a warm glow on the floor under him
+    if (!f.look || !f.look.flameKing || f.respawnTimer > 0 || f.hbPinned || !f.ground) continue;
+    const g = ctx.createRadialGradient(f.x, f.y, 2, f.x, f.y, 70);
+    g.addColorStop(0, 'rgba(255,140,30,0.28)'); g.addColorStop(1, 'rgba(255,90,20,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(f.x, f.y, 70, 16, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // each blob is stretched into a TONGUE along the way it's moving, and they overlap: the body of the flame first (deep red >
+  // orange), then the hot young ones added on top (yellow > white) so the thick of it burns bright
+  const blob = (q, sp, r, a) => {
+    const v = Math.hypot(q.vx, q.vy), st = 1 + Math.min(1.6, v / 260);
+    ctx.globalAlpha = a; ctx.translate(q.x, q.y); ctx.rotate(Math.atan2(q.vy, q.vx) + Math.PI / 2);
+    ctx.drawImage(sp, -r, -r * st, r * 2, r * 2 * st); ctx.setTransform(T);
+  };
+  const T = ctx.getTransform();
+  for (const q of fkFire) {
+    const k = q.life / q.max, ci = k > 0.7 ? 2 : k > 0.35 ? 3 : 4;
+    blob(q, fkSprites[ci], q.r * (0.8 + 0.5 * (1 - k)), Math.min(1, k * 2.5) * 0.55);
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const q of fkFire) {
+    const k = q.life / q.max; if (k < 0.35) continue;
+    blob(q, fkSprites[k > 0.86 ? 0 : 1], q.r * (0.35 + 0.4 * k), (k - 0.35) * 0.5);
+  }
+  ctx.restore();
+}
+// where his head / shoulders / hands / feet are right now (world space)
+function fkJoints(p) {
+  const pz = p.disp; if (!pz) return null;
+  let f = p.face; if (pz.mirror) f = -f;
+  const sc = (p.look && p.look.scale) || 1, hipY = -(LEG_UP + LEG_LOW - 1) - pz.bob * LEG_SCALE;
+  const hip = { x: 0, y: hipY };
+  const sh = { x: Math.sin(pz.lean) * TORSO * f, y: hipY - Math.cos(pz.lean) * TORSO };
+  const hd = { x: sh.x + Math.sin(pz.lean) * NECK * f, y: sh.y - NECK };
+  const seg = (r, [th, bend], l1, l2) => { const m = { x: r.x + Math.sin(th) * l1 * f, y: r.y + Math.cos(th) * l1 }, a2 = th - bend;
+    return [m, { x: m.x + Math.sin(a2) * l2 * f, y: m.y + Math.cos(a2) * l2 }]; };
+  const [eA, hA] = seg(sh, pz.armA, 16, 15), [eB, hB] = seg(sh, pz.armB, 16, 15);
+  const [kA, fA] = seg(hip, pz.legA, LEG_UP, LEG_LOW), [kB, fB] = seg(hip, pz.legB, LEG_UP, LEG_LOW);
+  const L = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  const pts = { head: hd, sh, hA, hB, fA, fB, wA: L(eA, hA, 0.72), wB: L(eB, hB, 0.72), aA: L(kA, fA, 0.82), aB: L(kB, fB, 0.82) };
+  const c = Math.cos(pz.spin || 0), s2 = Math.sin(pz.spin || 0);
+  for (const k in pts) {
+    let { x, y } = pts[k];
+    if (pz.spin) { const dy = y - hipY; [x, y] = [x * c - dy * s2, hipY + x * s2 + dy * c]; }
+    pts[k] = { x: p.x + x * sc, y: p.y + y * sc };
+  }
+  return { ...pts, f, sc };
+}
+// ENDEAVOR'S DRIP (from the reference): a navy hero suit (his body colour) with orange / yellow stripes across the chest, a black
+// belt, BIG white shoulder pads, white armoured gauntlets and white armoured boots
+const FK_SUIT = { white: '#eef1f6', whiteD: '#b9c0cc', line: '#7d8696', orange: '#ff8a1a', yellow: '#ffc830', belt: '#141418', gold: '#e8b030' };
+// LAVA TUBES: channels of molten rock set into his armour - a dark crust, glowing orange inside, and brighter lava FLOWING
+// along them (a pulse running down the tube). pts: the tube's path; w: how thick
+function fkLavaTube(pts, w) {
+  if (pts.length < 2) return;
+  const path = () => { ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y); };
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#3a0c06'; ctx.lineWidth = w + 2.4; path(); ctx.stroke();                     // the crust
+  ctx.shadowColor = '#ff5a12'; ctx.shadowBlur = 6;
+  ctx.strokeStyle = '#e2400e'; ctx.lineWidth = w; path(); ctx.stroke();                            // the molten channel
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ffd25a'; ctx.lineWidth = w * 0.5; ctx.setLineDash([4, 5]); ctx.lineDashOffset = -time * 26; path(); ctx.stroke();   // the lava flowing through it
+  ctx.restore();
+}
+function drawFkSuit(hip, shoulder, pz, f) {
+  const C = FK_SUIT;
+  const leg = L => { const [th, bend] = L; const mid = { x: hip.x + Math.sin(th) * LEG_UP * f, y: hip.y + Math.cos(th) * LEG_UP };
+    const a2 = th - bend; return { mid, end: { x: mid.x + Math.sin(a2) * LEG_LOW * f, y: mid.y + Math.cos(a2) * LEG_LOW } }; };
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  [[pz.legB, C.whiteD], [pz.legA, C.white]].forEach(([L, col]) => {        // armoured BOOTS: knee to toe
+    const g = leg(L), k0 = { x: lerp(g.mid.x, g.end.x, 0.3), y: lerp(g.mid.y, g.end.y, 0.3) };
+    ctx.strokeStyle = col; ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(k0.x, k0.y); ctx.lineTo(g.end.x, g.end.y); ctx.lineTo(g.end.x + f * 5, g.end.y + 1); ctx.stroke();
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1.2;                         // (the plate lines)
+    for (const t of [0.5, 0.7]) { const x = lerp(g.mid.x, g.end.x, t), y = lerp(g.mid.y, g.end.y, t); ctx.beginPath(); ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y); ctx.stroke(); }
+    const sx = g.end.x - g.mid.x, sy = g.end.y - g.mid.y, sl = Math.hypot(sx, sy) || 1, nx2 = -sy / sl * 3 * f, ny2 = sx / sl * 3 * f;   // LAVA TUBE down the shin
+    fkLavaTube([0.36, 0.6, 0.86].map((t, i) => ({ x: lerp(g.mid.x, g.end.x, t) + nx2 * (i === 1 ? 1.4 : 1), y: lerp(g.mid.y, g.end.y, t) + ny2 * (i === 1 ? 1.4 : 1) })), 2.6);
+  });
+  const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO, nx = -uy, ny = ux;
+  const P = (t, w) => ({ x: lerp(hip.x, shoulder.x, t) + nx * w, y: lerp(hip.y, shoulder.y, t) + ny * w });
+  const chevron = (t, col, w) => { ctx.strokeStyle = col; ctx.lineWidth = w; const a = P(t + 0.1, -5), b = P(t, 0), c = P(t + 0.1, 5);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke(); };
+  chevron(0.62, C.orange, 3); chevron(0.4, C.yellow, 2.6);                 // the orange / yellow stripes across his chest
+  const b0 = P(0.12, -6), b1 = P(0.12, 6);                                 // black belt + a gold buckle
+  fkLavaTube([P(0.12, -7), P(0.1, 0), P(0.12, 7)], 3.6);                // a LAVA TUBE belt round his waist
+  const bk = P(0.11, 0), gl = 3 + Math.sin(time * 6);                      // (its buckle: a glowing core)
+  ctx.fillStyle = '#3a0c06'; ctx.beginPath(); ctx.arc(bk.x + f, bk.y, 3.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd25a'; ctx.beginPath(); ctx.arc(bk.x + f, bk.y, gl * 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// a white armoured GAUNTLET over the forearm (elbow to wrist) - and, on top of it all, the big SHOULDER PAD
+function drawFkArm(shoulder, arm, f, far) {
+  const C = FK_SUIT, [th, bend] = arm;
+  const mid = { x: shoulder.x + Math.sin(th) * 16 * f, y: shoulder.y + Math.cos(th) * 16 };
+  const a2 = th - bend, end = { x: mid.x + Math.sin(a2) * 15 * f, y: mid.y + Math.cos(a2) * 15 };
+  const w = { x: lerp(mid.x, end.x, 0.75), y: lerp(mid.y, end.y, 0.75) };
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.strokeStyle = far ? C.whiteD : C.white; ctx.lineWidth = 13;
+  ctx.beginPath(); ctx.moveTo(lerp(mid.x, end.x, 0.08), lerp(mid.y, end.y, 0.08)); ctx.lineTo(w.x, w.y); ctx.stroke();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1.2;
+  for (const t of [0.3, 0.55]) { const x = lerp(mid.x, end.x, t), y = lerp(mid.y, end.y, t), px = -(end.y - mid.y) / 15 * 6, py = (end.x - mid.x) / 15 * 6;
+    ctx.beginPath(); ctx.moveTo(x - px, y - py); ctx.lineTo(x + px, y + py); ctx.stroke(); }
+  { const px = -(end.y - mid.y) / 15 * 2.5, py = (end.x - mid.x) / 15 * 2.5;   // MAGMA TUBES: down the gauntlet and over the knuckles
+    fkLavaTube([0.12, 0.45, 0.78].map(t => ({ x: lerp(mid.x, end.x, t) + px, y: lerp(mid.y, end.y, t) + py })), 2.4);
+    fkLavaTube([{ x: lerp(mid.x, end.x, 0.86) - px * 1.6, y: lerp(mid.y, end.y, 0.86) - py * 1.6 }, { x: end.x + px * 1.6, y: end.y + py * 1.6 }], 2.2); }
+  // the SHOULDER PAD: a big white plate capping the shoulder, sitting out over the top of the arm
+  ctx.translate(shoulder.x, shoulder.y); ctx.scale(f, 1); ctx.rotate(clamp(th * 0.35, -0.5, 0.9));
+  ctx.fillStyle = far ? C.whiteD : C.white; ctx.strokeStyle = C.line; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(-7, 2); ctx.quadraticCurveTo(-6, -4, 2, -4); ctx.quadraticCurveTo(11, -4, 12, 4); ctx.lineTo(10, 13); ctx.lineTo(-4, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+  fkLavaTube([{ x: -4, y: -1 }, { x: 3, y: 0 }, { x: 10, y: 4 }], 2.4); fkLavaTube([{ x: -2, y: 6 }, { x: 4, y: 7 }, { x: 9, y: 10 }], 2);   // LAVA TUBES in the pad
+  ctx.restore();
+}
+function drawColtenShields() {
+  for (const f of fighters) {
+    if (f.char !== 'COLTEN' || !f.transformed || f.respawnTimer > 0 || f.minion) continue;
+    f.bsFlash = Math.max(0, (f.bsFlash || 0) - 1 / 60); f.bsTextT = Math.max(0, (f.bsTextT || 0) - 1 / 60);
+    const sc = (figureOf(f).look.scale || 1) * COLTEN_SHIELD.size, x = f.x - f.face * COLTEN_SHIELD.back * sc, y = f.y - 62 * sc + Math.sin(time * 3) * 4 * sc;
+    const w = 17 * sc, hh = 25 * sc;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-f.face * 0.12);
+    if (f.bsFlash > 0) { ctx.shadowColor = '#fff3a8'; ctx.shadowBlur = 24 * f.bsFlash / 0.35; }
+    const kite = k => { ctx.beginPath(); ctx.moveTo(-w * k, -hh * k); ctx.lineTo(w * k, -hh * k); ctx.lineTo(w * k, hh * 0.2 * k); ctx.quadraticCurveTo(w * 0.9 * k, hh * 0.75 * k, 0, hh * k); ctx.quadraticCurveTo(-w * 0.9 * k, hh * 0.75 * k, -w * k, hh * 0.2 * k); ctx.closePath(); };
+    ctx.fillStyle = '#e8c64a'; kite(1); ctx.fill();                       // gold rim
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#b9c1ca'; kite(0.86); ctx.fill();                    // steel
+    ctx.fillStyle = '#2f9a3a'; kite(0.7); ctx.fill();                     // the green field
+    ctx.fillStyle = '#e8c64a'; ctx.fillRect(-2.2 * sc, -hh * 0.55, 4.4 * sc, hh * 1.05); ctx.fillRect(-w * 0.45, -hh * 0.2, w * 0.9, 4.4 * sc);   // a gold cross
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.25 + 0.6 * (f.bsFlash || 0)) + ')'; ctx.beginPath(); ctx.ellipse(-w * 0.35, -hh * 0.55, w * 0.25, hh * 0.12, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+// FLAME KING'S FACE (the fire itself is particles - see fkFire): red spiky hair, a fierce eye, and two smooth flame brows
+// sweeping up and out over it (Endeavor's glare). Behind him: a soft heat glow.
+const FK_LAYERS = [['#c81e0e', 1, 1], ['#ff6a14', 0.74, 0.8], ['#ffb02e', 0.48, 0.58], ['#fff0a0', 0.22, 0.32]];
+function fkTongue(x, y, ang, w, h, seed) {
+  const fl = 0.85 + 0.22 * Math.abs(Math.sin(time * 11 + seed * 2.3));
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  for (const [col, kw, kh] of FK_LAYERS) {
+    const W = w * kw, H = h * kh * fl, sw = Math.sin(time * 8 + seed * 1.7) * W * 0.35;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(-W / 2, 0);
+    ctx.bezierCurveTo(-W * 0.6, -H * 0.45, -W * 0.05 + sw * 0.5, -H * 0.75, sw, -H);
+    ctx.bezierCurveTo(W * 0.15 + sw * 0.5, -H * 0.65, W * 0.6, -H * 0.4, W / 2, 0);
+    ctx.quadraticCurveTo(0, W * 0.4, -W / 2, 0); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawFlameKingFire(head, shoulder, f, fig, pass) {
+  ctx.save();
+  if (pass === 'back') {
+    const g = ctx.createRadialGradient(head.x, head.y + 10, 4, head.x, head.y + 10, 60);
+    g.addColorStop(0, 'rgba(255,170,40,0.4)'); g.addColorStop(0.55, 'rgba(255,90,20,0.16)'); g.addColorStop(1, 'rgba(255,60,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(head.x, head.y + 10, 60, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#a61c12';                                             // red spiky hair (no crown)
+    for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(head.x + k * 4 - 3, head.y - 9); ctx.lineTo(head.x + k * 5 + f * 2, head.y - 20 - (2 - Math.abs(k)) * 3); ctx.lineTo(head.x + k * 4 + 3, head.y - 9); ctx.fill(); }
+    const ex = head.x + f * 6, ey = head.y - 1;                            // the fierce eye (no face flames)
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(ex, ey, 3.6, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a2a3a'; ctx.beginPath(); ctx.arc(ex + f * 0.8, ey + 0.2, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#3a0a06'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(ex - f * 4, ey - 3.4); ctx.lineTo(ex + f * 4, ey - 1.2); ctx.stroke();
+  }
+  ctx.restore();
+}
+function fkAmbient(f, dt) {
+  if (!f.look || f.minion) return;
+  if (f.char === 'COLTEN') coltenFuryTick(f, dt);                    // (Colten's FURY meter)
+  if (f.look.flameKing && f.respawnTimer <= 0 && !f.hbPinned) {
+    const J = fkJoints(f);
+    if (J) {
+      const R = Math.random, H = J.head, S = J.sh, fc = J.f, sc = J.sc;
+      const busy = f.action && f.action.type === 'attack';
+      for (let i = fkRate(60, dt); i--;) { const k = Math.floor(R() * 5) - 2;                                           // little flames off the tips of his hair
+        fkEmit(H.x + (k * 5 + (R() - 0.5) * 3) * sc, H.y - (18 + (2 - Math.abs(k)) * 3) * sc, (R() - 0.5) * 30, -90 - R() * 80, (3.5 + R() * 2.5) * sc, 0.12 + R() * 0.1); }
+      for (let i = fkRate(150, dt); i--;) { const side = R() < 0.55 ? 1 : -1;                                               // the SHOULDERS (rolling up behind the pads)
+        fkEmit(S.x + side * fc * (11 + R() * 8) * sc, S.y + 2 * sc, side * fc * (70 + R() * 90), -130 - R() * 110, (6 + R() * 5) * sc, 0.22 + R() * 0.14); }   // (out to the SIDES - his face stays clear)
+      for (const w of [J.wA, J.wB]) for (let i = fkRate(busy ? 120 : 55, dt); i--;) { const ang = R() * Math.PI * 2;      // FLAMING CUFFS (a ring of fire at each wrist)
+        fkEmit(w.x + Math.cos(ang) * 6 * sc, w.y + Math.sin(ang) * 4 * sc, Math.cos(ang) * 30, -70 - R() * 90, (3.5 + R() * 2.5) * sc, 0.14 + R() * 0.1); }
+      for (const an of [J.aA, J.aB]) for (let i = fkRate(Math.abs(f.vx) > 220 ? 80 : 50, dt); i--;) { const ang = R() * Math.PI * 2;   // FLAMING ANKLES
+        fkEmit(an.x + Math.cos(ang) * 8 * sc, an.y + Math.sin(ang) * 3 * sc, Math.cos(ang) * 40, -60 - R() * 80, (4.5 + R() * 3) * sc, 0.16 + R() * 0.1); }
+      { const sa = f.action, sm = sa && sa.type === 'attack' && sa.move;     // FIREBALL SPIN: a fireball in each hand + a ring of fire round him
+        if (sm && sm.fkSpin && sa.phase !== 'end') {
+          for (const h of [J.hA, J.hB]) if (h) for (let i = fkRate(160, dt); i--;) fkEmit(h.x + (R() - 0.5) * 14, h.y + (R() - 0.5) * 14, (R() - 0.5) * 80, -60 - R() * 80, (7 + R() * 5) * sc, 0.16 + R() * 0.1);
+          if (sa.phase === 'active') for (let i = fkRate(140, dt); i--;) { const ang = R() * Math.PI * 2, rr = 52 * sc;
+            fkEmit(f.x + Math.cos(ang) * rr, f.y - 58 * sc + Math.sin(ang) * rr * 0.35, -Math.sin(ang) * 260, Math.cos(ang) * 90 - 40, (6 + R() * 4) * sc, 0.12 + R() * 0.06); }
+        } }
+      const a = f.action, m = a && a.type === 'attack' && a.move;           // the fireball in his hand (charging / stored)
+      const c = m && m.fkBall && a.fx === 'charge' ? a.c : (f.fkStore || 0);
+      if (c > 0) for (let i = fkRate(30 + 70 * c, dt); i--;) { const ang = R() * Math.PI * 2, d = (4 + 14 * c) * R();
+        fkEmit(f.x + f.face * 38 + Math.cos(ang) * d, f.y - 62 + Math.sin(ang) * d, (R() - 0.5) * 40, -60 - R() * 80, 4 + 6 * c, 0.2 + R() * 0.12); }
+    }
+  }
+  if (f.look.roshi && !(f.action && f.action.type === 'omKameCb')) {       // THE OLD MAN: MAX POWER while transformed / in his ultimate
+    if (omMaxNow(f) && !f.look.roshiMax) { f._omBase = f.look; f.look = omMaxLook(f.look); }
+    else if (!omMaxNow(f) && f.look.roshiMax && f._omBase) { f.look = f._omBase; f._omBase = null; }
+  }
+  if (f.look.roshi && f.action && f.action.type === 'attack' && f.action.move && (f.action.move.omCounter || f.action.move.omStance) && f.action.fx && f.action.fx !== 'out' && f.action.fx !== 'whiff' && Math.random() < dt * 30)
+    particles.push({ x: f.x + (Math.random() - 0.5) * 40, y: f.y - 10 - Math.random() * 70, vx: 0, vy: -140, life: 0.35, max: 0.35, size: 2, color: f.action.move.omCounter ? '#ffffff' : '#b98cff', type: 'bit', grav: 0 });
+}
+
+// =====================================================================
+//  THE OLD MAN - a tiny old martial arts master (turtle shell, sunglasses, long white beard) who's faster than he looks
+//  side K = AFTERIMAGE RUSH, up K = FLASH STEP, neutral K = TURTLE WAVE, down K = WEAVE COUNTER (a hit in the window: he
+//  weaves round to their OTHER side and strikes - a low pop-up he can combo from)
+// =====================================================================
+const OM = { counterFrom: 0.03, counterWin: 0.55, whiffLag: 0.35, flash: 250, elec: '#b47cff', elecMult: 1.35, cpuElec: 0.35 };
+// THE OLD MAN fights like REINA (Tekken 8): TAIDO footwork + hard-hitting MISHIMA KARATE - fast, aggressive and built round
+// STANCES. Low, wide karate stance: lead hand open and out, rear fist chambered at the hip.
+//   SENTAI (side K): a lightning-fast step in, low to the floor. From it: J = SENTAI FLIP KICK (Taido somersault launcher),
+//     K = SPINNING DEMON (heel kick, a KO move), DOWN = HELL SWEEP. Block (or wait) to drop it.
+//   HEAVEN'S WRATH: his J string (jab > cross > spinning backfist) drops him into it. From it: J = THUNDER PALM (electric,
+//     launches), K = SPINNING DEMON, DOWN = HELL SWEEP.
+//   WIND GOD FIST (up J): the Mishima uppercut. Tap J AGAIN while he's crouched into it = an ELECTRIC: purple lightning,
+//     hits a lot harder.
+const OM_STANCE = pose({ lean: 0.12, bob: -14, legA: [0.85, 0.6], legB: [-0.8, 0.25], armA: [1.25, -0.9], armB: [-0.5, -1.9] });
+const OM_ROCKET = { wind: 0.12, power: 0.85, charge: 0.35, beam: 0.45, rise: 1250, riseT: 0.36, drift: 260, headT: 0.14, endlag: 0.25,
+                    head: { dmg: 8, base: 380, growth: 5, angle: 82 } };
+const OM_GUARD = pose({ lean: 0.1, bob: -12, legA: [0.8, 0.7], legB: [-0.7, 0.3], armA: [1.3, -1.6], armB: [0.9, -2.0] });
+const OM_SENTAI = pose({ lean: 0.5, bob: -26, legA: [1.15, 1.45], legB: [-0.95, 0.3], armA: [0.95, -0.5], armB: [-0.7, -0.4] });
+const OM_HEW = pose({ lean: -0.06, bob: -6, legA: [0.5, 0.3], legB: [-0.45, 0.1], armA: [2.4, -1.2], armB: [1.2, -1.7] });
+function omElectric(x, y, big) {                                     // Mishima lightning (Reina's is PURPLE)
+  for (let k = 0; k < (big ? 9 : 5); k++) bolt(x + (Math.random() - 0.5) * 20, y + (Math.random() - 0.5) * 20, Math.random() * Math.PI * 2, 30 + Math.random() * (big ? 70 : 40), 0.14, k % 2 ? '#ffffff' : OM.elec);
+  burst(x, y, [OM.elec, '#ffffff', '#d9c2ff'], big ? 22 : 10, 0, Math.PI, big ? 560 : 360, { grav: 0 });
+}
+const omGo = (f, key, btn) => {                                      // straight into another of his moves (a stance follow-up)
+  const m = f.moveset[key]; if (!m) return false;
+  f.atkBuf = f.spcBuf = 0;
+  f.action = { type: 'attack', key, move: m, btn, phase: 'startup', t: 0, charge: 0, mult: 1, hit: new Set(), air: !f.ground, started: time };
+  ghosts.push({ fig: figureOf(f), life: 0.16, max: 0.16, color: OM.elec });
+  return true;
+};
+// a STANCE: holds the pose (stepping in first, if it has a step), and branches on J / K / DOWN - or drops out
+function omStanceMove(name, st, o) {
+  return { name, startup: 0, active: o.dur, endlag: 0.14, landLag: 0.08, omStance: true, wind: st, strike: st,
+    step(f, a, dt, inp) {
+      if (a.fx === undefined) { a.fx = 'in'; a.phase = 'active'; a.t = 0; f.atkBuf = f.spcBuf = 0; if (o.step) { sfx.whoosh(true); dust(f.x, f.y, 6, 1.2); } }
+      if (a.fx === 'in') {
+        a.poseOverride = st;
+        if (o.step && a.t < o.stepT && !a.stepDone && fighters.some(t => t !== f && !allies(f, t) && t.respawnTimer <= 0 && !t.minion && Math.abs(t.y - f.y) < 90 && (t.x - f.x) * f.face > 0 && (t.x - f.x) * f.face < 52)) { a.stepDone = true; f.vx = 0; }   // (stops right in their face)
+        if (o.step && a.t < o.stepT && !a.stepDone) {                 // the step in: low, fast, after-images
+          f.vx = f.face * o.step; if (!f.ground) f.vy = Math.min(f.vy, 0);
+          a.ghostT = (a.ghostT || 0) - dt; if (a.ghostT <= 0) { a.ghostT = 0.025; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#ffffff' }); }
+          if (f.ground && !f.onPlatform && !wideFloor()) { const e = f.face > 0 ? STAGE.x + STAGE.w - 16 : STAGE.x + 16; if ((f.x - e) * f.face > 0) { f.x = e; f.vx = 0; } }
+        } else if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt * 2); else f.vy = Math.min(f.vy, 160);
+        if (Math.random() < dt * 14) bolt(f.x + (Math.random() - 0.5) * 30, f.y - 20 - Math.random() * 50, Math.random() * Math.PI * 2, 14, 0.06, OM.elec);
+        if (a.t > 0.04 && (f.atkBuf > 0 || f.spcBuf > 0)) {
+          const btn = f.atkBuf > 0 ? 'atk' : 'spc', key = inp.down ? o.down : btn === 'atk' ? o.j : o.k;
+          if (key && omGo(f, key, btn)) return true;
+        }
+        if (inp.blockTap && a.t > 0.04) { f.action = null; return true; }
+        if (a.t >= o.dur) { a.fx = 'out'; a.phase = 'end'; a.t = 0; a.poseOverride = null; }
+        return true;
+      }
+      if (a.t >= 0.14) f.action = null;
+      return true;
+    } };
+}
+const OM_BASE = {};
+for (const [k, m] of Object.entries(STICKMAN_MOVES)) OM_BASE[k] = { ...m, startup: m.startup * 0.8, endlag: m.endlag * 0.85 };   // (quicker than he looks)
+for (const k of ['nairR', 'fairR', 'bairR', 'dairR']) delete OM_BASE[k];
+const OLDMAN_MOVES = {
+  ...OM_BASE,
+  nair: { ...OM_BASE.nair, name: 'Taido Spin Kick' },
+  uair: { ...OM_BASE.uair, name: 'Somersault Kick' },
+  fair: { ...OM_BASE.fair, name: 'Flying Side Kick' },
+  // ---- J STRING: jab > cross > SPINNING BACKFIST, into HEAVEN'S WRATH ----
+  jab: { name: 'Taido Jab', startup: 0.04, active: 0.05, endlag: 0.1, lunge: 320, combo: 'jab2',
+    hitboxes: [{ x: 32, y: -56, r: 15, dmg: 3, base: 120, growth: 0.6, angle: 45 }],
+    wind: pose({ ...OM_STANCE, armA: [1.0, -1.7], lean: 0.1 }), strike: pose({ ...OM_STANCE, armA: [1.57, 0], lean: 0.32 }) },
+  jab2: { name: 'Mishima Cross', startup: 0.04, active: 0.06, endlag: 0.1, lunge: 340, combo: 'jab3',
+    hitboxes: [{ x: 34, y: -58, r: 16, dmg: 3.5, base: 130, growth: 0.6, angle: 50 }],
+    wind: pose({ ...OM_STANCE, armB: [-0.6, -1.8], lean: 0.05 }), strike: pose({ ...OM_STANCE, armB: [1.57, 0], armA: [0.2, -2.0], lean: 0.4 }) },
+  jab3: { name: 'Spinning Backfist', startup: 0.07, active: 0.07, endlag: 0.2, lunge: 380,
+    hitboxes: [{ x: 36, y: -60, r: 20, dmg: 6, base: 250, growth: 2.4, angle: 40 }],
+    wind: pose({ lean: -0.1, bob: -10, spin: -0.5, armA: [-1.2, -0.6], armB: [-0.6, -1.4], legA: [0.6, 0.5], legB: [-0.6, 0.3] }),
+    strike: pose({ lean: 0.1, bob: -10, armA: [1.8, 0], armB: [-0.8, -1.2], legA: [0.8, 0.6], legB: [-0.7, 0.2] }),
+    step(f, a) {                                                   // ...and he flows straight into HEAVEN'S WRATH
+      if (a.phase === 'end' && a.t >= 0.05) { omGo(f, 'omHEW', 'atk'); return true; }
+      return false;
+    } },
+  // ---- the Mishima moves ----
+  sideGround: { name: 'Demon Paw', startup: 0.13, active: 0.08, endlag: 0.26, charge: true, lunge: 300,
+    hitboxes: [{ x: 40, y: -56, r: 22, dmg: 12, base: 400, growth: 6.4, angle: 38 }],
+    wind: pose({ ...OM_STANCE, armA: [-0.5, -1.3], lean: -0.2 }),
+    strike: pose({ lean: 0.5, bob: -14, armA: [1.57, 0], armB: [-0.6, -1.6], legA: [1.05, 0.65], legB: [-0.95, 0.1] }),
+    onHit(f, t) { omElectric(t.x, t.y - 55, false); } },
+  upGround: { name: 'Wind God Fist', startup: 0.13, active: 0.08, endlag: 0.24, lunge: 260,
+    hitboxes: [{ x: 26, y: -76, r: 22, dmg: 9, base: 340, growth: 4.6, angle: 85 }],
+    wind: pose({ lean: 0.45, bob: -26, legA: [1.15, 1.4], legB: [-0.85, 0.4], armA: [0.3, -2.3], armB: [-0.6, -1.5] }),
+    strike: pose({ lean: -0.15, bob: 0, legA: [0.35, 0.15], legB: [-0.4, 0.1], armA: [2.95, -0.1], armB: [-0.7, -1.2] }),
+    step(f, a, dt) {                                               // ELECTRIC: J tapped again during the crouch
+      if (a.phase === 'startup' && !a.elec) {
+        if (a.wantE === undefined) a.wantE = f.controller === 'dummy' && Math.random() < OM.cpuElec;
+        if ((f.atkBuf > 0 && a.t >= 0.015) || (a.wantE && a.t > 0.06)) {
+          a.elec = true; a.mult *= OM.elecMult; f.atkBuf = 0;
+          omElectric(f.x + f.face * 20, f.y - 40, false); sfx.clash(false);
+        }
+      }
+      if (a.elec && a.phase === 'active' && Math.random() < dt * 60) { const h = (figureTips(f) || {}).hA; if (h) bolt(h.x, h.y, Math.random() * Math.PI * 2, 24, 0.06, Math.random() < 0.5 ? '#ffffff' : OM.elec); }
+      return false;
+    },
+    onHit(f, t, a) {
+      if (!a.elec) return;
+      omElectric(t.x, t.y - 60, true); hitstop = Math.max(hitstop, 0.14); shake = Math.max(shake, 12);
+      impactFrame = Math.max(impactFrame, 0.06); impactAt = { x: t.x, y: t.y - 60, ang: Math.PI / 2, all: false, focus: true };
+      painTexts.push({ x: t.x, y: t.y - 140, t: 0.8, max: 0.8, text: 'ELECTRIC!', big: true });
+    } },
+  downGround: { name: 'Hell Sweep', startup: 0.1, active: 0.1, endlag: 0.26,
+    hitboxes: [{ x: 46, y: -10, r: 22, dmg: 9, base: 280, growth: 3.4, angle: 78 }, { x: -40, y: -10, r: 20, dmg: 9, base: 280, growth: 3.4, angle: 102 }],
+    wind: pose({ bob: -28, lean: 0.5, legA: [0.9, 1.5], legB: [-0.4, 1.2], armA: [0.5, -0.3], armB: [0.2, -0.3] }),
+    strike: pose({ bob: -32, lean: 0.55, spin: 0.3, legA: [1.6, 0], legB: [-0.5, 1.4], armA: [0.6, 0], armB: [0.3, 0] }) },
+  // ---- the stance follow-ups ----
+  omFlipKick: { name: 'Sentai Flip Kick', startup: 0.06, active: 0.12, endlag: 0.22, landLag: 0.1, hop: 640,
+    hitboxes: [{ x: 22, y: -92, r: 26, dmg: 10, base: 360, growth: 4.8, angle: 86 }],
+    wind: pose({ bob: -20, lean: 0.4, legA: [0.9, 1.4], legB: [-0.5, 1.0], armA: [-0.8, -0.4], armB: [-1.0, -0.3] }),
+    strike: pose({ lean: -0.4, spin: -0.9, legA: [3.0, 0], legB: [0.5, 1.6], armA: [-1.2, -0.2], armB: [-1.6, -0.2] }) },
+  omSpinDemon: { name: 'Spinning Demon', startup: 0.1, active: 0.1, endlag: 0.28, landLag: 0.12, hop: 300,
+    hitboxes: [{ x: 46, y: -62, r: 26, dmg: 13, base: 430, growth: 6.6, angle: 35 }],
+    wind: pose({ lean: 0.2, spin: -1.2, legA: [0.7, 1.0], legB: [-0.5, 0.4], armA: [-0.6, -0.8], armB: [0.6, -1.4] }),
+    strike: pose({ lean: -0.55, legA: [1.75, 0], legB: [-0.3, 0.4], armA: [-1.4, -0.3], armB: [1.0, -0.8] }),
+    onHit(f, t) { omElectric(t.x, t.y - 60, false); } },
+  omThunderPalm: { name: 'Thunder Palm', startup: 0.08, active: 0.08, endlag: 0.26, lunge: 380,
+    hitboxes: [{ x: 38, y: -58, r: 24, dmg: 12, base: 380, growth: 5.8, angle: 58 }],
+    wind: pose({ ...OM_HEW, armA: [-0.4, -1.4], armB: [-0.6, -1.2] }),
+    strike: pose({ lean: 0.5, bob: -12, armA: [1.57, 0], armB: [1.4, 0.05], legA: [1.0, 0.6], legB: [-0.9, 0.1] }),
+    onHit(f, t) { omElectric(t.x, t.y - 58, true); hitstop = Math.max(hitstop, 0.1); } },
+  omSentai: omStanceMove('Sentai', OM_SENTAI, { dur: 0.5, step: 1500, stepT: 0.13, j: 'omFlipKick', k: 'omSpinDemon', down: 'downGround' }),
+  omHEW: omStanceMove("Heaven's Wrath", OM_HEW, { dur: 0.5, j: 'omThunderPalm', k: 'omSpinDemon', down: 'downGround' }),
+  // ---- K ----
+  neutralRanged: { name: 'Kamehameha', startup: 0.14, active: 0.4, endlag: 0.22, charge: true, landLag: 0.1, beam: true,
+    chargeSfx: 'kame', chargeRate: 2.0, airHover: true,                  // (charges twice as fast - and it tops out at HALF of Lance's)
+    wind: pose({ ...OM_STANCE, armA: [-0.6, -1.6], armB: [-0.5, -1.6], lean: -0.2 }),
+    strike: pose({ ...OM_STANCE, armA: [1.57, 0], armB: [1.45, 0.05], lean: 0.25 }),
+    fire(f, mult, c) {
+      spawnBeam(f, mult * 0.7, Math.min(c, 0.5), 0, 0);
+      const b = projectiles[projectiles.length - 1];
+      b.grow *= 1.6; b.maxLen *= 0.85; b.w *= 0.8; b.life = b.max = 0.38;
+      b.tick = { ...b.tick, dmg: b.tick.dmg * 0.7 }; b.final = { ...b.final, dmg: b.final.dmg * 0.7, growth: b.final.growth * 0.8 };
+    } },
+  sideRanged: null,                                                  // (side K = SENTAI - set just below)
+  // ---- UP K: KAMEHAMEHA ROCKET - fired straight DOWN beneath him: it blasts him up into a HEADBUTT. The beam itself is a
+  //      normal Kamehameha (normal damage and knockback) - great for covering the side of the stage under him ----
+  upRanged: { name: 'Kamehameha Rocket', startup: 0.12, active: 0.5, endlag: 0.25, landLag: 0.14,
+    wind: pose({ lean: 0.1, bob: -12, legA: [0.5, 0.9], legB: [-0.4, 0.8], armA: [-0.5, -1.4], armB: [-0.4, -1.5] }),
+    strike: pose({ lean: -0.05, bob: -4, legA: [0.2, 0.4], legB: [-0.25, 0.5], armA: [0.12, 0], armB: [-0.05, 0.05] }),
+    step(f, a, dt, inp) {
+      const K = OM_ROCKET, sc = (f.look && f.look.scale) || 1;
+      if (a.fx === undefined) { a.fx = 'wind'; a.phase = 'startup'; a.t = 0; a.can = f.ground || !f.upSpecialUsed; }
+      if (a.fx === 'wind') {                                         // hands cupped down at his side - KA... ME... HA... ME...
+        if (!f.ground) f.vy = Math.min(f.vy, 40); f.vx *= Math.exp(-dt * 8);
+        if (Math.random() < dt * 40) burst(f.x + f.face * 6, f.y - 30, ['#ffffff', '#8fe3ff'], 1, Math.PI / 2, 2, 160, { grav: 0 });
+        if (a.t >= K.wind) {
+          if (!a.can) { a.fx = 'end'; a.phase = 'end'; a.t = 0; return true; }
+          spawnBeam(f, K.power, K.charge, 0, 1);                     // ...HA! straight DOWN
+          const b = projectiles[projectiles.length - 1]; if (b && b.kind === 'beam') { b.life = b.max = K.beam; b.color = '#8fe3ff'; }
+          f.upSpecialUsed = true; f.ground = false; f.onPlatform = null; f.y -= 2; a.air = true;
+          a.fx = 'rise'; a.phase = 'active'; a.t = 0;
+          shake = Math.max(shake, 8); dust(f.x, f.y, 10, 1.8); ring(f.x, f.y - 10);
+        }
+        return true;
+      }
+      if (a.fx === 'rise') {                                         // the blast rockets him up
+        f.vy = -K.rise * (1 - 0.5 * a.t / K.riseT); f.vx = approach(f.vx, (inp.dir || 0) * K.drift, 2400 * dt);
+        a.ghostT = (a.ghostT || 0) - dt; if (a.ghostT <= 0) { a.ghostT = 0.03; ghosts.push({ fig: figureOf(f), life: 0.18, max: 0.18, color: '#8fe3ff' }); }
+        if (a.t >= K.riseT) { a.fx = 'head'; a.t = 0; sfx.whoosh(true); }
+        return true;
+      }
+      if (a.fx === 'head') {                                         // ...straight into a HEADBUTT
+        a.poseOverride = pose({ lean: 0.55, bob: -4, legA: [-0.4, 0.6], legB: [-0.7, 0.9], armA: [-0.9, -0.4], armB: [-1.1, -0.3] });
+        f.vy = Math.min(f.vy, -300);
+        fxHit(f, a, f.x + f.face * 14, f.y - 92 * sc, 28, K.head, f.face, 'head');
+        if (a.t >= K.headT) { a.fx = 'end'; a.phase = 'end'; a.t = 0; a.poseOverride = null; }
+        return true;
+      }
+      if (a.t >= K.endlag) f.action = null;
+      return true;
+    } },
+  // ---- DOWN K: WEAVE COUNTER (see omWeave - the hit's checked in applyHit) ----
+  downRanged: { name: 'Weave Counter', startup: 0, active: OM.counterWin, endlag: OM.whiffLag, landLag: 0.1, omCounter: true,
+    wind: OM_GUARD, strike: OM_GUARD,
+    step(f, a, dt) {
+      if (a.fx === undefined) { a.fx = 'stance'; a.phase = 'active'; a.t = 0; sfx.shing(); }
+      if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 120);
+      if (a.fx === 'stance') { if (a.t >= OM.counterWin) { a.fx = 'whiff'; a.phase = 'end'; a.t = 0; } return true; }
+      if (a.t >= OM.whiffLag) f.action = null;
+      return true;
+    } },
+  // the strike he weaves into: a quick low pop-up he can follow up on
+  omWeaveHit: { name: 'Weave Strike', startup: 0.04, active: 0.07, endlag: 0.12,
+    hitboxes: [{ x: 30, y: -56, r: 26, dmg: 7, base: 250, growth: 1.6, angle: 78 }],
+    wind: pose({ lean: -0.1, armA: [0.4, -2.0], armB: [0.2, -1.8], legA: [0.6, 0.5], legB: [-0.5, 0.2] }),
+    strike: pose({ lean: 0.3, armA: [2.4, 0], armB: [-0.5, -1.0], legA: [0.8, 0.6], legB: [-0.7, 0.1] }) },
+};
+OLDMAN_MOVES.sideRanged = OLDMAN_MOVES.omSentai;
+// ---- THE OLD MAN'S COMEBACK: MAX POWER KAMEHAMEHA ----
+// Knocked out on his LAST stock with a FULL meter (once a match) - whichever way he went out: he doesn't go. The match stops
+// and he hangs right THERE, where he was knocked out, bulks up to MAX POWER and charges a Kamehameha over "My limitations can
+// go straight to hell" (2:21 - 2:34) - and on the SCREAM it goes off, aimed at WHOEVER KNOCKED HIM OUT (or, if they're gone,
+// the nearest opponent): a huge beam - as thick as the floor is from Ruins' top platform - from his hands right out past the
+// KO lines, locked in the moment it fires. The match comes back to life just before it fires: Z vanish through it or
+// PERFECT BLOCK it - anyone else is carried off and blasted away. Then he's left out there and has to make it back himself
+// (every Z vanish refilled).
+const OM_CB = { src: 'sounds/battle/oldman-comeback.wav', vol: 1.0, len: 13.0, chargeT: 2.4, fire: 5.2, beamT: 2.8, free: 0.6,
+                h: (STAGE.y - (265 - 40)) * 1.25, near: 0.5, flare: 240, margin: 150, maxLen: 3200,   // (h: floor to past Ruins' top platform, +25%)
+                grow: 4200, every: 0.1, invuln: 1.0,
+                tick: { dmg: 1.2, base: 120, growth: 0, angle: 10, noStop: true, ultHit: true },
+                final: { dmg: 12, base: 950, growth: 7, angle: 30, ultFinal: true, ultHit: true, xray: 'RIBS' } };
+function playOmSong(f) {
+  stopOmSong(f);
+  if (!soundOn) return null;
+  let el; try { el = new Audio(OM_CB.src); } catch (e) { return null; }
+  el.preload = 'auto'; el.volume = clamp(OM_CB.vol * settings.master * settings.music * 1.6, 0, 1);
+  el.play().catch(() => {});
+  const h = { el, at: performance.now() }; f.omSong = h;
+  return h;
+}
+function stopOmSong(f, fade = 0) {
+  const h = f && f.omSong; if (!h) return; f.omSong = null;
+  const el = h.el; if (!el) return;
+  if (!fade) { try { el.pause(); } catch (e) {} return; }
+  const v0 = el.volume, t0 = performance.now(), ms = fade * 1000;
+  const step = () => { const k = 1 - (performance.now() - t0) / ms; if (k <= 0) { try { el.pause(); } catch (e) {} return; } el.volume = Math.max(0, v0 * k); requestAnimationFrame(step); }; step();
+}
+function startOmComeback(f) {
+  f.omCbUsed = true; f.ult = 0; f.ultPower = 1;
+  const M = OM_CB.margin, x0 = clamp(f.x, BLAST.left + M, BLAST.right - M), y0 = clamp(f.y, BLAST.top + M, BLAST.bottom - M);   // (right where he went out)
+  let by = f.lastHitBy; if (by && by.minion && by.owner) by = by.owner;
+  Object.assign(f, { respawnTimer: 0, shielding: false, vx: 0, vy: 0, x: x0, y: y0, ground: false, onPlatform: null });
+  f.invuln = Math.max(f.invuln || 0, 1);
+  f.action = { type: 'omKameCb', t: 0, T: 0, freeze: true, ev: new Set(), look0: f.look, safe: new Set(), tickT: 0, x0, y0, foe: by,
+               cam: { x: x0, y: y0 - 60, z: 1.2, speed: 3 } };
+  omAimAt(f, f.action, 99);
+  ultBanner = { t: 1.6, title: 'COMEBACK', name: 'MAX POWER KAMEHAMEHA', color: '#8fe3ff', who: f };
+  burst(x0, y0 - 50, ['#ffffff', '#8fe3ff', '#cfe8ff'], 40, 0, Math.PI, 700, { grav: 0 }); ring(x0, y0 - 50);
+  shake = Math.max(shake, 14); sfx.huge ? sfx.huge() : sfx.slam();
+  playOmSong(f);
+}
+// who he's aiming at: whoever knocked him out (if they're still in it), otherwise the nearest opponent
+function omTarget(f, a) {
+  const ok = o => o && o !== f && fighters.includes(o) && !o.minion && !o.out && o.respawnTimer <= 0 && !allies(f, o);
+  if (ok(a.foe)) return a.foe;
+  let best = null, bd = Infinity;
+  for (const o of fighters) if (ok(o)) { const d = Math.hypot(o.x - f.x, o.y - f.y); if (d < bd) { bd = d; best = o; } }
+  return best;
+}
+// turn the aim toward the target (at most `rate` radians a second - 99 = snap)
+function omAimAt(f, a, rate, dt = 1) {
+  const t = omTarget(f, a), hx = f.x, hy = f.y - 50 * ((f.look && f.look.scale) || 1);
+  const want = t ? Math.atan2((t.y - hurtH(t) / 2) - hy, t.x - hx) : Math.atan2(STAGE.y - 100 - hy, (stageL() + stageR()) / 2 - hx);
+  if (a.ang === undefined || rate >= 99) a.ang = want;
+  else { let d = want - a.ang; d = Math.atan2(Math.sin(d), Math.cos(d)); a.ang += clamp(d, -rate * dt, rate * dt); }
+  f.face = Math.cos(a.ang) >= 0 ? 1 : -1;
+}
+const OM_P = {
+  flex: pose({ lean: -0.18, bob: -10, legA: [0.5, 0.9], legB: [-0.4, 0.8], armA: [0.35, -1.6], armB: [-0.35, -1.6] }),
+  cup: pose({ lean: -0.1, bob: -10, legA: [0.5, 0.9], legB: [-0.4, 0.8], armA: [-0.7, -1.5], armB: [-0.6, -1.6] }),
+};
+// his arms thrust out along the aim (0 = straight down, PI/2 = straight ahead, PI = straight up)
+const omAimPose = a => { const arm = Math.PI / 2 + Math.atan2(-Math.sin(a.ang), Math.abs(Math.cos(a.ang)));   // (up = PI, ahead = PI/2, down = 0)
+  return pose({ lean: 0.2, bob: -10, legA: [0.6, 0.8], legB: [-0.7, 0.4], armA: [arm, 0], armB: [arm - 0.12, 0.05] }); };
+// the beam's half-thickness this far along it (it flares out from his hands to full size)
+const omBeamHalf = d => OM_CB.h / 2 * lerp(OM_CB.near, 1, clamp(d / OM_CB.flare, 0, 1));
+function stepOmKameCb(f, a, dt) {
+  const C = OM_CB;
+  a.T += dt;
+  { const h = f.omSong; if (h && h.el && !h.el.paused && !netActive()) { const ct = h.el.currentTime; if (ct > 0.05 && Math.abs(ct - a.T) < 0.6) a.T = ct; } }   // (offline: locked to the song)
+  const T = a.T, ev = k => (a.ev.has(k) ? false : (a.ev.add(k), true));
+  f.vx = 0; f.vy = 0; f.ground = false; f.invuln = Math.max(f.invuln || 0, 0.2);
+  f.x = a.x0; f.y = a.y0;                                                    // (he hangs right where he went out)
+  const sc = f.look.scale || 1;
+  const bulk = clamp((T - 0.2) / 1.6, 0, 1);                                 // MAX POWER: he bulks right up
+  if (bulk > 0) f.look = { ...a.look0, scale: (a.look0.scale || 1) * (1 + (OM_MAX.scale - 1) * bulk), muscle: bulk > 0.3, roshiMax: bulk > 0.3 };
+  a.freeze = T < C.fire - C.free;
+  const endT = C.fire + C.beamT, t = omTarget(f, a);
+  const frame = (pad, zMax) => { const xs = [f.x, t ? t.x : f.x], ys = [f.y - 50, t ? t.y - 50 : f.y - 50];
+    return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2,
+             z: clamp(Math.min(W / (Math.max(...xs) - Math.min(...xs) + pad), H / (Math.max(...ys) - Math.min(...ys) + pad * 0.7)), 0.42, zMax), speed: 3 }; };
+  if (T < C.fire) omAimAt(f, a, 99, dt);                                   // (it aims while he charges - once it fires, it's LOCKED)
+  a.hx = f.x + Math.cos(a.ang) * 26 * sc; a.hy = f.y - 50 * sc + Math.sin(a.ang) * 26 * sc;   // (his hands, out along the aim)
+  if (T < C.chargeT) {                                                       // POWERING UP
+    a.pose = pose({ ...OM_P.flex, lean: OM_P.flex.lean + Math.sin(T * 60) * 0.02 * bulk });
+    a.cam = { x: f.x, y: f.y - 50, z: 1.4 - 0.2 * bulk, speed: 3 };
+    shake = Math.max(shake, 3 + 10 * bulk);
+    if (Math.random() < dt * (10 + 30 * bulk)) auraWaves.push({ x: f.x, y: f.y - 50, t: 0, dur: 0.4, max: 70 + 90 * bulk, color: Math.random() < 0.5 ? '#ffffff' : '#8fe3ff' });
+    if (Math.random() < dt * 30 * bulk) particles.push({ x: f.x + (Math.random() - 0.5) * 160, y: f.y + 20, vx: 0, vy: -200 - Math.random() * 400, life: 0.5, max: 0.5, size: 3 + Math.random() * 3, color: Math.random() < 0.5 ? '#ffffff' : '#cfe8ff', type: 'bit', grav: 0 });
+    if (Math.random() < dt * 12 * bulk) bolt(f.x + (Math.random() - 0.5) * 60, f.y - Math.random() * 110, Math.random() * Math.PI * 2, 40, 0.08, '#8fe3ff');
+    if (T > 1.4 && ev('max')) { painTexts.push({ x: f.x, y: f.y - 180, t: 1.0, max: 1.0, text: 'MAX POWER!', big: true, ult: true }); ring(f.x, f.y - 60); ring(f.x, f.y - 90); sfx.clash(true); }
+  } else if (T < C.fire) {                                                   // KA... ME... HA... ME...: the ball grows in his cupped hands
+    const k = clamp((T - C.chargeT) / (C.fire - C.chargeT), 0, 1);
+    a.pose = OM_P.cup; a.ball = 6 + 40 * k;
+    a.cam = frame(700, 1.0);
+    shake = Math.max(shake, 2 + 10 * k);
+    const bx = f.x - f.face * 18, by = f.y - 48 * sc;
+    if (Math.random() < dt * (30 + 80 * k)) { const ang = Math.random() * Math.PI * 2, d = 60 + Math.random() * 60;
+      particles.push({ x: bx + Math.cos(ang) * d, y: by + Math.sin(ang) * d, vx: -Math.cos(ang) * d * 5, vy: -Math.sin(ang) * d * 5, life: 0.2, max: 0.2, size: 2, color: '#cfe8ff', type: 'bit', grav: 0 }); }
+    if (Math.random() < dt * 14 * k) bolt(bx, by, Math.random() * Math.PI * 2, 20 + 30 * k, 0.06, '#ffffff');
+    a.bx = bx; a.by = by;
+  } else if (T < endT) {                                                     // THE SCREAM - and it goes off, straight at them
+    a.pose = omAimPose(a); a.ball = 0;
+    a.cam = frame(900, 0.9);
+    if (ev('fire')) {
+      a.beam = { len: 0 }; shake = Math.max(shake, 30); hitstop = Math.max(hitstop, 0.06); sfx.beam(1); sfx.huge ? sfx.huge() : sfx.slam();
+      painTexts.push({ x: f.x, y: f.y - 150, t: 1.2, max: 1.2, text: 'KAMEHAMEHA!', big: true, ult: true });
+      impactFrame = Math.max(impactFrame, 0.08); impactAt = { x: a.hx, y: a.hy, ang: a.ang, all: true, focus: true };
+    }
+    a.beam.len = Math.min(C.maxLen, a.beam.len + C.grow * dt);
+    shake = Math.max(shake, 12);
+    const dx = Math.cos(a.ang), dy = Math.sin(a.ang);
+    if (STAGE.y > a.hy && Math.random() < dt * 40) {                         // (where it tears across the floor)
+      const along = (STAGE.y - a.hy) / (dy || 1e-6);
+      if (dy > 0.05 && along > 0 && along < a.beam.len) { const x = a.hx + dx * along + (Math.random() - 0.5) * 200; if (x > STAGE.x && x < STAGE.x + STAGE.w) { dust(x, STAGE.y, 3, 2); burst(x, STAGE.y - 4, ['#ffffff', '#8fe3ff', '#806b5a'], 3, -Math.PI / 2, 1.2, 600, { grav: 700 }); } }
+    }
+    const last = T >= endT - 0.35 && ev('final');
+    a.tickT -= dt;
+    if (a.tickT <= 0 || last) {
+      a.tickT = C.every;
+      const deg = Math.atan2(-dy, Math.abs(dx)) * 180 / Math.PI, dir = Math.sign(dx) || f.face;
+      ultHitCtx = true;
+      for (const o of fighters) {
+        if (o === f || allies(f, o) || o.respawnTimer > 0 || o.out || o.halo > 0 || o.dead || o.poofT > 0 || a.safe.has(o)) continue;
+        const px = o.x - a.hx, py = (o.y - hurtH(o) / 2) - a.hy, along = px * dx + py * dy, perp = Math.abs(px * dy - py * dx);
+        if (along < -20 || along > a.beam.len || perp > omBeamHalf(along) + Math.max(o.w, hurtH(o)) / 2) continue;
+        if (isIntangible(o)) { o.dodgedFlash = 0.35; continue; }                                    // (Z vanished through it)
+        const pf0 = o.parryFlash || 0;
+        applyHit(o, last ? { ...C.final, angle: clamp(deg, -60, 80) } : { ...C.tick, angle: deg }, dir, f.ultPower || 1, o.x, o.y - 50, { by: f });
+        if ((o.parryFlash || 0) > Math.max(0.5, pf0)) { a.safe.add(o); continue; }                // (PERFECT BLOCKED: safe from it)
+        if (!last && o.action && o.action.type === 'hitstun') { o.vx = dx * 650; o.vy = dy * 650 - (dy < 0.3 ? 40 : 0); o.action.dur = Math.max(o.action.dur, o.action.t + C.every + 0.1); }   // (carried along in it)
+      }
+      ultHitCtx = false;
+    }
+  } else {                                                                   // DONE: and he's left out there - make it back!
+    f.look = a.look0; a.freeze = false; f.action = null; a.beam = null;
+    f.invuln = Math.max(f.invuln || 0, C.invuln);
+    f.dodgeCount = 0; f.dodgeRecover = 0; f.airJumps = AIR_JUMPS; f.airDodges = AIR_DODGES; f.upSpecialUsed = false; f.flyUsed = false;   // (EVERY Z vanish back, his jump and his recovery)
+    painTexts.push({ x: f.x, y: f.y - 140, t: 0.9, max: 0.9, text: 'FULL Z VANISHES', big: false });
+    const h = f.omSong; if (h && h.el) h.el.addEventListener('ended', () => { if (f.omSong === h) f.omSong = null; }, { once: true });   // (the song plays out)
+    return;
+  }
+}
+// the ball in his hands, and the BEAM itself (world space, over the stage)
+function drawOmCb() {
+  for (const f of fighters) {
+    const a = f.action; if (!a || a.type !== 'omKameCb') continue;
+    ctx.save();
+    if (a.ball > 0 && a.bx !== undefined) {
+      const r = a.ball * (1 + 0.06 * Math.sin(time * 40)), g = ctx.createRadialGradient(a.bx, a.by, 0, a.bx, a.by, r * 1.8);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, 'rgba(200,240,255,0.95)'); g.addColorStop(0.7, 'rgba(90,190,255,0.5)'); g.addColorStop(1, 'rgba(60,150,255,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(a.bx, a.by, r * 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    if (a.beam && a.beam.len > 0) {                                   // THE BEAM: out of his hands along the aim, flaring to full size
+      const C = OM_CB, L = a.beam.len, H2 = C.h / 2, F = C.flare;
+      ctx.translate(a.hx, a.hy); ctx.rotate(a.ang);
+      const layer = (k, col, wob) => {
+        const w = Math.sin(time * 50 + k * 7) * wob, n = H2 * C.near * k, full = H2 * k;
+        ctx.fillStyle = col; ctx.beginPath();
+        ctx.moveTo(0, -n); ctx.quadraticCurveTo(F * 0.5, -full - w, Math.min(L, F), -full - w);
+        ctx.lineTo(L, -full + w); ctx.lineTo(L, full - w); ctx.lineTo(Math.min(L, F), full + w);
+        ctx.quadraticCurveTo(F * 0.5, full + w, 0, n); ctx.closePath(); ctx.fill();
+      };
+      ctx.globalAlpha = 0.5; layer(1.06, '#3aa0ff', 8);
+      ctx.globalAlpha = 0.8; layer(0.92, '#7fd8ff', 6);
+      ctx.globalAlpha = 0.9; layer(0.7, '#cfefff', 4);
+      ctx.globalAlpha = 1; layer(0.42, '#ffffff', 3);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 120);         // (the blast at his hands)
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(140,220,255,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 120, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+// a hit lands on him while he's in the WEAVE COUNTER stance: it misses, and he's round their other side, striking
+function omWeave(t, src, hx) {
+  const a = t.action;
+  if (!a || a.type !== 'attack' || !a.move || !a.move.omCounter || a.fx !== 'stance' || a.t < OM.counterFrom) return false;
+  const by = src.fighter || src.by || (src.shot && src.shot.owner);
+  ghosts.push({ fig: figureOf(t), life: 0.4, max: 0.4, color: '#ffffff' });
+  burst(t.x, fkMid(t), ['#ffffff', '#cfe8ff'], 12, 0, Math.PI, 340, { grav: 0 });
+  const tgt = by && by !== t && fighters.includes(by) && by.respawnTimer <= 0 && Math.abs(by.x - t.x) < 520 && Math.abs(by.y - t.y) < 300 ? by : null;
+  if (tgt) {
+    const side = Math.sign(t.x - tgt.x) || -tgt.face;               // (which side of them he's on now)
+    t.x = tgt.x - side * 50; t.y = tgt.y; t.ground = tgt.ground; t.vx = 0; t.vy = 0;
+    if (tgt.ground && !tgt.onPlatform && !wideFloor()) t.x = clamp(t.x, STAGE.x + 10, STAGE.x + STAGE.w - 10);
+    t.face = side;
+    t.action = { type: 'attack', key: 'omWeaveHit', move: t.moveset.omWeaveHit || OLDMAN_MOVES.omWeaveHit, btn: 'spc', phase: 'startup', t: 0,
+                 charge: 0, mult: 1, hit: new Set(), air: !t.ground, started: time };
+    hitstop = Math.max(hitstop, 0.08);
+  } else {
+    t.x += (Math.sign(t.x - (hx ?? t.x)) || -t.face) * 110; t.action = null;   // (nobody close to weave round: he just slips it)
+  }
+  t.invuln = Math.max(t.invuln || 0, 0.3);
+  ghosts.push({ fig: figureOf(t), life: 0.25, max: 0.25, color: '#cfe8ff' });
+  burst(t.x, fkMid(t), ['#ffffff', '#cfe8ff'], 12, 0, Math.PI, 340, { grav: 0 });
+  painTexts.push({ x: t.x, y: t.y - 130, t: 0.6, max: 0.6, text: 'WEAVE!', big: true });
+  sfx.vanish(0.7);
+  return true;
+}
+// THE OLD MAN at MAX POWER (his transformation, his ultimate and his comeback): a third bigger, a body of bulging muscle,
+// the shirt GONE - bare-chested, just the baggy pants and a white sash (from the reference)
+const OM_MAX = { scale: 1.32, power: 1.4, speed: 1.05 };
+const omMaxLook = l => l._max || (l._max = { ...l, muscle: true, roshiMax: true, scale: (l.scale || 1) * OM_MAX.scale });
+const omMaxNow = p => !!(p && p.look && p.look.roshi && (p.transformed || (typeof ult !== 'undefined' && ult && ult.user === p) || (p.action && p.action.type === 'omKameCb')));
+// MASTER ROSHI GEAR (from the reference): the turtle shell on his back, PINK sunglasses, a long white beard and moustache,
+// white eyebrows and a bald shine. (His clothes - the orange tunic, sleeves, purple baggy pants and slippers - see drawRoshiClothes.)
+const OM_CLOTH = { shirt: '#f2a24a', shirtD: '#c97a26', trim: '#7a3d12', pants: '#6e5cd6', pantsD: '#5243b0', shoe: '#4a3aa0', shell: '#3f8f3a', shellD: '#1d4a1b', shellL: '#86c870', glass: '#ff6fb8' };
+function drawRoshiGear(head, shoulder, hip, f, max) {
+  const C = OM_CLOTH;
+  ctx.save();
+  const bx = (shoulder.x + hip.x) / 2 - f * 14, by = (shoulder.y + hip.y) / 2 - 2;
+  if (!max) {                                                          // (MAX POWER: the shell's off - nothing hides that chest)
+  ctx.fillStyle = C.shell; ctx.strokeStyle = C.shellD; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(bx, by, 11, 19, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = C.shellL; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(bx - 5, by - 9); ctx.lineTo(bx + 5, by - 9); ctx.lineTo(bx + 7, by); ctx.lineTo(bx + 5, by + 9); ctx.lineTo(bx - 5, by + 9); ctx.lineTo(bx - 7, by); ctx.closePath(); ctx.stroke();
+  ctx.strokeStyle = '#e8c860'; ctx.lineWidth = 2.4;                    // the yellow strap across his chest
+  ctx.beginPath(); ctx.moveTo(bx + f * 4, by - 16); ctx.lineTo(shoulder.x + f * 7, (shoulder.y + hip.y) / 2 + 7); ctx.stroke();
+  }
+  const sway = Math.sin(time * 3) * 1.2;                               // the long white beard
+  ctx.fillStyle = '#f6f6f6'; ctx.strokeStyle = '#bdbdbd'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(head.x - f * 5, head.y + 3);
+  const bl = max ? 0.62 : 1;                                           // (shorter at MAX POWER: the chest shows)
+  ctx.quadraticCurveTo(head.x + f * 1, head.y + 32 * bl, head.x + f * 8 + sway, head.y + 40 * bl);
+  ctx.quadraticCurveTo(head.x + f * 15, head.y + 18, head.x + f * 12, head.y + 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(head.x + f * 10, head.y + 5, 6.5, 2.4, f * 0.25, 0, Math.PI * 2); ctx.fill();   // moustache
+  ctx.beginPath(); ctx.ellipse(head.x + f * 5, head.y - 8, 4.5, 1.8, -f * 0.3, 0, Math.PI * 2); ctx.fill();   // bushy white brow
+  ctx.fillStyle = C.glass; ctx.strokeStyle = '#3a1028'; ctx.lineWidth = 1.4;   // PINK sunglasses
+  ctx.beginPath(); ctx.ellipse(head.x + f * 7, head.y - 3, 4.8, 3.8, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.ellipse(head.x + f * 8.4, head.y - 4.4, 1.4, 0.9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#3a1028'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(head.x + f * 2.3, head.y - 3); ctx.lineTo(head.x - f * 9, head.y - 4); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.ellipse(head.x - f * 2, head.y - 8, 4, 2, -0.4 * f, 0, Math.PI * 2); ctx.fill();   // bald shine
+  ctx.restore();
+}
+// his clothes, over his (skin-coloured) body: purple BAGGY pants and slippers, the long orange tunic with a dark collar and buttons
+function drawRoshiClothes(hip, shoulder, pz, f, max) {
+  const C = OM_CLOTH;
+  const leg = L => { const [th, bend] = L; const mid = { x: hip.x + Math.sin(th) * LEG_UP * f, y: hip.y + Math.cos(th) * LEG_UP };
+    const a2 = th - bend; return { mid, end: { x: mid.x + Math.sin(a2) * LEG_LOW * f, y: mid.y + Math.cos(a2) * LEG_LOW } }; };
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  [[pz.legB, C.pantsD], [pz.legA, C.pants]].forEach(([L, col]) => {
+    const g = leg(L), kx = lerp(g.mid.x, g.end.x, 0.7), ky = lerp(g.mid.y, g.end.y, 0.7);
+    ctx.strokeStyle = col; ctx.lineWidth = 15;                         // BAGGY trousers, gathered at the ankle
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(g.mid.x, g.mid.y); ctx.lineTo(kx, ky); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(kx, ky, 9, 6, 0, 0, Math.PI * 2); ctx.fill();   // (the puffy cuff)
+    ctx.strokeStyle = C.shoe; ctx.lineWidth = 9;                        // purple slipper
+    ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(g.end.x, g.end.y); ctx.lineTo(g.end.x + f * 6, g.end.y + 1); ctx.stroke();
+  });
+  const ux = (shoulder.x - hip.x) / TORSO, uy = (shoulder.y - hip.y) / TORSO, nx = -uy, ny = ux;
+  if (max) {                                                            // MAX POWER: no shirt - a HUGE chest, and a white sash round his waist
+    const Q = (t, w) => ({ x: lerp(hip.x, shoulder.x, t) + nx * w, y: lerp(hip.y, shoulder.y, t) + ny * w });
+    const pts = [Q(1.1, -22), Q(1.1, 22), Q(0.6, 17), Q(0.05, 10), Q(0.05, -10), Q(0.6, -17)];   // (V-shaped: broad shoulders down to a narrow waist)
+    ctx.fillStyle = '#e8c49a'; ctx.strokeStyle = '#a8784c'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) ctx.lineTo(q.x, q.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.lineWidth = 1.4;
+    for (const sd of [-1, 1]) { const a0 = Q(0.97, sd * 1), a1 = Q(0.72, sd * 16), c0 = Q(0.66, sd * 4);   // the PECS
+      ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.quadraticCurveTo(c0.x, c0.y, a1.x, a1.y); ctx.stroke(); }
+    const m0 = Q(0.66, 0), m1 = Q(0.12, 0); ctx.beginPath(); ctx.moveTo(m0.x, m0.y); ctx.lineTo(m1.x, m1.y); ctx.stroke();   // the ABS
+    for (const t of [0.52, 0.38, 0.24]) { const l = Q(t, -6), r = Q(t, 6); ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(r.x, r.y); ctx.stroke(); }
+    const bx = hip.x + ux * 4, by = hip.y + uy * 4;
+    ctx.strokeStyle = '#f4f4f4'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(bx - nx * 11, by - ny * 11); ctx.lineTo(bx + nx * 11, by + ny * 11); ctx.stroke();
+    ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(bx + f * 4, by + 2); ctx.lineTo(bx + f * 7, by + 14); ctx.moveTo(bx + f * 2, by + 2); ctx.lineTo(bx - f * 1, by + 13); ctx.stroke();
+    ctx.restore(); return;
+  }
+  ctx.fillStyle = C.shirt;                                              // the TUNIC: shoulders down past the hips, flaring at the hem
+  ctx.beginPath();
+  ctx.moveTo(shoulder.x - nx * 9, shoulder.y - ny * 9); ctx.lineTo(shoulder.x + nx * 9, shoulder.y + ny * 9);
+  ctx.lineTo(hip.x + nx * 13 - ux * 12, hip.y + ny * 13 - uy * 12); ctx.lineTo(hip.x - nx * 13 - ux * 12, hip.y - ny * 13 - uy * 12);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = C.shirtD; ctx.lineWidth = 2;                       // the side slit / shading line down the back
+  ctx.beginPath(); ctx.moveTo(shoulder.x - nx * 6 * f, shoulder.y - ny * 6 * f); ctx.lineTo(hip.x - nx * 10 * f - ux * 11, hip.y - ny * 10 * f - uy * 11); ctx.stroke();
+  ctx.strokeStyle = C.trim; ctx.lineWidth = 3;                         // the dark mandarin collar
+  ctx.beginPath(); ctx.moveTo(shoulder.x - nx * 5, shoulder.y - ny * 5 + 1); ctx.lineTo(shoulder.x + nx * 5, shoulder.y + ny * 5 + 1); ctx.stroke();
+  ctx.fillStyle = C.trim;                                              // buttons down the front
+  for (const k of [0.25, 0.5, 0.75]) { ctx.beginPath(); ctx.arc(lerp(shoulder.x, hip.x, k) + f * 4, lerp(shoulder.y, hip.y, k), 1.4, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
+// a wide orange SLEEVE over the arm, down to just past the elbow (hand and wrist bare)
+function drawRoshiSleeve(shoulder, arm, f, far) {
+  const [th, bend] = arm, mid = { x: shoulder.x + Math.sin(th) * 16 * f, y: shoulder.y + Math.cos(th) * 16 };
+  const a2 = th - bend, end = { x: mid.x + Math.sin(a2) * 15 * f, y: mid.y + Math.cos(a2) * 15 };
+  const cx = lerp(mid.x, end.x, 0.5), cy = lerp(mid.y, end.y, 0.5);
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = far ? OM_CLOTH.shirtD : OM_CLOTH.shirt; ctx.lineWidth = 13;
+  ctx.beginPath(); ctx.moveTo(shoulder.x, shoulder.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(cx, cy); ctx.stroke();
+  ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.fill();   // (the wide cuff)
+  ctx.restore();
+}
+
 const CHARACTERS = {
   COLBY: {
     moves: COLBY_MOVES,
@@ -10812,6 +12109,30 @@ const CHARACTERS = {
     // forward = RKO, back = Giant Swing, up = Spinning Piledriver, down = Body Slam + Elbow Drop
     throwKinds: { forward: 'rko', back: 'rko', up: 'piledriver', down: 'giantSwing' },   // (forward AND back = the YARRKO, down = the Giant Swing)
     transformName: 'CAGE MATCH',
+  },
+  FLAMEKING: {
+    moves: FLAMEKING_MOVES,
+    // the pro hero: solid on his feet, a touch heavy - everything he throws is on fire
+    stats: { runSpeed: 660, airSpeed: 550, jumpVel: 1210, doubleJumpVel: 1090, weight: 1.0 },
+    look: {
+      body: '#1f2747', headColor: '#f6f6f6',   // a white stickman in ENDEAVOR's navy hero suit (see drawFkSuit / drawFkArm)...
+      extraJump: 1, heatRises: true,          // HEAT RISES (passive): one more air jump than everyone - it bursts out of a column of fire
+      flameKing: true,                        // ...wreathed in REAL fire: his mane, beard, shoulders, fists (see fkFire / fkAmbient)
+      fireHits: true, ki: '#ff7a1a', transformAura: '#ff5a1a',
+      idle: pose({ lean: 0.08, bob: -8, legA: [0.65, 0.45], legB: [-0.55, 0.1], armA: [0.9, -1.3], armB: [0.5, -1.5] }),
+    },
+  },
+  OLDMAN: {
+    moves: OLDMAN_MOVES,
+    // the old master: SMALL and light (easy to launch) - but the fastest hands in the game
+    stats: { runSpeed: 760, airSpeed: 610, jumpVel: 1250, doubleJumpVel: 1140, weight: 0.84 },
+    look: {
+      body: '#e8c49a', headColor: '#e8c49a',  // SKIN all over (his clothes are drawn on top - see drawRoshiClothes)
+      roshi: true,                            // turtle shell, sunglasses, the long white beard (see drawRoshiGear)
+      scale: 0.88,                            // a bit SMALLER than everyone else
+      ki: '#8fe3ff', transformAura: '#8fe3ff',
+      idle: OM_STANCE,                         // REINA's karate stance: low and wide, lead hand open and out, rear fist chambered
+    },
   },
 };
 const CHAR_NAMES = Object.keys(CHARACTERS);
@@ -13988,6 +15309,16 @@ CHARACTERS.STICKMAN.ult = ({
   perHit: 1.0, final: { dmg: 12, base: 480, growth: 6, angle: 80 }, cutscene: false,
 });
 CHARACTERS.HUNTER.ult = { name: 'ERASER CANNON', hunterMove: HUNTER_ERASER };
+CHARACTERS.FLAMEKING.ult = { name: 'PROMINENCE BURN',
+  slashes: [FLAMEKING_MOVES.jab.strike, FLAMEKING_MOVES.jab3.strike, FLAMEKING_MOVES.sideGround.strike],
+  kicks: [FLAMEKING_MOVES.jab2.strike, FLAMEKING_MOVES.fair.strike, FLAMEKING_MOVES.nair.strike],
+  finalWind: FLAMEKING_MOVES.upRanged.wind, finalStrike: FLAMEKING_MOVES.downRanged.strike,
+  perHit: 1.1, final: { dmg: 14, base: 500, growth: 6.2, angle: 50 }, cutscene: false };
+CHARACTERS.OLDMAN.ult = { name: 'MAX POWER BLITZ',
+  slashes: [OLDMAN_MOVES.jab.strike, OLDMAN_MOVES.jab3.strike, OLDMAN_MOVES.omThunderPalm.strike, OLDMAN_MOVES.sideGround.strike],
+  kicks: [OLDMAN_MOVES.omSpinDemon.strike, OLDMAN_MOVES.omFlipKick.strike, OLDMAN_MOVES.downGround.strike],
+  finalWind: OLDMAN_MOVES.upGround.wind, finalStrike: OLDMAN_MOVES.upGround.strike,
+  perHit: 1.0, final: { dmg: 12, base: 480, growth: 6, angle: 42 }, cutscene: false };
 CHARACTERS.HUNTER.altUlt = { name: 'GIGANTIC ROAR', hunterMove: HUNTER_ROAR };
 // HAILIE: FLYING RAIJIN - she rings them with kunai, then teleports between them, cutting through them from every side (anyone
 // close by gets caught in it too) - and finishes with the knife through their chest: a launch that's PURELY HORIZONTAL
@@ -14127,7 +15458,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -14561,7 +15892,7 @@ function startBattleSong() {
 }
 // ONE ULT SONG AT A TIME: with ultimates and transformations all able to go off together, only the NEWEST one is heard -
 // every older one is CUT (muted, not stopped: it still plays out silently, so anything timed to it stays on time)
-const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong'];
+const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong'];
 let ultAudioSeq = 0;
 const ultAudioOrder = new WeakMap();                              // (handle -> when it started)
 const ULT_EXTRA = [];                                            // (voice lines / clips belonging to ultimates and cutscenes)
@@ -14609,7 +15940,7 @@ function updateBattleMusic(dt) {
   for (const f of fighters) if (f.jjSnd && f.jjSnd.final) { const ct = f.jjSnd.el.currentTime; if (ct > 2.1) f.jjSnd.el.volume = clamp(settings.master * settings.sfx * (1 - (ct - 2.1) / 0.45), 0, 1); if (f.jjSnd.el.ended) f.jjSnd = null; }   // (the shout: fades out at the end)
   const fighting = scene === 'fight' && !matchOver;
   ultAudioFocus();
-  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); stopSunSong(f); stopOnePunchSong(f); stopMegazordSong(f); stopHakaiSong(f); stopRgSong(f); }   // (Lance's UI theme doesn't follow you out of the fight - nor do these)
+  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); stopSunSong(f); stopOnePunchSong(f); stopMegazordSong(f); stopHakaiSong(f); stopRgSong(f); stopOmSong(f); }   // (Lance's UI theme doesn't follow you out of the fight - nor do these)
   if (fighting && !battleMusic.el && soundOn && menuMusic.unlocked) startBattleSong();   // a new fight: a new song
   const el = battleMusic.el;
   if (!el) return;
@@ -14657,7 +15988,7 @@ function updateBattleMusic(dt) {
   }
   // turned down under an ultimate's own music / voice lines, and while the game's paused
   const ultMusic = ult || fighters.some(f => (f.action && f.action.type === 'shipUlt') || f.uiSong);   // (+ Lance's Ultra Instinct theme)
-  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong || f.opSong || f.mzSong || f.hkSong || f.rgSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
+  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong || f.opSong || f.mzSong || f.hkSong || f.rgSong || f.omSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
   el.volume = clamp(BATTLE_MUSIC.vol * battleMusic.level * duck * settings.master * settings.music * 1.6, 0, 1);
   if (el.paused && want) el.play().catch(() => {});
 }
@@ -15078,7 +16409,8 @@ playGrindSong = gateSound('grindSong', playGrindSong, (h, [f]) => { if (h && f) 
 playOnePunchSong = gateSound('opSong', playOnePunchSong, (h, [f]) => { if (h && f) f.opSong = h; });   // (Colten's One Punch)
 playMegazordSong = gateSound('mzSong', playMegazordSong, (h, [f]) => { if (h && f) f.mzSong = h; });   // (Sevon's Megazord comeback)
 playHakaiSong = gateSound('hkSong', playHakaiSong, (h, [f]) => { if (h && f) f.hkSong = h; });   // (Colby's HAKAI)
-playRgSong = gateSound('rgSong', playRgSong, (h, [f]) => { if (h && f) f.rgSong = h; });   // (Colby's GOD OF COMBAT)
+playRgSong = gateSound('rgSong', playRgSong, (h, [f]) => { if (h && f) f.rgSong = h; });
+playOmSong = gateSound('omSong', playOmSong, (h, [f]) => { if (h && f) f.omSong = h; });   // (The Old Man's MAX POWER KAMEHAMEHA)   // (Colby's GOD OF COMBAT)
 kameRelease = gateSound('kameHa', kameRelease);                    // (Lance's "...HAAA!" + the blast)
 kaiokenSfx = gateSound('kaioSnd', kaiokenSfx);                     // ("KAIOKEN!")
 playLeeSong = gateSound('leeSong', playLeeSong, (h, [f]) => { if (h && f) f.leeSong = h; });   // (Colby's Primary Lotus)
@@ -15101,7 +16433,7 @@ const phasedThrough = (s, t) => projPhase(t) && ((s.hit && circleHitsFighter(s.x
 // powering up (a transformation) or mid-COMEBACK: they can't be moved, swapped, frozen or stopped - it plays out
 function powerUpLocked(f) {
   const a = f && f.action;
-  return !!a && (['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform', 'sgCut', 'sgWait', 'cruelSun'].includes(a.type) || (a.type === 'leeUlt' && a.comeback));
+  return !!a && (['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform', 'sgCut', 'sgWait', 'cruelSun', 'omKameCb'].includes(a.type) || (a.type === 'leeUlt' && a.comeback));
 }
 // LANCE / HUNTER TRANSFORMING: untouchable - EXCEPT by an ULTIMATE or a COMEBACK. ultHitCtx is on while one of those is
 // doing its hitting (set around each fighter's update / their hitboxes / each projectile / the ultimate sequence).
@@ -15125,7 +16457,7 @@ function isIntangible(f) {
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return true;   // (vanished: nothing can touch him)
   if (a && a.type === 'attack' && a.move && a.move.dragonFist && a.ph && a.ph !== 'wind' && a.ph !== 'dash') return true;   // (Hunter mid-Dragon Fist)
   if (a && a.type === 'attack' && a.move && a.move.finalExp) return true;   // (Lance's Final Explosion: NOTHING interrupts it - no hit, grab or throw)
-  if (a && ['sunFrozen', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'shipUlt', 'gazeSwap', 'swapped'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
+  if (a && ['sunFrozen', 'thrown', 'ultSeq', 'ultVictim', 'ultBeam', 'flameDragon', 'tsukuyomi', 'tsukuVictim', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'shipUlt', 'gazeSwap', 'swapped', 'omKameCb'].includes(a.type)) return true;   // nothing else can hit you mid-throw / ultimate (a CLASH can be broken up, though)
   return !!a && (a.type === 'spot' || a.type === 'roll' || a.type === 'air') && a.t >= a.iStart && a.t <= a.iEnd;
 }
 // CROUCHING: hold down on the ground to duck. Your hurtbox shrinks to ~60% height, so HIGH attacks
@@ -15171,8 +16503,23 @@ const parryRoll = t => t.controller !== 'dummy' ||
   Math.random() < (t.arcadeBoss && ARCADE_BOSS.ai === 'BOSS' ? 1 : (t.look && t.look.demonMeter && !t.minion) ? 0.97 : ({ EASY: 0.1, NORMAL: 0.3, HARD: 0.55, MASTER: 0.7, IMPOSSIBLE: 0.97 }[(t.cpuLevel || DUMMY_MODES[dummyMode]).slice(3)] ?? 0.3));   // (Colbalias: his parry reflex already decided - see COLB_PARRY)
 // Returns true if the hit "connected" (hit or got blocked), false if it whiffed on a dodge.
 // src = { fighter } for melee hits, { shot } for projectiles (used for perfect-block counters/reflects).
+// COLTEN TRANSFORMED: a SHIELD floats behind him and blocks every hit from BEHIND - shots included. You have to face him
+// to beat him. (Ultimates and comebacks still get through it.)
+const COLTEN_SHIELD = { back: 44, size: 1.3 };
+function coltenBackShield(t, h, hx, src) {
+  if (t.char !== 'COLTEN' || !t.transformed || t.minion || h.ultHit || h.ultFinal || ultHitCtx) return false;
+  const by = src.fighter || src.by || (src.shot && src.shot.owner);
+  const sx = src.shot ? src.shot.x : by ? by.x : hx;
+  if (sx === undefined || (sx - t.x) * t.face > -8) return false;           // (from in front: it gets through)
+  t.bsFlash = 0.35; t.blockedFlash = 0.2;
+  const sc = (figureOf(t).look.scale || 1), px = t.x - t.face * COLTEN_SHIELD.back * sc, py = t.y - 62 * sc;
+  burst(px, py, ['#ffffff', '#e8c64a', '#cfd8e6'], 12, t.face > 0 ? Math.PI : 0, 0.9, 420, { grav: 300 }); sfx.block();
+  if (!(t.bsTextT > 0)) { painTexts.push({ x: px, y: py - 50, t: 0.5, max: 0.5, text: 'BLOCKED', big: false }); t.bsTextT = 0.5; }
+  return true;
+}
 function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (t.respawnTimer > 0) return false;
+  if (coltenBackShield(t, h, hx, src)) return true;
   { const by = src.fighter || src.by || (src.shot && src.shot.owner), k = by && CHAR_DMG[by.char];   // (per-fighter DAMAGE trims - knockback untouched)
     if (k && h.dmg) h = { ...h, dmg: h.dmg * k };
     // COLBALIAS'S CLONES during his 100-Type Guanyin: their hits only CHIP - no hitstun, no knockback (the Guanyin's targets
@@ -15197,6 +16544,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (uiAutoDodge(t, hx)) return false;                    // Lance in ULTRA INSTINCT: his body dodges it on its own (spends a Z vanish dot)
   if (sageAutoDodge(t, hx)) return false;                  // Colbalias in SAGE MODE: one auto dodge every 5 seconds
   if (hailiePhaseDodge(t, hx)) return false;               // Hailie, TRANSFORMED: 3 automatic phase-outs
+  if (omWeave(t, src, hx)) return false;                   // THE OLD MAN's Weave Counter
   const dmg = h.dmg * mult;
 
   // PERFECT BLOCK: shield went up just as the hit arrived
@@ -16192,7 +17540,7 @@ function stepThrown(f, a, dt) {
 //  Homes in if they're roughly that way. Contact = strong rush punch. Miss = he tumbles (punishable).
 // =====================================================================
 const FLY_DASH = { speed: 1500, dur: 0.288, recover: 0.5, cooldown: 0.4, chain: 2 };   // (chain: dashes in a row when NOT flying - any attack / grab resets it)
-// LANCE'S FLIGHT (double-tap neutral K): he FLIES - free movement in every direction, no gravity. Double-tap K again while
+// LANCE'S FLIGHT (double-tap BLOCK in the air): he FLIES - free movement in every direction, no gravity. Double-tap K again while
 // flying = his air dash straight at the opponent. A flat 5 SECONDS - then he's TIRED, drops out of it and falls, back to
 // normal. Landing ends it too.
 const LANCE_FLIGHT = { cap: 5, speed: 660, accel: 4200, dashes: 2 };   // (cap: seconds of flight - then he drops)   // (dashes: air dashes per flight - then he has to land / start a new flight to get them back)
@@ -18136,6 +19484,8 @@ function spawnUltBeam(f, aim = 0) {
 // your ultimate, using up whatever meter is left (right away = full-power finisher, late = weaker).
 // Meter runs out = you power back down.
 const TRANSFORM = { power: 1.2, speed: 1.1, drain: ULT_MAX / 14 };   // drain: full meter lasts ~14 seconds
+CHARACTERS.OLDMAN.transformName = 'MAX POWER';                             // THE OLD MAN: bulks right up (see omMaxLook)
+CHARACTERS.OLDMAN.transformStats = { power: OM_MAX.power, speed: OM_MAX.speed, drain: TRANSFORM.drain };   // (+40% damage)
 // Some characters' transformations are tuned differently (Lance's Super Saiyan: less power, more speed)
 const tfStats = f => (f.lanceForm && LANCE_FORMS[f.lanceForm]) || (f.ui ? UI_STATS : null) || (f.char && CHARACTERS[f.char] && CHARACTERS[f.char].transformStats) || TRANSFORM;
 // BALANCE: per-fighter damage (round robin, Nov 2026: Colten 85% and Sevon 60% wins - both are meant to sit UNDER Colbalias)
@@ -18150,6 +19500,7 @@ function powerOf(f) {
          (f.transformed || f.lanceForm || f.ssg ? tfStats(f).power : 1) * (f.kaioken ? kaiokenLv(f).dealt : 1) *   // both stack (Lance: his form stays on)
          (f.hForm ? HUNTER_FORMS[f.hForm].power : 1) *                                // Hunter's rage forms
          (f.tc ? TC.dealt : 1) *                                                      // Sevon's TOTAL CONCENTRATION
+         (f.furyT > 0 ? COLTEN_FURY.power : 1) *                                          // Colten's FURY
          (f.look && f.look.glassJaw ? GLASS_JAW.dmgBonus : 1) *                         // Colbalias: hits harder to make up for his glass jaw + debuffs
          (f.look && f.look.heavyHits ? 0.92 : 1) *                                     // Captain Heel: a touch less damage (he topped the CPU tournament)
          (CHAR_POWER[f.char] || 1) *                                                    // per-fighter balance (see CHAR_POWER)
@@ -21141,6 +22492,8 @@ function updateProjectiles(dt, only = null) {
     if (s.kind === 'dragon') { if (updateDragon(s, dt)) projectiles.splice(i, 1); continue; }   // Sevon's Flame Dragon
     if (s.kind === 'tiger') { if (updateTiger(s, dt)) projectiles.splice(i, 1); continue; }     // Sevon's Flame Tiger
     if (s.kind === 'batarang') { if (updateBatarang(s, dt)) projectiles.splice(i, 1); continue; }   // Sevon's batarang
+    if (s.kind === 'fkPillar') { if (updateFkPillar(s, dt)) projectiles.splice(i, 1); continue; }   // Flame King's pillar of fire
+    if (s.kind === 'fkPatch') { if (updateFkPatch(s, dt)) projectiles.splice(i, 1); continue; }     // ...and the patches his Fire Rain leaves
     if (s.kunai) {                                         // HAILIE'S KUNAI: flying - or stuck in someone
       const o = s.owner;
       if (!o || !fighters.includes(o) || o.respawnTimer > 0) { projectiles.splice(i, 1); continue; }
@@ -21197,6 +22550,8 @@ function updateProjectiles(dt, only = null) {
       if (Math.random() < dt * 30) burst(s.x, STAGE.y - 4, ['#cdb79a', '#806b5a'], 1, -Math.PI / 2, 0.6, 300, { grav: 700 });
       if (s.x < STAGE.x || s.x > STAGE.x + STAGE.w) s.life = 0;
     }
+    if (s.fkRain && s.vy > 0) for (const pl of PLATFORMS) if (s.x > pl.x && s.x < pl.x + pl.w && s.y < pl.y && s.y + s.vy * dt >= pl.y) { s.y = pl.y; s.landY = pl.y; s.fkFloor = true; s.life = 0; }   // (Fire Rain lands on platforms too)
+    if (s.fkBall || s.fkTrap) for (let k = fkRate(s.fkBall ? 140 : 90, dt); k--;) fkEmit(s.x + (Math.random() - 0.5) * s.r, s.y + (Math.random() - 0.5) * s.r, -s.vx * 0.15 + (Math.random() - 0.5) * 60, -s.vy * 0.15 - 40, Math.max(4, s.r * 0.9), 0.2 + Math.random() * 0.12);   // (Flame King's shots burn)
     if (s.electric && Math.random() < dt * 30) bolt(s.x, s.y, Math.random() * Math.PI * 2, 18 + Math.random() * 16, 0.05, Math.random() < 0.5 ? '#ffffff' : s.color);
     if (s.homeT) {                                          // Hunter's TRACKING Blaster Shell: steers onto them (a Z vanish shakes it off)
       const T = s.homeT;
@@ -21215,6 +22570,7 @@ function updateProjectiles(dt, only = null) {
     // Hit the solid stage
     if (s.kind !== 'wave' && s.x > STAGE.x && s.x < STAGE.x + STAGE.w && s.y > STAGE.y && s.y < STAGE.y + STAGE.h) {
       burst(s.x, s.y, [s.color, '#ffffff'], 8, Math.PI / 2, 1, 300);
+      if (s.fkTrap || s.fkRain) s.fkFloor = true;
       if (s.kind === 'tile') {                             // Hunter's tile: SHATTERS on the floor
         burst(s.x, STAGE.y - 6, ['#b9b0a3', '#8e857a', '#d6cec2', '#806b5a'], 30, -Math.PI / 2, 1.2, 620, { grav: 900 });
         dust(s.x, STAGE.y, 16, 2.2); ring(s.x, STAGE.y - 8); cracks.push({ x: s.x, y: STAGE.y, life: 3, max: 3, seed: (s.x * 1.7) % 1000, size: 1.1 });
@@ -21260,7 +22616,7 @@ function updateProjectiles(dt, only = null) {
         }
       }
     }
-    if (dead) { if (s.eraser) eraserBlast(s); projectiles.splice(i, 1); }   // (the Eraser Cannon goes off where it ends)
+    if (dead) { if (s.eraser) eraserBlast(s); if (s.fkTrap && (s.hit.size || s.fkFloor)) fkPillar(s); if (s.fkRain && (s.hit.size || s.fkFloor)) fkPatch(s); projectiles.splice(i, 1); }   // (the Eraser Cannon goes off where it ends)
   }
   // Projectile clash: two shots from different fighters meet and cancel out
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -21268,7 +22624,7 @@ function updateProjectiles(dt, only = null) {
       const a = projectiles[i], b = projectiles[j];
       if (!a || !b || a.owner === b.owner || !a.owner || !b.owner) continue;
       if (a.eraser || b.eraser) continue;                              // (the Eraser Cannon plows through other shots)
-      if (a.clash || b.clash || a.kind === 'beam' || b.kind === 'beam' || a.kind === 'tile' || b.kind === 'tile' || a.groundWave || b.groundWave) continue;   // (beam-clashing / beams / Hunter's tile + shockwave plow through)
+      if (a.fkZone || b.fkZone || a.clash || b.clash || a.kind === 'beam' || b.kind === 'beam' || a.kind === 'tile' || b.kind === 'tile' || a.groundWave || b.groundWave) continue;   // (beam-clashing / beams / Hunter's tile + shockwave plow through)
       if (a.phase === 'hold' || b.phase === 'hold') continue;          // (a disc still forming in his hand)
       if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r) {
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
@@ -21953,7 +23309,10 @@ function beginActive(f, a) {
   a.t = 0;
   if (a.track) { f.vx *= 0.1; a.track = null; }      // tracking dash ends when the hit comes out
   const m = a.move;
-  if (m.lunge && f.ground && !a.blink) f.vx = f.face * m.lunge * Math.sqrt(a.mult);   // (a BLINK hit - Colby teleported - doesn't lunge)
+  if (m.lunge && f.ground && !a.blink) f.vx = f.face * m.lunge * Math.sqrt(a.mult) * (f.furyT > 0 ? COLTEN_FURY.lunge : 1);   // (a BLINK hit - Colby teleported - doesn't lunge)
+  if (f.furyT > 0 && a.btn === 'atk' && !m.noPush) {                            // COLTEN'S FURY: every move drives him further forward
+    f.vx += f.face * COLTEN_FURY.push; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#ff3a1a' });
+  }
   if (a.powered) {                                   // charged power jab: explodes forward
     f.vx = f.face * m.chargedHit.lunge;
     burst(f.x + f.face * 30, f.y - 66, ['#ff8a3c', '#ffd23f', '#ffffff'], 20, f.face > 0 ? 0 : Math.PI, 0.5, 700, { grav: 0 });
@@ -22015,11 +23374,12 @@ function stepAction(f, inp, dt) {
   if (a.type === 'leeUlt') return stepLeeLotus(f, a, dt);          // Colby: Primary Lotus
   if (a.type === 'hGrindCut') return stepHunterGrindCut(f, a, dt);  // Hunter: Glacier Grind (Broly demolishes Goku)
   if (a.type === 'leeVictim') { if (!a.by.action || a.by.action.type !== 'leeUlt') f.action = null; return; }
-  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else if (a.mz) startMegazord(f, true); else if (a.sun) startSunComeback(f); else if (a.hailie) startHailieComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
+  if (a.type === 'sgWait') { f.vx = f.vy = 0; if (!ult && !fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq'].includes(o.action.type))) { if (a.lotus) startLotusComeback(f); else if (a.mz) startMegazord(f, true); else if (a.sun) startSunComeback(f); else if (a.om) startOmComeback(f); else if (a.hailie) startHailieComeback(f); else { f.sgUsed = false; startSsgCut(f); } } return; }
   if (a.type === 'hCome') return stepHailieComeback(f, a, dt);
   if (a.type === 'hRasenDrop') return stepHailieRasenDrop(f, a, dt);   // Hailie's Rasengan Drop
   if (a.type === 'mzUlt') return stepMegazord(f, a, dt);            // Sevon's Samurai Megazord
   if (a.type === 'hakai') return stepHakai(f, a, dt);               // Colby's HAKAI
+  if (a.type === 'omKameCb') return stepOmKameCb(f, a, dt);       // The Old Man's comeback
   if (a.type === 'reaperGod') return stepReaperGod(f, a, dt);       // Colby's Reaper's Judgment
   if (a.type === 'rgVictim') { if (!a.by || !a.by.action || a.by.action.type !== 'reaperGod' || a.by.action.victim !== f) f.action = null; return; }
   if (a.type === 'hakaiVictim') { if (!a.by || !a.by.action || a.by.action.type !== 'hakai' || a.by.action.victim !== f) f.action = null; return; }
@@ -22483,6 +23843,10 @@ function freeMove(f, dir, inp, dt) {
       f.flip = 0.001;
       if (dir) f.vx = dir * f.stats.airSpeed * hSpd(f);
       ring(f.x, f.y);
+      if (f.look && f.look.heatRises) {                              // FLAME KING: HEAT RISES - fire bursts out under him on his air jumps
+        fkFlames(f.x, f.y, f.airJumps < 0 ? 22 : 10, 0.5, 420);
+        if (f.airJumps < 0) painTexts.push({ x: f.x, y: f.y - 120, t: 0.5, max: 0.5, text: 'HEAT RISES', big: false });
+      }
     }
   }
 
@@ -22518,6 +23882,7 @@ function reviveFighter(f) {
 function updateFighter(f, inp, dt) {
   if (f.ground && !(f.action && f.action.type === 'hitstun')) f.lastGroundAt = time;   // (the KO list: a KO counts for the last hitter till they're back on their feet)
   if (f.respawnTimer > 0) {
+    if (f.out && !matchOver && !(typeof hb !== 'undefined' && hb && hb.active)) checkMatchEnd();   // (safety net: a KO path that forgot to end the match)
     // OUT of lives, but went out with a FULL ultimate meter and the match is still going: press ULT to come back
     // (CPUs do it by themselves after a moment)
     if (canRevive(f)) {
@@ -22529,6 +23894,8 @@ function updateFighter(f, inp, dt) {
     return;
   }
 
+  if (fkBuryStep(f, dt)) return;                                  // (BURIED by Flame King's headbutt: stuck)
+  fkAmbient(f, dt);
   f.lastInp = inp;                                                // (things he controls from afar - e.g. Colby's Thunder Bolt - read it)
   f.jumpBuf  = inp.jumpTap  ? BUFFER : Math.max(0, f.jumpBuf - dt);
   f.dodgeBuf = inp.blockTap ? BUFFER : Math.max(0, f.dodgeBuf - dt);
@@ -22558,17 +23925,18 @@ function updateFighter(f, inp, dt) {
   if (f.look && f.look.spd) noteStickCircle(f, inp);
   f.ultBuf   = inp.ultTap   ? BUFFER : Math.max(0, (f.ultBuf || 0) - dt);
   tfRefillCheck(f);                                               // (a transformation: Z vanish dots refilled)
-  if (f.look && f.look.flyDash && !f.minion && inp.spcTap && !inp.dir && !inp.up && !inp.down) {   // LANCE: DOUBLE-TAP neutral K
-    const dbl = time - (f.lastSpcN ?? -9) < DOUBLE_TAP + 0.05; f.lastSpcN = dbl ? -9 : time;
-    const a = f.action, starting = !a || a.type === 'land' || (a.type === 'attack' && a.key === 'neutralRanged' && a.t < 0.4) || a.type === 'kiCharge';
-    if (dbl && starting) {
-      f.spcBuf = 0; if (typeof stopKameCharge === 'function') stopKameCharge(f);
-      if (f.flight) {                                                // flying: the AIR DASH at them - TWO per flight
+  // LANCE: DOUBLE-TAP BLOCK IN THE AIR = FLIGHT (the first tap's Z vanish is cancelled into it, and its dot given back).
+  // Flying, double-tap BLOCK again = the AIR DASH straight at them (two per flight).
+  if (f.look && f.look.flyDash && !f.minion && inp.blockTap && !f.ground && (f.blockGap ?? 99) < DOUBLE_TAP + 0.05 && !(time - (f.flyTapT ?? -9) < 0.3)) {
+    const a = f.action;
+    if (!a || a.type === 'air' || a.type === 'land' || a.type === 'kiCharge') {
+      f.flyTapT = time; f.dodgeBuf = 0;
+      if (a && a.type === 'air') { f.dodgeCount = Math.max(0, (f.dodgeCount || 0) - 1); f.invuln = 0; }
+      if (f.flight) {
         if ((f.flight.dashes || 0) >= LANCE_FLIGHT.dashes) {
           if (!f.flight.noDashMsg) { f.flight.noDashMsg = true; painTexts.push({ x: f.x, y: f.y - 140, t: 0.6, max: 0.6, text: 'NO DASHES LEFT', big: false }); }
         } else { const o = nearestFoe(f); f.action = null; f.flyUsed = false; f.flyCD = 0; startFlyDash(f, o ? (Math.sign(o.x - f.x) || f.face) : f.face); }
-      }
-      else { f.action = null; startFlight(f); }
+      } else { f.action = null; if (typeof stopKameCharge === 'function') stopKameCharge(f); startFlight(f); }
     }
   }
   if (f.flight) updateFlight(f, dt);
@@ -22680,7 +24048,7 @@ function updateFighter(f, inp, dt) {
 
   // Gravity
   const a = f.action;
-  const floating = (f.flight && !(a && a.type === 'hitstun')) || (a && (a.type === 'cruelSun' || a.type === 'sunFrozen' || a.type === 'hakai' || a.type === 'hakaiVictim' || a.type === 'rgVictim' || (a.type === 'reaperGod' && a.ph !== 'fly'))) || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
+  const floating = (f.flight && !(a && a.type === 'hitstun')) || (a && (a.type === 'cruelSun' || a.type === 'sunFrozen' || a.type === 'hakai' || a.type === 'hakaiVictim' || a.type === 'rgVictim' || a.type === 'omKameCb' || (a.type === 'reaperGod' && a.ph !== 'fly'))) || a && ((a.type === 'air' && a.t < a.floatTime) || a.type === 'clash' || a.type === 'grabbed' || a.type === 'thrown' || a.type === 'whipped' ||
     (a.type === 'attack' && a.move.floatWhile && a.move.floatWhile(f, a)) ||
     a.type === 'flydash' || a.type === 'ultBeam' || a.type === 'flameDragon' || a.type === 'uiTransform' || a.type === 'ssj2Cut' || a.type === 'hL3Cut' || a.type === 'ss1Cut' || a.type === 'tsukuyomi' || a.type === 'tsukuVictim' || a.type === 'sgCut' || a.type === 'sgVictim' || a.type === 'sgWait' || a.type === 'fxSac' || a.type === 'fxFrozen' || a.type === 'leeUlt' || a.type === 'leeVictim' || a.type === 'hGrindCut' || a.type === 'shipUlt' || a.type === 'kiBarrage' || a.type === 'impaled' || a.type === 'ledge' || a.type === 'gazeSwap' || a.type === 'swapped' || (a.type === 'hitstun' && a.crit) || a.type === 'timeStop' ||
     (a.type === 'hitstun' && (a.impaled || (a.flat && a.t < a.flat))) ||
@@ -22819,7 +24187,7 @@ function updateFighter(f, inp, dt) {
   if (!ringOut) f.ringOutShown = false;
   if (ringOut || f.x < BLAST.left || f.x > BLAST.right || f.y > BLAST.bottom || f.y < (stageDef.pit ? PIT.top : BLAST.top)) {
     if (f.minion) { killMinion(f, true); return; }      // a clone knocked off the stage just vanishes (no stock)
-    if (f.action && (['sunFrozen', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
+    if (f.action && (['sunFrozen', 'sgCut', 'sgVictim', 'sgWait', 'fxSac', 'fxFrozen', 'leeUlt', 'leeVictim', 'hGrindCut', 'omKameCb'].includes(f.action.type) || (f.action.type === 'whipped' && f.action.holder && f.action.holder.action && f.action.holder.action.type === 'hGrindCut'))) { f.x = clamp(f.x, BLAST.left + 40, BLAST.right - 40); f.y = clamp(f.y, BLAST.top + 40, BLAST.bottom - 40); return; }   // (in Lance's comeback: it holds them)
     // COMEBACKS (Colby's Primary Lotus, Lance's Super Saiyan God): ONLY if you're knocked out WITH A FULL ULT METER - and only
     // once a match. Any stock, however you went out. It spends the meter.
     const cbReady = (f.ult || 0) >= ULT_MAX && !f.out;
@@ -22854,6 +24222,14 @@ function updateFighter(f, inp, dt) {
         f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0, mz: true }; return;
       }
       startMegazord(f, true); return;
+    }
+    if (f.char === 'OLDMAN' && !f.omCbUsed && cbReady && f.stocks === 1) {   // THE OLD MAN: on his LAST stock - MAX POWER KAMEHAMEHA
+      f.ult = 0; f.omCbUsed = true;
+      if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq', 'mzUlt', 'omKameCb'].includes(o.action.type))) {
+        f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
+        f.vx = f.vy = 0; f.action = { type: 'sgWait', t: 0, om: true }; return;
+      }
+      startOmComeback(f); return;
     }
     const st0 = gameOptions.stocks > 0 ? gameOptions.stocks : Infinity, lanceStock = !isFinite(f.stocks) || !isFinite(st0) || f.stocks === st0 - 1 || f.stocks === 1;
     if (f.char === 'LANCE' && !f.sgUsed && cbReady && lanceStock) {   // LANCE: SUPER SAIYAN GOD - only on his SECOND or LAST stock
@@ -24388,7 +25764,7 @@ function updateSim(dt) {
   // LANCE'S ULTRA INSTINCT: the whole match stops to watch - everyone but him and the one he's beating on is frozen
   // (TRANSFORMATIONS - Lance's Super Saiyan / Super Saiyan 2 / Ultra Instinct, Hunter's Legendary / Legendary 3 - DON'T stop the
   //  match any more: they play out while everyone else keeps fighting. Ultra Instinct's victim is held by the scene itself.)
-  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac' || (f.action.type === 'mzUlt' && f.action.freeze) || f.action.type === 'hakai' || (f.action.type === 'reaperGod' && f.action.freeze)));   // (+ Sevon's Megazord, till the slash; + Colby's HAKAI)
+  const uiCut = fighters.find(f => f.action && ((f.action.type === 'leeUlt' && f.action.freeze && !f.action.comeback) || f.action.type === 'hGrindCut' || f.action.type === 'tsukuyomi' || f.action.type === 'fxSac' || (f.action.type === 'mzUlt' && f.action.freeze) || f.action.type === 'hakai' || (f.action.type === 'reaperGod' && f.action.freeze) || (f.action.type === 'omKameCb' && f.action.freeze)));   // (+ Sevon's Megazord, till the slash; + Colby's HAKAI)
   // (Sevon's NINTH FORM no longer stops the match: everyone keeps moving while he breathes in - run, or get ready to block)   // (+ Sevon's NINTH FORM wind-up: a cutscene too - but everyone's FREE again on the shout, to block / dodge the rush)
   const TF_TYPES = ['ss1Cut', 'ssj2Cut', 'hL3Cut', 'uiTransform'];
   const inTransform = f => !!(f.action && (TF_TYPES.includes(f.action.type) || f.action.type === 'sgCut' || (f.action.type === 'leeUlt' && f.action.comeback) || f.action.type === 'flameDragon' || (f.action.type === 'ultVictim' && fighters.some(g => g.action && g.action.type === 'uiTransform' && g.action.victim === f))));
@@ -24585,6 +25961,7 @@ function updateSim(dt) {
   const cutNow = uiCut && uiCut.action ? uiCut.action.type : null;   // (the cutscene can END partway through this frame - KO'd, landed...)
   if (!cutNow) updateProjectiles(dt);                      // (frozen while Lance's Ultra Instinct plays)
   else if (cutNow === 'flameDragon') updateProjectiles(dt, 'dragon');   // (Sevon's cutscene: only his dragon moves)
+  if (!cutNow) updateFkFire(dt);                            // (Flame King's fire)
   ultHitCtx = false;
   updateScythes(dt);
   updatePortals(dt);                                       // Hailie's portals
@@ -25622,7 +26999,7 @@ function basePose(p) {
   // ULTIMATE poses
   if (a && a.type === 'timeStop') return { ...a.pose, raw: true };   // frozen mid-motion
   if (a && a.type === 'shipUlt' && a.pose) return { ...a.pose };
-  if (a && (a.type === 'hKunaiUlt' || a.type === 'hRasenDrop' || a.type === 'cOnePunch' || a.type === 'hakai' || a.type === 'hakaiVictim' || a.type === 'reaperGod' || a.type === 'rgVictim') && a.pose) return { ...a.pose };   // Hailie's Kunai Barrage (the throw)   // Aiden's pirate ship ultimate animates itself
+  if (a && (a.type === 'hKunaiUlt' || a.type === 'hRasenDrop' || a.type === 'cOnePunch' || a.type === 'hakai' || a.type === 'hakaiVictim' || a.type === 'reaperGod' || a.type === 'rgVictim' || a.type === 'omKameCb') && a.pose) return { ...a.pose };   // Hailie's Kunai Barrage (the throw)   // Aiden's pirate ship ultimate animates itself
   if (a && a.type === 'kiBarrage') {                  // Lance hanging in the air, hand thrust down at the stage
     const w = Math.sin(p.anim * 60) * 0.12;
     const k = a.phase === 'barrage' ? Math.sin(p.anim * 45) * 0.5 : 0;   // (barrage: his arm jerking all over as he sprays)
@@ -25909,7 +27286,8 @@ function figureOf(p) {
   return { x: p.x, y: p.y, vx: p.vx, vy: p.vy, face: p.face, pose: p.disp || getPose(p), squash: p.squash,
            color: bodyColorOf(p), ink: inkOf(p), look: p.look, transformed: !!p.transformed, noScythe: !!p.noScythe || p.spareSwordT > 0 || !!(p.action && p.action.type === 'reaperGod'), ui: !!p.ui, lanceForm: p.lanceForm || 0, ssg: !!p.ssg, odmGas: p.odmGas, sizeMul: p.sizeMul || 1, hForm: p.hForm || 0, hairGrow: p.hairGrow,
            ...(p.hForm && p.look && p.look.rage ? { look: hunterFormLook(p.look, p.hForm) } : {}),
-           ...(p.transformed && p.look && p.look.escanorForm ? { look: escLook(p.look), color: escLook(p.look).body } : {}) };   // (Colten transformed: his skin, not steel)
+           ...(p.transformed && p.look && p.look.escanorForm ? { look: escLook(p.look), color: escLook(p.look).body } : {}),
+           ...(omMaxNow(p) && !p.look.roshiMax ? { look: omMaxLook(p.look) } : {}) };   // (THE OLD MAN at MAX POWER)   // (Colten transformed: his skin, not steel)
 }
 
 // Characters can have their own body color (Colby is red). If both players pick the same character,
@@ -26024,6 +27402,7 @@ function drawFigure(fig, opts = {}) {
   const S = look.scythe3d && pz.sc && !fig.noScythe ? scytheGeom(shoulder, pz.sc, f) : null;   // (no scythe after throwing it)
   const LW = (sketch ? 7 : 9) + (opts.outline || 0);  // sketch: marker-pen thickness (+ fatter for the dark OUTLINE pass)
   const ink = sketch ? main : null;                   // sketch: hair is outlined in the fighter's pen
+  if (look.flameKing && !opts.tint) drawFlameKingFire(head, shoulder, f, fig, 'back');   // FLAME KING: the glow, crown and shoulder wings (behind him)
 
   // Solid, thick, flat-colored figure (Combat Gods style), no outline
   ctx.lineCap = 'round';
@@ -26132,6 +27511,8 @@ function drawFigure(fig, opts = {}) {
   else if (MUS) muscleLimb(shoulder, pz.armB, AL, AL2, f, ARM_W, back, null);
   else limb(shoulder, pz.armB, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armB, f, back, null); drawHunterBracer(shoulder, pz.armB, f, opts); }   // (the far arm's delt + bracer)
+  if (look.roshi && !look.roshiMax && !grip && !opts.tint) drawRoshiSleeve(shoulder, pz.armB, f, true);
+  if (look.flameKing && !grip && !opts.tint) drawFkArm(shoulder, pz.armB, f, true);
   if (look.dualKatana && !grip && !fig.noScythe) drawKatana(shoulder, pz, f, { ...opts, trailKey: 'bladeTrail2' }, swordHoldB(shoulder, pz, f));   // SEVON: the second katana, in his back hand
   if (four) {                                                 // far LOWER arm
     ctx.strokeStyle = back; ctx.lineWidth = ARM_W;
@@ -26631,8 +28012,12 @@ function drawFigure(fig, opts = {}) {
   if (look.flameHair) drawFlameHair(head, f, opts, main, fig);   // SEVON: swept-back ginger hair, orange tips
   if (look.ranger) drawRangerSuit(hip, shoulder, head, pz, f, opts, look);
   if (look.hunter) drawHunterGear(hip, shoulder, head, pz, f, opts, fig);
+  if (look.roshi && !opts.tint) drawRoshiClothes(hip, shoulder, pz, f, look.roshiMax);   // THE OLD MAN's tunic + baggy pants
+  if (look.flameKing && !opts.tint) drawFkSuit(hip, shoulder, pz, f);      // FLAME KING's suit, belt and boots
   if (look.knight) drawKnightArmor(hip, shoulder, head, pz, f, opts, look.knight);   // COLTEN: plate armor, tabard and great helm   // SEVON's alt: the BLUE RANGER - helmet, chest diamonds, belt, boots
   // COLTEN: rectangle reading glasses
+  if (look.flameKing && !opts.tint) drawFlameKingFire(head, shoulder, f, fig, 'front');   // FLAME KING: the fire mask
+  if (look.roshi && !opts.tint) drawRoshiGear(head, shoulder, hip, f, look.roshiMax);      // THE OLD MAN
   if (look.glasses && !opts.tint) {
     ctx.strokeStyle = sketch ? main : '#141414'; ctx.lineWidth = 1.8;
     ctx.strokeRect(head.x + f * 2 - (f > 0 ? 0 : 10), head.y - 4, 10, 5.5);                        // lens frame
@@ -26670,6 +28055,8 @@ function drawFigure(fig, opts = {}) {
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armA, f, main, EDGE); drawHunterBracer(shoulder, pz.armA, f, opts); }   // (the near arm's delt + bracer, on top of it)
+  if (look.roshi && !look.roshiMax && !grip && !opts.tint) drawRoshiSleeve(shoulder, pz.armA, f, false);
+  if (look.flameKing && !grip && !opts.tint) drawFkArm(shoulder, pz.armA, f, false);
   if ((look.hellcat || look.kunaiHand) && !grip) {               // HAILIE (or Colten, holding hers): her kunai, always in her front hand - in a REVERSE GRIP:
     const H = swordHold(shoulder, pz, f), ux = H.ux, uy = H.uy;     //  the blade comes out the bottom of her fist and lies back along her
     let px = -uy, py = ux; if (py < 0 || (Math.abs(py) < 0.2 && px * f > 0)) { px = -px; py = -py; }   //  forearm (pointing down / back), the ring
@@ -27085,6 +28472,12 @@ const cloneRim = new WeakMap();
 const cloneRimLook = L => { if (!L) return L; let q = cloneRim.get(L); if (!q) { q = { ...L, madara: false, smoke: false, longHair: false, demonEyes: false, sage: false }; cloneRim.set(L, q); } return q; };
 function drawFighter(p) {
   if (p.hbPinned) return;                                          // (Hunter Ball party: OUT this round)
+  if (p.buryT > 0 && !p._buryDraw) {                               // BURIED: only the top of them sticks out of the floor
+    p._buryDraw = true; ctx.save(); ctx.beginPath(); ctx.rect(p.x - 300, p.buryFloor - 900, 600, 900); ctx.clip();
+    try { drawFighter(p); } finally { ctx.restore(); p._buryDraw = false; }
+    ctx.fillStyle = '#6b5440'; ctx.beginPath(); ctx.ellipse(p.x, p.buryFloor, 30, 7, 0, Math.PI, 0); ctx.fill();
+    return;
+  }
   const a = p.action;
   if (a && a.type === 'uiDash' && a.phase === 'vanish') return;   // (Lance mid-Embodied-Light: gone - just the streak of light)
   if (a && a.type === 'cOnePunch') return;                         // (Colten's One Punch draws him itself - the close-up, the GIANT)
@@ -27621,11 +29014,12 @@ function drawProjectiles() {
   }
   if (!sketch) drawKameCharge();                                // Lance's ultimate: the ki ball growing in his hand
   for (const f of fighters) if (f.action && f.action.type === 'uiTransform') drawUiKame(f);   // Lance's UI cutscene Kamehameha
-  for (const s of projectiles) if (s.kunai) drawKunaiShot(s); else if (s.kind === 'beam') drawBeam(s); else if (s.kind === 'tile') drawTile(s); else if (s.kind === 'disc') drawDisc(s); else if (s.kind === 'dragon') drawDragon(s); else if (s.kind === 'tiger') drawTiger(s); else if (s.kind === 'batarang') drawBatarang(s);
+  for (const s of projectiles) if (s.kunai) drawKunaiShot(s); else if (s.kind === 'beam') drawBeam(s); else if (s.kind === 'tile') drawTile(s); else if (s.kind === 'disc') drawDisc(s); else if (s.kind === 'dragon') drawDragon(s); else if (s.kind === 'tiger') drawTiger(s); else if (s.kind === 'batarang') drawBatarang(s); else if (s.kind === 'fkPillar') drawFkPillar(s); else if (s.kind === 'fkPatch') drawFkPatch(s);
+  drawFkAuras(); drawOmCb(); drawColtenShields(); drawColtenKanji(); drawColtenFury();
   if (sketch) {                          // pen-drawn energy balls with a scribbled fill
     ctx.lineCap = 'round';
     for (const s of projectiles) {
-      if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'tiger' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
+      if (s.kind === 'fkPillar' || s.kind === 'fkPatch' || s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'tiger' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
       const ink = s.owner ? inkOf(s.owner) : '#7a4b00';
       ctx.strokeStyle = ink;
       if (s.kind === 'wave') {
@@ -27648,7 +29042,7 @@ function drawProjectiles() {
     return;
   }
   for (const s of projectiles) {
-    if (s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'tiger' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
+    if (s.kind === 'fkPillar' || s.kind === 'fkPatch' || s.kind === 'beam' || s.kind === 'disc' || s.kind === 'dragon' || s.kind === 'tiger' || s.kind === 'batarang' || s.kind === 'tile' || s.kunai) continue;
     if (s.electric) { drawThunderBolt(s); continue; }
     s.trail.forEach((t, i) => {
       const k = i / s.trail.length;
@@ -28371,6 +29765,7 @@ function render() {
       // Draw back-to-front (a thrown fighter swung behind the thrower goes behind him)
       const order = fighters.filter(f => f.respawnTimer <= 0 && (!arc || f === arc || f === arc.action.victim)).sort((a, b) => (a.drawZ || 0) - (b.drawZ || 0));   // (the arctic: only the two of them)
       for (const f of order) drawFighter(f);
+      drawFkFire();                                                // (Flame King's fire, over the fighters)
       for (const f of order) drawSmear(f);              // attack smears on top of the bodies
       for (const f of order) if (f.action && f.action.anchor && f.action.type === 'attack') { const A = f.action.anchor; drawAnchorAt(A.x, A.y, A.th, A.alpha, A.scale || 1); }
       for (const f of order) if (f.action && f.action.type === 'taunt' && f.look && f.look.pirateHat && !f.action.bones) drawHeelTauntProps(f, f.action, true);   // (his cigar, in front of his face)   // Captain Heel's anchor (in his hands)
@@ -28514,7 +29909,7 @@ addEventListener('pointerdown', unlockAudio);
 // The last tile after these is RANDOM.
 // ROOM FOR 16 FIGHTERS: the empty slots (null) show as COMING SOON on the select screen until someone's added there
 const ROSTER_SLOTS = 16;
-const ROSTER = ['COLBY', 'LANCE', 'STICKMAN', 'AIDEN', 'COLBALIAS', 'COLTEN', 'SEVON', 'HUNTER', 'HAILIE'];
+const ROSTER = ['COLBY', 'LANCE', 'STICKMAN', 'AIDEN', 'COLBALIAS', 'COLTEN', 'SEVON', 'HUNTER', 'HAILIE', 'FLAMEKING', 'OLDMAN'];
 while (ROSTER.length < ROSTER_SLOTS) ROSTER.push(null);
 const RANDOM_TILE = ROSTER.length;                 // tile index of the RANDOM tile
 const GRID_TILES = ROSTER.length + 1;
@@ -28528,6 +29923,8 @@ const CHAR_INFO = {
   STICKMAN: { title: 'THE ORIGINAL', a: '#52525c', b: '#141418' },
   HUNTER:   { title: 'TRIPLE H', a: '#8a4a12', b: '#1a0c04' },
   HAILIE:   { title: 'THE VOICES', a: '#a8141c', b: '#120405' },
+  FLAMEKING: { title: 'THE BURNING HERO', a: '#c2410c', b: '#1a0603', name: 'FLAME KING' },
+  OLDMAN:   { title: 'THE TURTLE HERMIT', a: '#d97a1a', b: '#0f1a24', name: 'THE OLD MAN' },
 };
 // The name a fighter is SHOWN by (their id - AIDEN, COLBY... - never changes, so saves and online play aren't affected)
 const charName = c => (c && CHAR_INFO[c] && CHAR_INFO[c].name) || c;
@@ -29091,7 +30488,7 @@ function startMatch() {
     f.color = matchTeams ? TEAM_COLORS[pl.team].main : FIGHTER_INIT[i].color;   // TEAMS: the team's colour
     f.binds = profileOf(pl.profile);                                              // this player's CONTROLS PRESET
     if (!pl.cpu) rememberDevPreset(pl.dev, pl.profile || 'DEFAULT');               // (so the MOVESETS page shows this device's buttons later)
-    f.kos = 0; f.kills = 0; f.killsOn = {}; f.sds = 0; f.lastHitBy = null; f.lastHitAt = -99; f.lastGroundAt = 0; f.ult = 0; f.disp = null; f.ss2Seen = false; f.ss1Seen = false; f.sgUsed = false; f.ssg = false; f.lotusUsed = false; f.hcbUsed = false; f.mzUsed = false; f.sunCbUsed = false; stopSsgSong(f);   // (Lance: the Super Saiyan / Super Saiyan 2 cutscenes play again in a new match)
+    f.kos = 0; f.kills = 0; f.killsOn = {}; f.sds = 0; f.lastHitBy = null; f.lastHitAt = -99; f.lastGroundAt = 0; f.ult = 0; f.disp = null; f.ss2Seen = false; f.ss1Seen = false; f.sgUsed = false; f.ssg = false; f.lotusUsed = false; f.hcbUsed = false; f.mzUsed = false; f.sunCbUsed = false; f.omCbUsed = false; f.fury = 0; f.furyT = 0; f.furyDmg0 = 0; stopSsgSong(f);   // (Lance: the Super Saiyan / Super Saiyan 2 cutscenes play again in a new match)
     f.stocks = gameOptions.stocks > 0 ? gameOptions.stocks : Infinity;   // lives
     f.cpuLevel = pl.cpu ? pl.level : null;                                // each CPU plays at its own level
     f.timeMeter = 0; f.tsCD = 0;
@@ -29912,7 +31309,7 @@ const MOVESETS = {
       ['AIR DOWN J', 'Spinning Axe Kick', 'A spinning heel brought down on them.'] ] },
     { title: 'K (KI)', rows: [
       ['K (HOLD)', 'Kamehameha', 'Hold to charge, let go to fire a beam that hits over and over. AIM IT while charging: the last direction you press decides where it fires - left / right / UP on the ground, and DOWN too in the air (up launches, down spikes). Z VANISH while charging = blink (up to 3 times, still charging). With someone MARKED = Instant Transmission behind them and fire at once.'],
-      ['K, K (DOUBLE-TAP)', 'Flight', 'He FLIES - every direction, no gravity. Double-tap K again while flying = an air dash straight at the opponent (two per flight). It lasts 5 seconds - then he is tired and drops out of it.'],
+      ['BLOCK, BLOCK (IN THE AIR)', 'Flight', 'Double-tap BLOCK in the air and he FLIES - every direction, no gravity. Double-tap BLOCK again while flying = an air dash straight at the opponent (two per flight). It lasts 5 seconds - then he is tired and drops out of it.'],
       ['SIDE K', 'Destructo Disc', 'A spinning disc of ki that flies out and comes back like a boomerang - it cuts on the way out AND back (and can nick him).'],
       ['UP K', 'Rising Axe Kick', 'His recovery: flips upward driving his heel up - carries them up with him, then pops them higher to keep the combo going.'],
       ['DOWN K (TAP)', 'Kaioken', 'Toggles KAIOKEN: x1 > x2 > x3 > off. More damage at each level (+5 / +10 / +16%), but it strains him (0.8% / 1.3% / 2.2% damage every second). At x3 his KAMEHAMEHA goes straight THROUGH people - it hits everyone in its line.'],
@@ -29960,6 +31357,33 @@ const MOVESETS = {
       ['UP + I (TRANSFORMED)', 'Flying Raijin', 'A lunge - whoever it catches is ringed with kunai and cut from every side as she teleports between them (anyone close gets caught too), then the knife through the chest: a purely horizontal launch.'],
       ['I (TRANSFORMED)', 'Kunai Barrage', 'A TRACKING kunai at every enemy on the stage. Perfect block it to knock it away (or dodge it) - otherwise it sticks, and she teleports to each of them in turn with a fully charged RASENGAN.'],
       ['SIDE + I (TRANSFORMED)', 'Rasengan Drop', 'One kunai. If it sticks, she teleports right above them and drops a fully charged RASENGAN on them - driven into the floor, then they bounce off it and fly STRAIGHT UP (off the stage: spiked down). Perfect block or dodge the kunai to stop it.'] ] } ] },
+  FLAMEKING: { blurb: 'A white stickman wreathed in a pro hero\'s flames. Trap them in fire, bounce their shots back, and bury them in the floor.', sections: [
+    { title: 'J', rows: [
+      ['AIR J', 'Fireball Spin', 'He whirls round with a fireball blazing in each hand - they reach well past his fists, both sides at once. Two quick hits, then a bigger burst.'],
+      ['SIDE J', 'Power Dunk', 'A rising LEFT UPPERCUT that carries them up into the air with him - then the RIGHT comes down in a flying superman punch that crashes them into the ground.'],
+      ['UP J', 'Blast Arc', 'A short, explosive and VERY wide arc of blasts off his hands - from one side of him, over his head, to the other. Great for catching people and juggling them.'],
+      ['J, J, J', 'Uppercut > Low Kick > Headbutt', 'The headbutt drives them into the ground - BURIED, stuck in place (longer the more damage they have). Any hit pops them out.'] ] },
+    { title: 'K (FIRE)', rows: [
+      ['K (HOLD)', 'Fireball', 'Charge it up. BLOCK while charging to store the charge for later - a full charge stores itself. K again fires it.'],
+      ['SIDE K', 'Fire Rain', 'Lobs three fireballs up in arcs - near, far and in between. They rain down and leave patches of fire that burn ANYONE standing in them (him too).'],
+      ['UP K', 'Flame Dash', 'Burns in place for a moment, then rockets him whichever way you hold. His recovery.'],
+      ['DOWN K', 'Falcon Kick', 'A flaming kick that rockets him forward (diagonally down in the air). With a STORED fireball it goes further, faster and hits much harder - and uses the charge up.'] ] },
+    { title: 'PASSIVE', rows: [ ['HEAT RISES', 'Extra Jump', 'One more air jump than everyone else - it bursts out of a column of fire.'] ] } ] },
+  OLDMAN: { blurb: 'A tiny old master who fights like a Tekken stance fighter: Taido footwork and hard-hitting Mishima karate. Small and light - but fast and relentless.', sections: [
+    { title: 'J (MISHIMA KARATE)', rows: [
+      ['J, J, J', 'Jab > Cross > Spinning Backfist', 'A fast string that drops him into HEAVEN\'S WRATH.'],
+      ['UP J (TAP J AGAIN)', 'Wind God Fist', 'The Mishima uppercut. Tap J again while he crouches into it for an ELECTRIC: purple lightning, hits much harder.'],
+      ['SIDE J (HOLD)', 'Demon Paw', 'A chargeable, electric palm strike.'],
+      ['DOWN J', 'Hell Sweep', 'A low sweep both ways that trips them up.'] ] },
+    { title: 'STANCES', rows: [
+      ['SIDE K', 'Sentai', 'A lightning-fast step in, low to the floor. Then J = Sentai Flip Kick (launcher), K = Spinning Demon (KO kick), DOWN = Hell Sweep.'],
+      ["(after J, J, J)", "Heaven's Wrath", 'Then J = Thunder Palm (electric launcher), K = Spinning Demon, DOWN = Hell Sweep.'],
+      ['DOWN K', 'Weave Counter', 'If anything hits him in the stance, he weaves round to their OTHER side and strikes - a little pop-up to combo off.'] ] },
+    { title: 'K', rows: [
+      ['K (HOLD)', 'Kamehameha', 'His own Kamehameha: comes out faster than Lance\'s, but it\'s weaker and only charges up to half as much.'],
+      ['UP K', 'Kamehameha Rocket', 'Fires a Kamehameha straight DOWN under him - it blasts him up into a HEADBUTT. The beam hits like a normal Kamehameha: great for covering the side of the stage below him. His recovery.'] ] },
+    { title: 'TRANSFORMATION', rows: [ ['FULL METER + I', 'Max Power', 'He bulks right up - huge, bare-chested, a third bigger - and hits 40% harder. He stays like this through his ultimate too.'] ] },
+    { title: 'COMEBACK', rows: [ ['KNOCKED OUT ON HIS LAST STOCK WITH A FULL METER (ONCE A MATCH)', 'Max Power Kamehameha', 'The match stops: he hangs right where he was knocked out, bulks up to MAX POWER and charges - and on the SCREAM he fires a HUGE Kamehameha at whoever knocked him out (or the nearest opponent) - locked in the moment it fires. Z vanish through it or PERFECT BLOCK it - or be blasted away. Then he has to make it back himself (every Z vanish refilled).'] ] } ] },
   STICKMAN: { blurb: 'The original: a balanced all-rounder with simple smash attacks and energy shots. The best place to start.', sections: [
     { title: 'GROUND J', rows: [
       ['J', 'Jab', 'A quick punch.'],
@@ -30085,9 +31509,9 @@ const MOVESETS = {
   COLTEN: { blurb: 'The knight - MASTER OF ALL WEAPONS. The Dragonslayer in his hands, and his grab TAKES your weapon and fights you with your own moves.', sections: [
     { title: 'GROUND J', rows: [
       ['J J J', "Warlord Slash > Rising Backhand > Giant's Crash", 'A wide slash, a heavy rising backhand, then the sword brought straight down from overhead.'],
-      ['SIDE J', 'Dread Cleaver', 'The sword raised behind his head and brought down in a giant diagonal arc. Hold to charge.'],
+      ['SIDE J (HOLD)', 'Giant Slam', 'He hoists the greatsword straight up over his head (charge it up there), then SLAMS it into the floor in front of him - a shockwave tears along the ground the way he faces.'],
       ['UP J', 'Heaven Cleaver', 'A huge arc from in front, up over his head and down behind. Hold to charge.'],
-      ['DOWN J', 'Ground Reaper', 'Sweeps the blade along the floor in front, then behind. Hold to charge.'],
+      ['DOWN J (HOLD)', 'Cyclone Reaper', 'Crouched low, he SPINS with the blade out flat along the floor - it swipes low on both sides at once: a quick catching hit, then the full-power one.'],
       ['RUN + J', 'Charging Thrust', 'Runs the sword straight through them.'] ] },
     { title: 'AIR J', rows: [
       ['AIR J', 'Whirlwind Blade', 'The sword spun all the way round him.'],
@@ -30096,13 +31520,13 @@ const MOVESETS = {
       ['AIR UP J', 'Sky Splitter', 'An arc over his head.'],
       ['AIR DOWN J', 'Impaler', 'The sword driven straight down beneath him - spikes.'] ] },
     { title: 'K', rows: [
-      ['K', 'Warlock Blade', 'A long wind-up, then a giant thrust wreathed in dark energy. Hold to charge - one of the strongest hits in the game.'],
-      ['SIDE K', 'Gate Throw', 'Throws whatever weapon he is holding. It hovers - K calls it back - or drops, and he picks it up with K. Throw a STOLEN weapon and his Dragonslayer falls back into his hand out of the Gate.'],
-      ['UP K', 'Dark Ascension', 'His recovery: rockets up with the sword raised, cutting on the way.'],
-      ['DOWN K', "Warlord's Quake", 'Plunges the greatsword into the ground: the floor erupts on both sides of him. Hold to charge.'] ] },
+      ['K', 'Gate Throw', 'Throws whatever weapon he is holding. It hovers - K calls it back - or drops, and he picks it up with K. Throw a STOLEN weapon and his Dragonslayer falls back into his hand out of the Gate.'],
+      ['DOWN K (HOLD)', 'Fury', 'Hold to build his FURY meter (it also builds slowly while he takes damage). FULL: down K sets it off - for 10 seconds every move carries him further forward, hits a bit harder, and his up K climbs much higher.'],
+      ['SIDE K, K, K, K', 'Flame Cross Slash', 'A cut for every press: each one STUNS them for a moment and paints a stroke of the kanji 火 (FIRE) beside him. The 4th completes it - it FLASHES and that cut hits far harder. Press quickly: if you are slow, they can get out of the way.'],
+      ['UP K', 'Dark Ascension', 'His recovery: rockets up with the sword raised, cutting on the way.'] ] },
     MS_STD_THROWS,
     { title: 'TRANSFORM + ULTIMATE (I)', rows: [
-      ['I (FULL METER)', 'WARLORD', 'He gets HUGE and bare-chested: much more damage and knockback, and 2 hits of HYPER ARMOR (both come back 2 seconds after they are used up). Only while it lasts.'],
+      ['I (FULL METER)', 'WARLORD', 'He gets HUGE and bare-chested: much more damage and knockback, and 2 hits of HYPER ARMOR (both come back 2 seconds after they are used up). And a SHIELD floats behind him that blocks EVERY hit from behind (shots too) - you have to face him. Only while it lasts.'],
       ['I (TRANSFORMED)', 'The Sun', 'He floats up and charges a sun over his hand, bigger and bigger (hyper armor the whole time) - then compresses it and throws it: the WHOLE floor explodes. Get off the ground! He is back to normal after.'],
       ['SIDE + I (TRANSFORMED)', 'One Punch', 'A close-up: his eyes light up. Then they turn round and look back... and he is ENORMOUS behind them. One gigantic red fist swallows them whole and sends them flying - a KO punch. It opens with a dash at the nearest enemy in range: PERFECT BLOCK it as he arrives to stop it (and stagger him), or dodge through it.'],
       ['COMEBACK (KNOCKED OUT WITH A FULL METER, ONCE A MATCH)', 'The Sun - Comeback', 'He is back in the middle of the stage and casts THE SUN - and this one launches with INSANE force (it KOs from 0% if it lands). It can still be PERFECT BLOCKED: the opening cut, and the explosion as it goes off (or be up in the air).'],
@@ -30590,7 +32014,13 @@ function arcadeUpdate(dt) {
   if (mouse.right && A.phase === 'pick') { arcadeLeavePick(A); }
   mouse.click = mouse.right = mouse.moved = false;
 }
-const arcadeTileRect = k => { const n = arcadePicks().length, w = 128, gap = 12, x0 = W / 2 - (n * w + (n - 1) * gap) / 2; return { x: x0 + k * (w + gap), y: 470, w, h: 64 }; };
+// the fighter tiles: one row up to 8 - more than that (up to the 16-fighter roster) = TWO balanced rows of slimmer tiles
+const arcadeTileRect = k => {
+  const n = arcadePicks().length, rows = n > 8 ? 2 : 1, cols = Math.ceil(n / rows), gap = rows > 1 ? 10 : 12;
+  const w = Math.min(128, (W - 60 - (cols - 1) * gap) / cols), h = rows > 1 ? 44 : 64, row = Math.floor(k / cols), inRow = row < rows - 1 ? cols : n - cols * (rows - 1);
+  const x0 = W / 2 - (inRow * w + (inRow - 1) * gap) / 2;
+  return { x: x0 + (k - row * cols) * (w + gap), y: rows > 1 ? 456 + row * (h + 6) : 470, w, h };
+};
 const arcadeDiffRect = k => ({ x: W / 2 - 340 + k * 136, y: 580, w: 128, h: 44 });
 const ARCADE_WATCH_RECT = { x: W / 2 + 352, y: 580, w: 170, h: 44 };
 function drawArcade() {
@@ -30724,8 +32154,10 @@ function drawArcade() {
         const r = arcadeTileRect(k), on = k === A.sel;
         if (sk) { if (on) { sctx.fillStyle = 'rgba(255,224,40,0.75)'; sctx.fillRect(r.x, r.y, r.w, r.h); } doodleRect(r.x, r.y, r.w, r.h, k + 20, INK, on ? 3 : 1.5); }
         else slantRect(r.x, r.y, r.w, r.h, 10, on ? '#d62a22' : 'rgba(20,16,18,0.85)');
-        sctx.font = F(charName(c).length > 9 ? 13 : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim; sctx.fillText(charName(c), r.x + r.w / 2, r.y + 34);
-        drawCharStars(c, r.x + r.w / 2, r.y + 50, 5, sk);
+        const slim = r.h < 60;                                        // (two rows: a slimmer tile - the name, and the stars under it)
+        sctx.font = F(charName(c).length > 9 || slim ? (charName(c).length > 9 ? 11 : 13) : 16, true); sctx.fillStyle = on ? (sk ? INK : '#ffffff') : dim;
+        sctx.fillText(charName(c), r.x + r.w / 2, r.y + (slim ? 20 : 34));
+        drawCharStars(c, r.x + r.w / 2, r.y + (slim ? 33 : 50), slim ? 4 : 5, sk, !slim);
       });
       sctx.textAlign = 'center';
       sctx.font = F(16, true); sctx.fillStyle = dim; sctx.fillText('DIFFICULTY', W / 2, 568);
@@ -31939,50 +33371,100 @@ function drawOptionsThemed(th) {
 }
 
 // ---------------- RESULTS (after a stock match) ----------------
+// TWO PAGES: the WINNER screen (the winner in the spotlight + everyone's standings, 1st to last - built to fit 8 players),
+// then A / ENTER for the KO LOG (one card per player: how many they knocked out and WHO, their falls and self-KOs).
+// A / ENTER again (or B / ESC from either page) = back to the character select.
 function resultsUpdate(dt) {
-  const devs = menuDevices(dt);
-  if (menuTime > 0.6 && (devs.some(d => d.tap.ok || d.tap.start || d.tap.back) || mouse.click)) {
-    results = null; backToSelect(); menuSfx('pick');
-    if (netplay) netBackToLobby();                   // online: back to the online lobby to pick again
+  const devs = menuDevices(dt), R = results;
+  R.pageT = (R.pageT || 0) + dt;
+  const go = devs.some(d => d.tap.ok || d.tap.start) || mouse.click, back = devs.some(d => d.tap.back);
+  if (menuTime > 0.6 && R.pageT > 0.25 && (go || back)) {
+    if (go && !R.page) { R.page = 1; R.pageT = 0; menuSfx('move'); }
+    else { results = null; backToSelect(); menuSfx('pick'); if (netplay) netBackToLobby(); }   // (online: back to the online lobby)
   }
   mouse.click = mouse.right = mouse.moved = false;
+}
+// everyone, best first: the winner(s), then stocks left, then KOs, then fewest falls
+const resultsOrder = R => R.rows.map((r, i) => ({ ...r, idx: i })).sort((a, b) => (b.won - a.won) || (b.stocks - a.stocks) || ((b.kills || 0) - (a.kills || 0)) || (a.falls - b.falls));
+const placeName = n => n + (n === 1 ? 'ST' : n === 2 ? 'ND' : n === 3 ? 'RD' : 'TH');
+function resultsWho(R, vi) {                                         // (a victim's name: the character - plus the player when two share it)
+  const v = R.rows[vi]; if (!v) return '?';
+  return (R.rows.some(o => o !== v && o.char === v.char) ? v.name + ' ' : '') + charName(v.char);
 }
 function drawResults() {
   withMenuDrawing(() => {
     drawMenuBackground();
     const R = results;
-    const win = R.winner >= 0 ? R.rows[R.winner] : null;
+    if (R.page) return drawKoLog(R);
+    const win = R.winner >= 0 ? R.rows[R.winner] : null, teamWin = R.team !== null && R.team !== undefined;
     slantRect(-20, 30, 720, 70, 26, '#a8261e');
-    const teamWin = R.team !== null && R.team !== undefined;
     text(teamWin ? TEAM_COLORS[R.team].name + ' TEAM WINS!' : win ? win.name + ' WINS!' : 'NO CONTEST', 32, 80, 30, '#ffffff');
-    if (win) {
-      // big spotlight on the winner
+    if (win) {                                                       // the winner, in the spotlight
       const g = sctx.createRadialGradient(330, 440, 20, 330, 440, 260);
       g.addColorStop(0, 'rgba(255,210,63,0.35)'); g.addColorStop(1, 'rgba(255,210,63,0)');
       sctx.fillStyle = g; sctx.fillRect(60, 160, 540, 520);
-      drawPortrait(win.char, 330, 600, 3.0, win.color, menuTime, 1, win.alt || 0);   // (in their skin)
+      drawPortrait(win.char, 330, 600, 3.0, win.color, menuTime, 1, win.alt || 0);
       text(charName(win.char), 330, 650, 26, '#ffffff', 'center');
       if (CHAR_INFO[win.char]) text(CHAR_INFO[win.char].title, 330, 676, 9, '#ffd23f', 'center', false);
     }
-    // the table of everyone
-    const many = R.rows.length > 4;                                 // (5-6 players: compact rows, so they all fit)
-    const rowH = many ? 84 : R.rows.length > 2 ? 118 : 130, boxH = many ? 72 : R.rows.length > 2 ? 96 : 100;
-    R.rows.forEach((r, k) => {
-      const y = (many ? 150 : R.rows.length > 2 ? 170 : 200) + k * rowH, x = 700, ty1 = many ? 30 : 36, ty2 = many ? 56 : 64;
-      slantRect(x - 4, y - 4, 520, boxH + 8, 14, '#0e0c0c');
-      slantRect(x, y, 512, boxH, 12, r.won ? '#5e4a12' : '#26211f');
-      sctx.fillStyle = r.color; sctx.fillRect(x + 12, y + 10, 10, boxH - 20);
-      text((r.won ? 'WIN  ' : '     ') + r.name, x + 36, y + ty1, many ? 14 : 16, '#ffffff', 'left', false);
-      text(charName(r.char), x + 36, y + ty2, 10, '#ffd23f', 'left', false);
-      text('STOCKS LEFT ' + r.stocks, x + 490, y + ty1, 10, '#ffffff', 'right', false);
-      text('FALLS ' + r.falls + (r.sds ? '  (' + r.sds + ' SELF)' : ''), x + 490, y + ty2, 10, '#b4b4bb', 'right', false);
-      text('KOS ' + (r.kills || 0), x + 215, y + ty1, many ? 12 : 13, '#ff9a6a', 'left', false);        // WHO THEY KNOCKED OUT
-      const on = Object.entries(r.killsOn || {}).map(([vi, n]) => { const v = R.rows[+vi]; if (!v) return null;
-        const dup = R.rows.some(o => o !== v && o.char === v.char); return (dup ? v.name + ' ' : '') + charName(v.char) + (n > 1 ? ' x' + n : ''); }).filter(Boolean);
-      if (on.length) text(on.slice(0, 3).join(', ') + (on.length > 3 ? ' +' + (on.length - 3) : ''), x + 215, y + ty2, 9, '#ffd0b0', 'left', false);
+    // STANDINGS: one clean row each, sized so 2 to 8 players all fit
+    const rows = resultsOrder(R), n = rows.length, top = 132, bottom = 650;
+    const rowH = Math.min(104, (bottom - top) / n), boxH = rowH - 10, big = rowH > 80, x = 680, w = 560;
+    text('STANDINGS', x + 4, top - 12, 11, '#ffd23f', 'left', false);
+    rows.forEach((r, k) => {
+      const y = top + Math.max(0, (bottom - top - n * rowH) * 0.4) + k * rowH, mid = y + boxH / 2;   // (a few players: centred down the page)
+      slantRect(x - 3, y - 3, w + 6, boxH + 6, 12, '#0e0c0c');
+      slantRect(x, y, w, boxH, 10, r.won ? '#5e4a12' : k % 2 ? '#221d1b' : '#2a2422');
+      text(placeName(k + 1), x + 34, mid + (big ? 8 : 6), big ? 20 : 14, r.won ? '#ffd23f' : '#b4b4bb', 'center');
+      sctx.fillStyle = r.color; sctx.fillRect(x + 66, y + 8, 8, boxH - 16);
+      text(r.name, x + 86, mid - (big ? 6 : 2), big ? 15 : 12, '#ffffff', 'left', false);
+      text(charName(r.char), x + 86, mid + (big ? 16 : 12), big ? 10 : 8, '#ffd23f', 'left', false);
+      // stocks left: a pip each
+      const pips = Math.min(r.stocks, 6), px = x + 300;
+      for (let i = 0; i < pips; i++) { sctx.fillStyle = r.color; sctx.beginPath(); sctx.arc(px + i * 13, mid - (big ? 8 : 5), 5, 0, Math.PI * 2); sctx.fill(); }
+      if (r.stocks > 6) text('+' + (r.stocks - 6), px + 6 * 13 + 2, mid - (big ? 4 : 2), 9, '#ffffff', 'left', false);
+      if (!r.stocks) text('OUT', px - 5, mid - (big ? 3 : 1), 9, '#8a8a92', 'left', false);
+      text('STOCKS', px - 5, mid + (big ? 16 : 12), 8, '#8a8a92', 'left', false);
+      text(String(r.kills || 0), x + 438, mid + (big ? 2 : 1), big ? 20 : 14, '#ff9a6a', 'center');
+      text('KOS', x + 438, mid + (big ? 18 : 13), 8, '#8a8a92', 'center', false);
+      text(String(r.falls), x + 512, mid + (big ? 2 : 1), big ? 20 : 14, '#b4b4bb', 'center');
+      text('FALLS', x + 512, mid + (big ? 18 : 13), 8, '#8a8a92', 'center', false);
     });
-    if (menuTime > 0.6 && Math.floor(menuTime * 2) % 2 === 0) text('PRESS START / ENTER / A TO CONTINUE', 960, 680, 10, '#fff3a8', 'center', false);
+    if (menuTime > 0.6 && Math.floor(menuTime * 2) % 2 === 0) text('A / ENTER: KO LOG      B / ESC: CONTINUE', 960, 684, 10, '#fff3a8', 'center', false);
   });
+}
+// PAGE 2: the KO LOG - a card for each player (in standings order): their KOs, and who - with how many times - then falls / self-KOs
+function drawKoLog(R) {
+  slantRect(-20, 30, 520, 70, 26, '#a8261e');
+  text('KO LOG', 32, 80, 30, '#ffffff');
+  const rows = resultsOrder(R), n = rows.length, cols = n > 4 ? 2 : 1, perCol = Math.ceil(n / cols);
+  const top = 128, bottom = 650, gap = 14, cw = cols === 2 ? 590 : 900, x0 = cols === 2 ? 40 : (W - cw) / 2;
+  const ch = Math.min(150, (bottom - top - (perCol - 1) * gap) / perCol);
+  rows.forEach((r, k) => {
+    const c = Math.floor(k / perCol), rr = k % perCol, x = x0 + c * (cw + 20), y = top + Math.max(0, (bottom - top - perCol * (ch + gap)) * 0.4) + rr * (ch + gap);
+    slantRect(x - 3, y - 3, cw + 6, ch + 6, 12, '#0e0c0c');
+    slantRect(x, y, cw, ch, 10, r.won ? '#4e3e10' : '#26211f');
+    sctx.fillStyle = r.color; sctx.fillRect(x + 12, y + 10, 8, ch - 20);
+    text(r.name, x + 32, y + 26, 14, '#ffffff', 'left', false);
+    text(charName(r.char), x + 32 + Math.min(150, r.name.length * 13 + 14), y + 26, 10, '#ffd23f', 'left', false);
+    text('KOS ' + (r.kills || 0), x + cw - 18, y + 26, 14, '#ff9a6a', 'right', false);
+    // who they knocked out: little chips, wrapping onto the next line
+    const list = Object.entries(r.killsOn || {}).filter(([, m]) => m > 0).sort((a, b) => b[1] - a[1]);
+    let cx = x + 32, cy = y + 40;
+    const chipH = 20, lineH = 24, maxY = y + ch - 30;
+    if (!list.length) text('NO KOS', cx, cy + 14, 9, '#8a8a92', 'left', false);
+    for (const [vi, m] of list) {
+      const v = R.rows[+vi], label = resultsWho(R, +vi) + (m > 1 ? '  x' + m : ''), cwid = label.length * 8 + 22;
+      if (cx + cwid > x + cw - 14) { cx = x + 32; cy += lineH; }
+      if (cy > maxY) { text('...', cx, cy + 14, 9, '#ffd0b0', 'left', false); break; }
+      sctx.fillStyle = '#3a302c'; sctx.fillRect(cx, cy, cwid, chipH);
+      sctx.fillStyle = v ? v.color : '#888'; sctx.fillRect(cx, cy, 5, chipH);
+      text(label, cx + 11, cy + 14, 9, '#ffd0b0', 'left', false);
+      cx += cwid + 8;
+    }
+    text('FALLS ' + r.falls + '      SELF-KOS ' + (r.sds || 0), x + 32, y + ch - 10, 9, '#b4b4bb', 'left', false);
+  });
+  if (menuTime > 0.6 && Math.floor(menuTime * 2) % 2 === 0) text('A / ENTER / B / ESC: CONTINUE', 960, 684, 10, '#fff3a8', 'center', false);
 }
 
 // ---------------- PAUSE (ESC / MENU button during a fight) ----------------
@@ -32189,7 +33671,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)
