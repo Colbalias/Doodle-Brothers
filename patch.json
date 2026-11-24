@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.94",
+    "version":  "0.7.95",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,16 +8,16 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "7ab09f247f15e27b7e006051a5dd332dabeddabba3a006c58b80e16ea1cd0fac",
-                                     "size":  2508622
+                                     "hash":  "d2f1392195951ade8bae408fb30dcbbf89e3a4e62d54804e90e2106d1faf8769",
+                                     "size":  2623002
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
                                             "size":  92865
                                         },
                   "net.js":  {
-                                 "hash":  "fbb310d723c1d3526c639b9db29fdd6e1254dbc79d0e9e6a880621af4be6d620",
-                                 "size":  67940
+                                 "hash":  "bc928364c0a67c9f4c2843ac696431b4f6aee6e2b734fa8b7e8e4d07c5a631fe",
+                                 "size":  67980
                              },
                   "sounds/battle/a-samurais-death.mp3":  {
                                                              "hash":  "0fa2765a6f521e2154568fbc2ff61c08a726a9283388ea9e57a6065d9ba8752c",
@@ -83,6 +83,38 @@
                                                         "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
                                                         "size":  1010304
                                                     },
+                  "sounds/battle/colten-bolter.mp3":  {
+                                                          "hash":  "1b04935436c827cb17c735d0c3b908255a27f5264cfa5189d8601c84810a6502",
+                                                          "size":  36181
+                                                      },
+                  "sounds/battle/colten-boot-kick.mp3":  {
+                                                             "hash":  "31ac543e2b6183feec4ca4ebe207044f92403ac75edf99b43233b9c5b890ddca",
+                                                             "size":  28810
+                                                         },
+                  "sounds/battle/colten-chainsword-follow.mp3":  {
+                                                                     "hash":  "3e80563bea6361880685e5b006478d0bcfa154b7d9c4187b4677dd24a776583f",
+                                                                     "size":  23822
+                                                                 },
+                  "sounds/battle/colten-chainsword-swipe.mp3":  {
+                                                                    "hash":  "997b33793c4c632e1a31b901242401a1173124dc370dee7f073b5fdef2482b21",
+                                                                    "size":  16542
+                                                                },
+                  "sounds/battle/colten-chainsword-swipe2.mp3":  {
+                                                                     "hash":  "967c50fc3a04005e5f75eba8693a473aad441833e3c91d70e8be2d8a339e88d4",
+                                                                     "size":  15706
+                                                                 },
+                  "sounds/battle/colten-chainsword-swipe3.mp3":  {
+                                                                     "hash":  "dd5f2ff479dcd861cafa4eb66e7586b8237f9da666cabfe54bee92ca22a9f7d7",
+                                                                     "size":  15288
+                                                                 },
+                  "sounds/battle/colten-chainsword-swipe4.mp3":  {
+                                                                     "hash":  "4a4c692d7dd7fc01220205295d5087f58b8fdcb29d17a8e3760671e6c9253473",
+                                                                     "size":  26155
+                                                                 },
+                  "sounds/battle/colten-for-the-emperor.mp3":  {
+                                                                   "hash":  "32f7690532421e1dcce33dde49b7372a214c7255124e8f29b9bec019f9625763",
+                                                                   "size":  21960
+                                                               },
                   "sounds/battle/colten-one-punch.mp3":  {
                                                              "hash":  "508a0fcddb056b98314a273fcc8b49e62bed62318868f5d138b3399db50caf8a",
                                                              "size":  1422070
