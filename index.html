@@ -15210,7 +15210,7 @@ function startCruelSun(f, comeback = false) {
   f.vx = f.vy = 0;
   playSunSong(f);
 }
-// COLTEN'S COMEBACK: knocked out WITH A FULL METER (once a match) - he never goes out: he's back in the middle of the stage
+// COLTEN'S COMEBACK: knocked out on his LAST STOCK WITH A FULL METER (once a match) - he never goes out: he's back in the middle of the stage
 // and it's THE SUN - and this one's explosion launches with INSANE force (SUN_CB.hit). It can still be PERFECT BLOCKED (the
 // opening cut, and the explosion itself - block as it goes off).
 const SUN_CB = { hit: { dmg: 30, base: 1500, growth: 10, angle: 38 }, invuln: 1.2 };   // (angle: out toward the edge - straight up barely ever KOs)
@@ -25185,7 +25185,7 @@ function updateFighter(f, inp, dt) {
       }
       startHailieComeback(f); return;
     }
-    if (f.char === 'COLTEN' && !f.sunCbUsed && cbReady) {      // COLTEN: THE SUN - back on the stage, and it launches like nothing else
+    if (f.char === 'COLTEN' && !f.sunCbUsed && cbReady && f.stocks === 1) {   // COLTEN: on his LAST stock, with a FULL meter - THE SUN ("Who decided that?"): back on the stage, and it launches like nothing else
       f.ult = 0; f.sunCbUsed = true;
       if (ult || fighters.some(o => o !== f && o.action && ['tsukuyomi', 'fxSac', 'leeUlt', 'hGrindCut', 'sgCut', 'flameDragon', 'shipUlt', 'ultSeq', 'mzUlt', 'cruelSun'].includes(o.action.type))) {
         f.x = clamp(f.x, BLAST.left + 160, BLAST.right - 160); f.y = clamp(f.y, BLAST.top + 160, STAGE.y + 260);
@@ -32961,7 +32961,7 @@ const MOVESETS = {
       ['I (TRANSFORMED)', 'Execution Round', 'He kneels with a huge sniper rifle - the LASER finds whoever is in front... and he fires THREE re-aimed shots. Anyone not READY (shield up, or rolling out of it) is hit hard.'],
       ['DOWN + I (TRANSFORMED)', 'Air Support', 'He calls it in on the vox: a HUGE armoured gunship roars low across the stage, shelling EVERY part of it as it passes - and anyone the hull runs into is pinned to its nose, dragged along and flung off the far side.'],
       ['SIDE + I (TRANSFORMED)', 'One Punch', 'A close-up: his eyes light up... and he is ENORMOUS behind them.'],
-      ['COMEBACK (KNOCKED OUT WITH A FULL METER, ONCE A MATCH)', 'The Sun - Comeback', 'He is back in the middle of the stage and casts THE SUN - it launches with INSANE force.'] ] },
+      ['COMEBACK (KNOCKED OUT ON HIS LAST STOCK, FULL METER)', 'The Sun - Comeback', '"Who decided that?" - he is back in the middle of the stage and casts THE SUN - it launches with INSANE force.'] ] },
     { title: 'WHAT MAKES HIM UNIQUE', notes: [
       'BLOCK = a rectangular STORM SHIELD. His Z vanish is a COMBAT ROLL - even in the air.',
       'A heavyweight: one fewer Z vanish than most, a stiff power-armour stride - but every swing hits about 15% harder, and he is hard to launch.',
