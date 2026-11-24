@@ -680,6 +680,10 @@ const STAGE_LIST = [
   // it ploughs on through the sea at dusk: rocking on the swell, waves and islands sliding past, spray off the bow
   { name: 'PIRATE SHIP', ship: true, platforms: [{ x: 230, y: 360, w: 200 }, { x: 850, y: 360, w: 200 }, { x: 570, y: 220, w: 140 }], scale: 1.125 },
   { name: 'GLACIER', arctic: true, platforms: [{ x: 205, y: 385, w: 220 }, { x: 855, y: 385, w: 220 }, { x: 530, y: 265, w: 220 }], scale: 1.125 },
+  // TIME CHAMBER: an endless, dead-flat white floor in a timeless WHITE void - walk off either side, like CHECKER HILLS.
+  // Behind the fight, on its tiled platform, the domed palace with a clock under its golden dome, two giant hourglasses of
+  // green sand and the pink-roofed wings.
+  { name: 'TIME CHAMBER', platforms: [], walkoff: true, chamber: true },
 ];
 const TOURNEY = { rim: 26, grace: 2.0 };   // (rim: the ring's own thin stone edge; grace: seconds you can stand on the grass before it's a RING OUT)
 // THE GRASS is a real floor, right at the foot of the ring (the ring is a raised stone platform standing on it). Land on it
@@ -1800,8 +1804,19 @@ function startTaunt(f, kind) {
   f.running = false; f.vx *= 0.3;
   heelSay(f, kind === 1 ? 'roar' : 'shout');                // Captain Heel: up taunt ROARS, the others shout
   const lines = CHARACTERS[f.char].taunts || TAUNT_LINES;
-  if (f.char === 'COLTEN' && kind === 1) { try { const el = new Audio('sounds/battle/colten-for-the-emperor.mp3'); el.volume = clamp(settings.master * 1.4, 0, 1); el.currentTime = 0.45; el.play().catch(() => {}); } catch (e) {} }   // (his line: sounds/battle/colten-for-the-emperor.mp3 - skips the half second of silence at the start)
+  if (f.char === 'COLTEN' && kind === 1) coltenEmperor(f);   // (his line - see coltenEmperor)
   if (lines[kind] !== '') painTexts.push({ x: f.x, y: f.y - 140, t: 0.8, max: 0.8, text: lines[kind] || TAUNT_LINES[kind], big: false });
+}
+// COLTEN's "FOR THE EMPEROR!" (sounds/battle/colten-for-the-emperor.mp3, skipping its first 0.45s): his up taunt, his
+// TRANSFORMATION and setting off his MORALE all shout it. (One at a time - a new shout restarts it.)
+let coltenEmperorEl = null;
+function coltenEmperor(f) {
+  if (f && f.minion) return;
+  try {
+    if (coltenEmperorEl) coltenEmperorEl.pause();
+    const el = coltenEmperorEl = new Audio('sounds/battle/colten-for-the-emperor.mp3');
+    el.volume = clamp(settings.master * 1.4, 0, 1); el.currentTime = 0.45; el.play().catch(() => {});
+  } catch (e) {}
 }
 function finishTaunt(f, a) {
   if (f.char === 'COLTEN' && a.kind === 1 && !(f.furyT > 0)) {     // COLTEN: FOR THE EMPEROR! - his MORALE surges
@@ -6344,7 +6359,7 @@ const LEGION_SEQ = [
 const LEGION_KITS = {
   COLBY:     [['neutralRanged', 'far', 'slash'], ['jab3', 'mid', 'kick'], ['scythe3', 'up', 'slash'], ['downGround', 'flat', 'kick'], ['upRanged', 'up', 'slash'],
               ['bair', 'far', 'kick'], ['scythe2', 'arc', 'slash'], ['upGround', 'up', 'kick'], ['downRanged', 'mid', 'slash'], ['fairR', 'far', 'slash'], ['uair', 'up', 'kick']],
-  COLTEN:    [['neutralRanged', 'far', 'slash'], ['sideGround', 'mid', 'slash'], ['jab3', 'flat', 'slash'], ['upGround', 'up', 'slash'], ['downGround', 'slide', 'slash'],
+  COLTEN:    [['neutralRanged', 'far', 'slash'], ['sideGround', 'mid', 'slash'], ['jab3', 'flat', 'slash'], ['upGround', 'up', 'slash'], ['runAttack', 'slide', 'kick'],
               ['dashAttack', 'far', 'slash'], ['downRanged', 'mid', 'slam'], ['jab2', 'up', 'slash'], ['sideRanged', 'slide', 'slash'], ['fair', 'flat', 'slash']],
   SEVON:     [['jab', 'mid', 'fire'], ['sideGround', 'far', 'fire'], ['upGround', 'up', 'fire'], ['downGround', 'flat', 'fire'], ['dashAttack', 'far', 'fire'],
               ['jab3', 'mid', 'fire'], ['unknowingFire', 'slide', 'fire'], ['jab2', 'up', 'fire'], ['nair', 'mid', 'fire'], ['blazingUniverse', 'flat', 'fire']],
@@ -8019,15 +8034,15 @@ COLTEN_MOVES.neutralRanged = { name: 'Gate Throw', startup: 0.16, active: 0.06, 
 // follow-through (the second hit: the Chainsaw Rise)
 const COLTEN_SFX = { swipe: 'sounds/battle/colten-chainsword-swipe.mp3', swipe2: 'sounds/battle/colten-chainsword-swipe2.mp3', swipe3: 'sounds/battle/colten-chainsword-swipe3.mp3',
                      swipe4: 'sounds/battle/colten-chainsword-swipe4.mp3', follow: 'sounds/battle/colten-chainsword-follow.mp3', kick: 'sounds/battle/colten-boot-kick.mp3',
-                     bolt: 'sounds/battle/colten-bolter.mp3', vol: 1.0 };   // (kick: the BOOT landing; bolt: a BOLTER shot)
+                     bolt: 'sounds/battle/colten-bolter.mp3', sniper: 'sounds/battle/colten-sniper.mp3', artillery: 'sounds/battle/colten-artillery.mp3', vol: 1.0 };   // (kick: the BOOT landing; bolt: a BOLTER shot; sniper: the .50 cal / Execution Round; artillery: a gunship shell fired)
 const COLTEN_SWIPES = ['swipe', 'swipe2', 'swipe3', 'swipe4'];   // ('vary': any chainsword swing without its own sound - one of these at random)
 let coltenSfxEls = null;
-function coltenSwordSfx(kind) {
+function coltenSwordSfx(kind, vol = 1, rate = 1) {
   if (!soundOn) return;
   if (kind === 'vary') kind = COLTEN_SWIPES[(Math.random() * COLTEN_SWIPES.length) | 0];
-  if (!coltenSfxEls) { coltenSfxEls = {}; for (const k of [...COLTEN_SWIPES, 'follow', 'kick', 'bolt']) { try { const el = new Audio(COLTEN_SFX[k]); el.preload = 'auto'; coltenSfxEls[k] = el; } catch (e) {} } }
+  if (!coltenSfxEls) { coltenSfxEls = {}; for (const k of [...COLTEN_SWIPES, 'follow', 'kick', 'bolt', 'sniper', 'artillery']) { try { const el = new Audio(COLTEN_SFX[k]); el.preload = 'auto'; coltenSfxEls[k] = el; } catch (e) {} } }
   const el = coltenSfxEls[kind]; if (!el) return;
-  try { const c = el.cloneNode(); c.volume = clamp(COLTEN_SFX.vol * settings.master * settings.sfx, 0, 1); c.play().catch(() => {}); } catch (e) {}
+  try { const c = el.cloneNode(); c.volume = clamp(COLTEN_SFX.vol * vol * settings.master * settings.sfx, 0, 1); c.playbackRate = rate; c.play().catch(() => {}); } catch (e) {}
 }
 // NEUTRAL J: CHAIN SLICE > CHAINSAW RISE > BOOT
 //   1: a fast flat slice with the chainsword
@@ -8128,6 +8143,40 @@ COLTEN_MOVES.sideGround = { name: 'Jump Pack Charge', startup: 0.08, active: 0.2
 COLTEN_MOVES.fairAlt = COLTEN_MOVES.fair;
 COLTEN_MOVES.fair = { ...COLTEN_MOVES.sideGround, name: 'Jump Pack Charge (Air)', landLag: 0.16, oncePerAir: true,
   floatWhile: (f, a) => a.phase === 'startup' || a.phase === 'charge' || (a.phase === 'active' && !a.struck) };
+// DOWN J: IRON COUNTER - he plants the STORM SHIELD. Anything that hits it in the window is stopped dead - and if whoever
+// threw it is close enough, he drops the shield-arm and GRABS them (straight into his grab: pick a throw). Too far away (or
+// a shot): it's just blocked, and he's free again at once. Whiff it and he's stuck behind the shield for a moment.
+const C_COUNTER = { from: 0.03, win: 0.38, whiffLag: 0.36, grabX: 140, grabY: 110 };
+const C_GUARD = { ...pose({ lean: 0.15, bob: -16, legA: [0.9, 0.9], legB: [-0.7, 0.4], armA: [-0.7, -0.5], armB: [1.3, -1.4], sw: -1.35 }), freeB: true, raw: true };
+COLTEN_MOVES.downGround = { name: 'Iron Counter', startup: 0, active: C_COUNTER.win, endlag: C_COUNTER.whiffLag, landLag: 0.1, cCounter: true, noClash: true,
+  wind: C_GUARD, strike: C_GUARD,
+  step(f, a, dt) {
+    if (a.fx === undefined) { a.fx = 'stance'; a.phase = 'active'; a.t = 0; sfx.block(); }
+    if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt); else f.vy = Math.min(f.vy, 120);
+    a.poseOverride = C_GUARD;
+    if (a.fx === 'stance') { if (a.t >= C_COUNTER.win) { a.fx = 'whiff'; a.phase = 'end'; a.t = 0; } return true; }
+    if (a.t >= C_COUNTER.whiffLag) f.action = null;
+    return true;
+  } };
+function coltenCounter(t, src, hx) {                                 // (checked in applyHit, like the Old Man's weave)
+  const a = t.action;
+  if (!a || a.type !== 'attack' || !a.move || !a.move.cCounter || a.fx !== 'stance' || a.t < C_COUNTER.from) return false;
+  const by = src.fighter || src.by || (src.shot && src.shot.owner);
+  const sc = (t.look && t.look.scale) || 1, px = t.x + t.face * 26 * sc, py = t.y - 50 * sc;
+  burst(px, py, ['#ffffff', '#d8a838', '#a8ecff'], 18, t.face > 0 ? 0 : Math.PI, 0.9, 460, { grav: 200 }); ring(px, py); sfx.parry();
+  hitstop = Math.max(hitstop, 0.1); shake = Math.max(shake, 8); t.invuln = Math.max(t.invuln || 0, 0.15);
+  const close = by && by !== t && fighters.includes(by) && by.respawnTimer <= 0 && !src.shot && !by.minion &&
+                Math.abs(by.x - t.x) < C_COUNTER.grabX * sc && Math.abs(by.y - t.y) < C_COUNTER.grabY &&
+                !isIntangible(by) && !(by.action && ['grabbed', 'holding', 'thrown', 'ultSeq', 'ultVictim'].includes(by.action.type));
+  if (close) {                                                       // ...COUNTERED - and caught
+    t.face = Math.sign(by.x - t.x) || t.face; by.face = -t.face;
+    by.shielding = false; by.vx = by.vy = 0;
+    by.action = { type: 'grabbed', t: 0, holder: t, escape: 1.0 + by.damage * 0.015 };
+    t.action = { type: 'holding', t: 0, victim: by, pummelCD: 0 };
+    sfx.grab(); ghosts.push({ fig: figureOf(t), life: 0.3, max: 0.3, color: '#d8a838' });
+  } else t.action = null;                                            // (just blocked - he's free straight away)
+  return true;
+}
 // NEUTRAL K: the BOLTER - a bolt for every press (fire as fast as you can mash), EIGHT in the magazine. Empty the magazine
 // and he stops dead to RELOAD (not long - but you can't do anything while he does).
 const BOLTER = { mag: 8, reload: 0.85, speed: 1700 };
@@ -8151,6 +8200,9 @@ COLTEN_MOVES.neutralRanged = { name: 'Bolter', startup: 0.05, active: 0.04, endl
 // TRANSFORMED: the BOLTER goes away and he pulls out a huge .50 CAL SNIPER RIFLE (neutral K). FOUR rounds, then a long reload.
 // Each round is a hitscan line straight across the stage: it goes THROUGH everyone in the way (and through shields - they
 // still block the damage), and hits like a truck.
+// SNIPER MODE: transformed, Colten ONLY has the .50 cal out - every attack button shoots it, and all he can do besides is
+// move, jump and Z vanish (no melee, no grabs, no shield)
+const sniperMode = f => !!(f && f.char === 'COLTEN' && f.transformed && !f.minion && !f.noScythe && f.look && f.look.bolter);
 const SNIPER50 = { rounds: 4, reload: 1.3, speed: 2600, shieldDmg: 55, hit: { dmg: 13, base: 640, growth: 7.6, angle: 20 }, recoil: 280 };   // (shieldDmg: two rounds break a full shield)
 const cTracers = [];
 COLTEN_MOVES.sniper = { name: '.50 Cal', startup: 0.24, active: 0.04, endlag: 0.36, landLag: 0.1, bolter: true,
@@ -8165,7 +8217,7 @@ COLTEN_MOVES.sniper = { name: '.50 Cal', startup: 0.24, active: 0.04, endlag: 0.
     const x0 = f.x + F * 110 * sc, y = f.y - 80 * sc;
     burst(x0, y, ['#ffffff', '#ffd23f', '#ff8a1a'], 14, F > 0 ? 0 : Math.PI, 0.45, 520, { grav: 0 }); ring(x0, y);
     f.vx = -F * SNIPER50.recoil; shake = Math.max(shake, 12); hitstop = Math.max(hitstop, 0.05); f.muzzleT = 0.09;
-    coltenSwordSfx('bolt'); sfx.slam();
+    coltenSwordSfx('sniper');
     f.sRounds--; if (f.sRounds <= 0 && a) a.reloadNext = true;
   },
   step(f, a) {
@@ -8252,7 +8304,7 @@ function stepColtenSnipe(f, a, dt) {
     a.shot++; a.next = a.t + (a.shot < SNIPE.shots ? SNIPE.again : 0.5);
     const m = coltenMuzzle(f, a), dx = Math.cos(a.ang), dy = Math.sin(a.ang);
     a.tracers.push({ x: m.x, y: m.y, ang: a.ang, t: 0 });
-    shake = Math.max(shake, 18); hitstop = Math.max(hitstop, 0.06); sfx.huge ? sfx.huge() : sfx.slam(); sfx.clash(true);
+    shake = Math.max(shake, 18); hitstop = Math.max(hitstop, 0.06); coltenSwordSfx('sniper'); sfx.slam();
     burst(m.x, m.y, ['#ffffff', '#ffd23f', '#ff8a1a'], 18, a.ang, 0.4, 900, { grav: 0 });
     f.vx -= f.face * 260;                                           // (the kick)
     ultHitCtx = true;
@@ -8296,7 +8348,19 @@ const AIRSTRIKE = { call: 0.7, speed: 520, alt: 340, sc: 1.25, slot: 64, blast: 
                     hit: { dmg: 8, base: 360, growth: 5, angle: 70, ultHit: true },
                     drag: { every: 0.2, dmg: 1.2 }, fling: { dmg: 10, base: 500, growth: 6.2, angle: 58, ultHit: true } };
 const cShips = [];
-function startColtenAirStrike(f) { f.action = { type: 'cAirStrike', t: 0 }; sfx.shing ? sfx.shing() : sfx.block(); painTexts.push({ x: f.x, y: f.y - 150, t: 1.0, max: 1.0, text: 'REQUESTING AIR SUPPORT!', big: false }); }
+// (the call-in: sounds/battle/colten-air-support.mp3 - the voice on the vox, cut just before the beat drops)
+function playAsSong(f) {
+  stopAsSong(f);
+  if (!soundOn) return null;
+  let el; try { el = new Audio('sounds/battle/colten-air-support.mp3'); } catch (e) { return null; }
+  el.preload = 'auto'; el.volume = clamp(settings.master * settings.music * 1.5, 0, 1);
+  el.play().catch(() => {});
+  const h = { el, at: performance.now() }; f.asSong = h;
+  el.addEventListener('ended', () => { if (f.asSong === h) f.asSong = null; }, { once: true });
+  return h;
+}
+function stopAsSong(f) { const h = f && f.asSong; if (!h) return; f.asSong = null; try { h.el && h.el.pause(); } catch (e) {} }
+function startColtenAirStrike(f) { if (!f.minion) playAsSong(f); f.action = { type: 'cAirStrike', t: 0 }; sfx.shing ? sfx.shing() : sfx.block(); painTexts.push({ x: f.x, y: f.y - 150, t: 1.0, max: 1.0, text: 'REQUESTING AIR SUPPORT!', big: false }); }
 function stepColtenAirStrike(f, a, dt) {
   if (f.ground) f.vx = approach(f.vx, 0, FRICTION * dt);
   if (a.t >= AIRSTRIKE.call && !a.sent) {
@@ -8333,7 +8397,7 @@ function updateColtenShips(dt) {
       S.nextSlot++; S.flashT = 0.08;
       projectiles.push({ owner: o, x: gunX, y: S.y + 46 * k, vx: S.dir * 60, vy: 900, r: 15, trailLen: 10, dmg: 0, base: 0, growth: 0, angle: 70,
                          mult: S.power, life: 3, kind: 'orb', color: '#ffb02e', hit: new Set(), pierce: false, trail: [], grav: 1800, cShell: true, ultHit: true });
-      burst(gunX, S.y + 50 * k, ['#ffffff', '#ffd23f', '#ff8a1a'], 14, Math.PI / 2, 0.5, 460, { grav: 0 }); fkFlames(gunX, S.y + 60 * k, 6, 0.4, 300); shake = Math.max(shake, 6); sfx.whoosh(true);
+      burst(gunX, S.y + 50 * k, ['#ffffff', '#ffd23f', '#ff8a1a'], 14, Math.PI / 2, 0.5, 460, { grav: 0 }); fkFlames(gunX, S.y + 60 * k, 6, 0.4, 300); shake = Math.max(shake, 6); coltenSwordSfx('artillery', 0.75, 0.9 + Math.random() * 0.2);
     }
     // THE HULL: anyone it runs into is caught on it
     const B = cShipBox(S);
@@ -8490,7 +8554,7 @@ COLTEN_MOVES.downRanged = { name: 'Morale', startup: 0, active: 99, endlag: 0.15
     if (a.fx === undefined) {
       a.t = 0; a.phase = 'active';
       if ((f.fury || 0) >= C.max && !(f.furyT > 0)) {                     // SET IT OFF
-        a.fx = 'roar'; f.furyT = C.dur; f.fury = C.max;
+        a.fx = 'roar'; f.furyT = C.dur; f.fury = C.max; coltenEmperor(f);   // (FOR THE EMPEROR!)
         ultBanner = { t: 1.0, title: 'MORALE', name: 'FOR THE EMPEROR', color: '#ff3a1a', who: f };
         for (let k = 0; k < 3; k++) auraWaves.push({ x: f.x, y: f.y - 60, t: -k * 0.07, dur: 0.5, max: 130 + k * 60, color: k % 2 ? '#ffb02e' : '#ff3a1a' });
         burst(f.x, f.y - 60, ['#ff3a1a', '#ffb02e', '#ffffff'], 40, 0, Math.PI, 760, { grav: 0 }); ring(f.x, f.y - 60);
@@ -16136,7 +16200,7 @@ const fighters = fighterPool.slice(0, 2);            // (rebuilt from the active
 // plain value goes back - so online, every computer starts the fight identically, whatever it played before.
 const FIGHTER_BASE = fighterPool.map(f => { const b = {}; for (const k of Object.keys(f)) { const v = f[k]; if (v === null || typeof v !== 'object') b[k] = v; } return { keys: new Set(Object.keys(f)), prim: b }; });
 const FIGHTER_KEEP = new Set(['slot', 'binds', 'profile', 'name', 'controller', 'color', 'energy', 'team', 'disp', 'smear', 'cpuLevel', 'startX',
-                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong']);   // (who they are + sounds handled elsewhere)
+                              'kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong', 'asSong']);   // (who they are + sounds handled elsewhere)
 function freshFighter(f) {
   const B = FIGHTER_BASE[f.slot]; if (!B) return;
   for (const k of Object.keys(f)) if (!B.keys.has(k) && !FIGHTER_KEEP.has(k)) delete f[k];
@@ -16570,7 +16634,7 @@ function startBattleSong() {
 }
 // ONE ULT SONG AT A TIME: with ultimates and transformations all able to go off together, only the NEWEST one is heard -
 // every older one is CUT (muted, not stopped: it still plays out silently, so anything timed to it stays on time)
-const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong'];
+const ULT_AUDIO_SLOTS = ['uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong', 'asSong'];
 let ultAudioSeq = 0;
 const ultAudioOrder = new WeakMap();                              // (handle -> when it started)
 const ULT_EXTRA = [];                                            // (voice lines / clips belonging to ultimates and cutscenes)
@@ -16618,7 +16682,7 @@ function updateBattleMusic(dt) {
   for (const f of fighters) if (f.jjSnd && f.jjSnd.final) { const ct = f.jjSnd.el.currentTime; if (ct > 2.1) f.jjSnd.el.volume = clamp(settings.master * settings.sfx * (1 - (ct - 2.1) / 0.45), 0, 1); if (f.jjSnd.el.ended) f.jjSnd = null; }   // (the shout: fades out at the end)
   const fighting = scene === 'fight' && !matchOver;
   ultAudioFocus();
-  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); stopSunSong(f); stopOnePunchSong(f); stopMegazordSong(f); stopHakaiSong(f); stopRgSong(f); stopOmSong(f); }   // (Lance's UI theme doesn't follow you out of the fight - nor do these)
+  if (!fighting) for (const f of fighterPool) { stopUiSong(f); stopSsj2Song(f); stopHunterL3Song(f); stopSs1Song(f); stopSsgSong(f); stopFxSong(f); stopTsuSong(f); stopLeeSong(f); stopGrindSong(f); stopSunSong(f); stopOnePunchSong(f); stopMegazordSong(f); stopHakaiSong(f); stopRgSong(f); stopOmSong(f); stopAsSong(f); }   // (Lance's UI theme doesn't follow you out of the fight - nor do these)
   if (fighting && !battleMusic.el && soundOn && menuMusic.unlocked) startBattleSong();   // a new fight: a new song
   const el = battleMusic.el;
   if (!el) return;
@@ -16666,7 +16730,7 @@ function updateBattleMusic(dt) {
   }
   // turned down under an ultimate's own music / voice lines, and while the game's paused
   const ultMusic = ult || fighters.some(f => (f.action && f.action.type === 'shipUlt') || f.uiSong);   // (+ Lance's Ultra Instinct theme)
-  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong || f.opSong || f.mzSong || f.hkSong || f.rgSong || f.omSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
+  const duck = fighters.some(f => f.uiSong || f.ssj2Song || f.l3Song || f.ss1Song || f.sgSong || f.fxSong || f.tsuSong || f.leeSong || f.grindSong || f.sunSong || f.opSong || f.mzSong || f.hkSong || f.rgSong || f.omSong || f.asSong) ? 0 : ultMusic ? 0.2 : paused ? 0.45 : 1;   // (Lance's UI theme: the battle music goes silent)
   el.volume = clamp(BATTLE_MUSIC.vol * battleMusic.level * duck * settings.master * settings.music * 1.6, 0, 1);
   if (el.paused && want) el.play().catch(() => {});
 }
@@ -17088,7 +17152,8 @@ playOnePunchSong = gateSound('opSong', playOnePunchSong, (h, [f]) => { if (h && 
 playMegazordSong = gateSound('mzSong', playMegazordSong, (h, [f]) => { if (h && f) f.mzSong = h; });   // (Sevon's Megazord comeback)
 playHakaiSong = gateSound('hkSong', playHakaiSong, (h, [f]) => { if (h && f) f.hkSong = h; });   // (Colby's HAKAI)
 playRgSong = gateSound('rgSong', playRgSong, (h, [f]) => { if (h && f) f.rgSong = h; });
-playOmSong = gateSound('omSong', playOmSong, (h, [f]) => { if (h && f) f.omSong = h; });   // (The Old Man's MAX POWER KAMEHAMEHA)   // (Colby's GOD OF COMBAT)
+playOmSong = gateSound('omSong', playOmSong, (h, [f]) => { if (h && f) f.omSong = h; });
+playAsSong = gateSound('asSong', playAsSong, (h, [f]) => { if (h && f) f.asSong = h; });   // (Colten's AIR SUPPORT call-in)   // (The Old Man's MAX POWER KAMEHAMEHA)   // (Colby's GOD OF COMBAT)
 kameRelease = gateSound('kameHa', kameRelease);                    // (Lance's "...HAAA!" + the blast)
 kaiokenSfx = gateSound('kaioSnd', kaiokenSfx);                     // ("KAIOKEN!")
 playLeeSong = gateSound('leeSong', playLeeSong, (h, [f]) => { if (h && f) f.leeSong = h; });   // (Colby's Primary Lotus)
@@ -17224,6 +17289,7 @@ function applyHit(t, h, dirSign, mult, hx, hy, src = {}) {
   if (sageAutoDodge(t, hx)) return false;                  // Colbalias in SAGE MODE: one auto dodge every 5 seconds
   if (hailiePhaseDodge(t, hx)) return false;               // Hailie, TRANSFORMED: 3 automatic phase-outs
   if (omWeave(t, src, hx)) return false;                   // THE OLD MAN's Weave Counter
+  if (coltenCounter(t, src, hx)) return true;              // COLTEN's Iron Counter (stopped - and maybe GRABBED)
   const dmg = h.dmg * mult;
 
   // PERFECT BLOCK: shield went up just as the hit arrived
@@ -17572,6 +17638,7 @@ const THROWS = {
 const THROW_HITSTUN_BONUS = 0.15;   // thrown players stay stunned this much longer, so you can combo off throws
 
 function startGrab(f) {
+  if (sniperMode(f)) { f.grabBuf = 0; return; }          // (COLTEN in SNIPER MODE: no grabs - he's only got the rifle)
   f.dashChain = 0;
   f.grabBuf = 0; f.atkBuf = 0; f.spcBuf = 0; f.squat = 0;
   f.shielding = false;
@@ -18103,7 +18170,7 @@ function stepMarineUp(f, a, dt) {
 }
 // COLTEN'S DOWN THROW: THE STOMP - he lifts one huge armoured boot and STOMPS them down into the floor, buried up to the
 // waist - stuck there while he lines up what comes next.
-const MARINE_STOMP = { raise: 0.3, stomp: 0.42, reach: 46, hit: { dmg: 9 } };
+const MARINE_STOMP = { raise: 0.3, stomp: 0.42, reach: 46, spike: { dmg: 10, base: 560, growth: 5.6, angle: -85 }, hit: { dmg: 9 } };
 THROW_ANIM.marineStomp = { dur: 0.6, rel: MARINE_STOMP.stomp };
 function stepMarineStomp(f, a, dt) {
   f.vx = approach(f.vx, 0, FRICTION * dt);
@@ -18111,8 +18178,17 @@ function stepMarineStomp(f, a, dt) {
   if (a.released) { if (a.t >= a.dur) f.action = null; return; }
   if (!v || !fighters.includes(v) || v.respawnTimer > 0) { f.action = null; return; }
   const sc = (f.look && f.look.scale) || 1;
-  v.x = f.x + a.face0 * 46 * sc; v.y = f.y; v.vx = v.vy = 0; v.face = -a.face0; v.ground = true;
+  v.x = f.x + a.face0 * 46 * sc; v.y = f.y; v.vx = v.vy = 0; v.face = -a.face0; v.ground = f.ground;
+  if (!f.ground) { f.vy = Math.min(f.vy, 60); }                                                 // (in the air: he hangs there for the stomp)
   if (a.t >= M.raise - 0.1 && !a.kw) { a.kw = true; sfx.whoosh(true); }
+  if (a.t >= M.stomp && !f.ground) {                                                           // IN THE AIR: the boot SPIKES them straight down
+    a.released = true; v.action = null; v.ground = false;
+    knock(v, M.spike, a.face0, powerOf(f), v.x, v.y - 50);
+    burst(v.x, v.y - 60, ['#ffffff', '#ffd23f'], 16, Math.PI / 2, 0.7, 520, { grav: 0 }); ring(v.x, v.y - 60);
+    if (gore) burst(v.x, v.y - 50, BLOOD, 12, Math.PI / 2, 1, 420, { stain: true });
+    shake = Math.max(shake, 18); hitstop = Math.max(hitstop, 0.12); impactFrame = Math.max(impactFrame, 0.07); coltenSwordSfx('kick'); sfx.slam();
+    return;
+  }
   if (a.t >= M.stomp) {                                                                         // STOMP
     a.released = true; v.action = null;
     v.damage += M.hit.dmg * powerOf(f); if (!v.transformed) v.ult = Math.min(ULT_MAX, (v.ult || 0) + M.hit.dmg);
@@ -20382,6 +20458,7 @@ function startTransform(f) {
   burst(f.x, f.y - 45, [auraColor(f), '#ffffff'], 46, 0, Math.PI, 800, { grav: 0 });
   for (let k = 0; k < 4; k++) bolt(f.x, f.y - 50, Math.random() * Math.PI * 2, 70, 0.12, auraColor(f));
   sfx.parry(); sfx.beam(0.6);
+  if (f.char === 'COLTEN') coltenEmperor(f);       // COLTEN: FOR THE EMPEROR!
   if (f.char === 'AIDEN') startCage(f);            // AIDEN: CAGE MATCH - a steel cage drops over him and his opponent
 }
 // ---------------- LANCE'S FORMS: a ladder, one step per full meter ----------------
@@ -22908,6 +22985,31 @@ function drawUiKame(f) {
     ctx.restore();
   }
 }
+// OFF-SCREEN BUBBLE (screen space): when someone's off the edge of the screen, a round window at the edge shows THEM, ringed
+// in their colour, with an arrow pointing the way they are. The further out they are, the smaller it gets - and near a KO
+// line the ring flashes red.
+function drawOffscreenBubble(f, wx, wy) {
+  const out = Math.max(-wx, wx - W, -wy, wy - H, 0);                     // (how far off the screen they are, in pixels)
+  const R = clamp(36 - out * 0.035, 20, 36), m = R + 14;
+  const bx = clamp(wx, m, W - m), by = clamp(wy, m, H - m);
+  const ang = Math.atan2(wy - by, wx - bx);
+  const danger = f.x < BLAST.left + 160 || f.x > BLAST.right - 160 || f.y > BLAST.bottom - 200 || f.y < BLAST.top + 160;
+  const ring = danger && Math.floor(time * 8) % 2 ? '#ff3a2a' : (sketch ? inkOf(f) : f.color);
+  const c = sctx;
+  c.save();
+  c.fillStyle = ring; c.beginPath();                                       // the ARROW, pointing at them
+  c.moveTo(bx + Math.cos(ang) * (R + 14), by + Math.sin(ang) * (R + 14));
+  c.lineTo(bx + Math.cos(ang + 0.42) * (R + 3), by + Math.sin(ang + 0.42) * (R + 3));
+  c.lineTo(bx + Math.cos(ang - 0.42) * (R + 3), by + Math.sin(ang - 0.42) * (R + 3)); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(214,232,250,0.92)'; c.beginPath(); c.arc(bx, by, R, 0, Math.PI * 2); c.fill();   // the window...
+  c.save(); c.beginPath(); c.arc(bx, by, R - 2, 0, Math.PI * 2); c.clip();
+  const kc = ctx; ctx = c;                                                 // ...with THEM in it
+  try { const k = (R * 1.5) / Math.max(90, f.h || 110); ctx.translate(bx, by); ctx.scale(k, k); ctx.translate(-f.x, -(f.y - (f.h || 110) / 2)); drawFighter(f); } catch (e) {}
+  ctx = kc; c.restore();
+  c.lineWidth = 4; c.strokeStyle = ring; c.beginPath(); c.arc(bx, by, R, 0, Math.PI * 2); c.stroke();
+  c.lineWidth = 1.5; c.strokeStyle = '#0e0c0c'; c.beginPath(); c.arc(bx, by, R + 2.5, 0, Math.PI * 2); c.stroke();
+  c.restore();
+}
 // the speech bubble (screen space)
 function drawUiBubble() {
   for (const f of fighters) {
@@ -23675,6 +23777,7 @@ function startAttack(f, inp, btn) {
   }
   if (f.phaseT > 0) { f.phaseT = 0; ghosts.push({ fig: figureOf(f), life: 0.3, max: 0.3, color: '#b06aff' }); }   // (Hailie: attacking pulls her straight back in)
   let key = chooseMove(f, inp, btn);
+  if (sniperMode(f) && key !== 'upRanged') key = 'neutralRanged';   // (SNIPER MODE: whatever the button / direction, he SHOOTS - except up K: still his jump-pack recovery)
   // BARE-HANDED COLBY, the buttons SWAPPED (so it's quick to set up after throwing the scythe): neutral J = JAJANKEN (ground or
   // air) - and neutral K does what J did (the start of the kick string on the ground, the air J in the air). Mid-string,
   // both buttons carry the string on as always.
@@ -24648,7 +24751,7 @@ function freeControl(f, inp, dt) {
       startDodge(f, dir, inp.down, inp.up);
       return;
     }
-    if (inp.blockHeld && f.jumpBuf <= 0 && f.shieldHP > 0 && f.slide <= 0) {
+    if (inp.blockHeld && f.jumpBuf <= 0 && f.shieldHP > 0 && f.slide <= 0 && !sniperMode(f)) {   // (SNIPER MODE: no shield - dodge or get out of the way)
       f.shieldAge = f.prevShield ? f.shieldAge + dt : ((inp.blockTap && (f.blockGap ?? 99) >= PARRY_SPAM) || f.controller === 'dummy' ? 0 : 99);   // (a MASHED press: no perfect block)   // how long since the PRESS (for perfect blocks) - a shield that comes up from block being HELD (out of another move...) can't perfect block
       f.shielding = true;
       f.shieldHP -= SHIELD_DRAIN * dt;
@@ -26704,7 +26807,7 @@ function updateSim(dt) {
         if (a.move.losesToPhysical && h.group !== 5 && t.action && t.action.type === 'attack' && t.action.btn === 'atk' && t.action.phase !== 'end') continue;
         // CLASH: they swung the same button at (almost) the same moment
         const ta = t.action;
-        if (ta && ta.type === 'attack' && ta.btn === a.btn && ta.phase !== 'end' && !a.noClash && !ta.noClash && !a.move.armor && !ta.move.armor &&
+        if (ta && ta.type === 'attack' && ta.btn === a.btn && ta.phase !== 'end' && !a.noClash && !ta.noClash && !a.move.noClash && !ta.move.noClash && !a.move.armor && !ta.move.armor &&
             !f.minion && !t.minion &&                         // (clones never start clashes)
             Math.abs((ta.started ?? -9) - (a.started ?? 9)) <= CLASH_WINDOW) {
           startClash(f, t, a.key, ta.key);
@@ -26987,6 +27090,70 @@ function drawStageSketch() {
   ctx.globalAlpha = 1;
 }
 
+// ---- TIME CHAMBER: the night sky and the aurora, the white void, and the palace with its hourglasses (parallax) ----
+function drawChamberPalace(cx, by) {                                 // (the palace on its tiled platform, base at by)
+  const P = (pts, fill, stroke) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(cx + x, by + y) : ctx.moveTo(cx + x, by + y)); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); } };
+  const gold = '#e3b23c', goldD = '#b07d1a', wall = '#eef2f8', wallD = '#c8d2e0';
+  P([[-380, 0], [380, 0], [360, 14], [-360, 14]], '#dfe8f2', '#b8c6d8');                     // the tiled platform
+  ctx.strokeStyle = 'rgba(150,170,195,0.5)'; ctx.lineWidth = 1;
+  for (let x = -360; x <= 360; x += 40) { ctx.beginPath(); ctx.moveTo(cx + x, by); ctx.lineTo(cx + x * 0.95, by + 14); ctx.stroke(); }
+  for (const sd of [-1, 1]) {                                                              // the WINGS, pink roofs
+    P([[sd * 70, 0], [sd * 190, 0], [sd * 190, -44], [sd * 70, -44]].map(([x, y]) => [x, y]), wall, wallD);
+    ctx.fillStyle = '#f2a9c9'; ctx.beginPath(); ctx.ellipse(cx + sd * 130, by - 44, 64, 14, 0, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = '#c97aa0'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#9fb4cc'; for (let k = 0; k < 3; k++) ctx.fillRect(cx + sd * (95 + k * 30) - 8, by - 32, 16, 12);
+  }
+  P([[-70, 0], [70, 0], [70, -86], [-70, -86]], wall, wallD);                              // the central hall
+  ctx.fillStyle = 'rgba(160,225,240,0.55)'; ctx.fillRect(cx - 54, by - 78, 108, 78);          // ...its glass front
+  ctx.fillStyle = '#c8d2e0'; for (const x of [-54, -27, 0, 27, 54]) ctx.fillRect(cx + x - 3, by - 80, 6, 80);   // (columns)
+  ctx.fillStyle = '#a0522d'; ctx.fillRect(cx - 11, by - 30, 22, 30);                         // the door
+  ctx.fillStyle = gold; ctx.beginPath(); ctx.ellipse(cx, by - 86, 78, 64, 0, Math.PI, 0); ctx.fill();   // the GOLDEN DOME
+  ctx.strokeStyle = goldD; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,240,180,0.55)'; ctx.beginPath(); ctx.ellipse(cx - 26, by - 118, 18, 26, -0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = gold; ctx.beginPath(); ctx.moveTo(cx - 5, by - 150); ctx.lineTo(cx, by - 168); ctx.lineTo(cx + 5, by - 150); ctx.fill();   // (finial)
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, by - 104, 13, 0, Math.PI * 2); ctx.fill();   // the CLOCK
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5; ctx.stroke();
+  const ang = time * 0.5; ctx.beginPath(); ctx.moveTo(cx, by - 104); ctx.lineTo(cx + Math.sin(ang) * 9, by - 104 - Math.cos(ang) * 9); ctx.moveTo(cx, by - 104); ctx.lineTo(cx + 6, by - 104); ctx.stroke();
+  for (const sd of [-1, 1]) {                                                              // the HOURGLASSES of green sand
+    const hx = cx + sd * 255, hb = by;
+    ctx.fillStyle = goldD; ctx.fillRect(hx - 26, hb - 12, 52, 12);
+    ctx.fillStyle = 'rgba(220,240,255,0.55)'; ctx.strokeStyle = 'rgba(170,200,230,0.9)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(hx - 22, hb - 12); ctx.quadraticCurveTo(hx - 22, hb - 50, hx - 3, hb - 64); ctx.quadraticCurveTo(hx - 22, hb - 80, hx - 22, hb - 116);
+    ctx.lineTo(hx + 22, hb - 116); ctx.quadraticCurveTo(hx + 22, hb - 80, hx + 3, hb - 64); ctx.quadraticCurveTo(hx + 22, hb - 50, hx + 22, hb - 12); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#5fd36a'; ctx.beginPath(); ctx.moveTo(hx - 20, hb - 13); ctx.quadraticCurveTo(hx - 20, hb - 40, hx - 10, hb - 46); ctx.lineTo(hx + 10, hb - 46); ctx.quadraticCurveTo(hx + 20, hb - 40, hx + 20, hb - 13); ctx.closePath(); ctx.fill();   // (the sand that's run through)
+    ctx.beginPath(); ctx.moveTo(hx - 12, hb - 104); ctx.lineTo(hx + 12, hb - 104); ctx.lineTo(hx + 2, hb - 70); ctx.lineTo(hx - 2, hb - 70); ctx.closePath(); ctx.fill();   // (...what's left)
+    ctx.fillStyle = 'rgba(95,211,106,0.8)'; ctx.fillRect(hx - 1, hb - 66, 2, 20);           // (trickling through)
+    ctx.fillStyle = gold; ctx.fillRect(hx - 26, hb - 124, 52, 10); ctx.beginPath(); ctx.ellipse(hx, hb - 124, 24, 22, 0, Math.PI, 0); ctx.fill();   // its gold cap
+    ctx.beginPath(); ctx.arc(hx, hb - 150, 4, 0, Math.PI * 2); ctx.fill();
+    const lx = cx + sd * 330;                                                              // a lamp post, a purple orb
+    ctx.fillStyle = goldD; ctx.fillRect(lx - 2, by - 70, 4, 70);
+    ctx.fillStyle = '#7a4fd0'; ctx.beginPath(); ctx.arc(lx, by - 76, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(200,170,255,0.7)'; ctx.beginPath(); ctx.arc(lx - 3, by - 79, 3, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function drawChamberBackground() {
+  const hz = 430;                                                    // (the horizon: a white void - just the faintest blue up high)
+  const g = ctx.createLinearGradient(0, -OY, 0, hz + 40);
+  g.addColorStop(0, '#eef3fb'); g.addColorStop(0.7, '#f8fafe'); g.addColorStop(1, '#ffffff');
+  ctx.fillStyle = g; ctx.fillRect(-OX, -OY, SW, SH);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(-OX, hz + 30, SW, SH);
+}   // (the palace itself stands on the floor, far back - drawn with the stage, see drawChamberStage)
+// the TIME CHAMBER's floor: dead flat and white, faint tiles, all the way across - past both KO lines
+function drawChamberStage() {
+  { const mid = STAGE_HOME.x + STAGE_HOME.w / 2, cx = mid + (cam.x - mid) * 0.55, K = 1.55;   // THE PALACE, far back (it slides a little slower than the floor)
+    ctx.save(); ctx.translate(cx, STAGE.y - 6); ctx.scale(K, K); drawChamberPalace(0, 0); ctx.restore(); }
+  const s = STAGE, vb = viewBounds(), x0 = Math.max(s.x, Math.floor(vb.l / 64) * 64 - 64), x1 = Math.min(s.x + s.w, vb.r + 64), bot = Math.max(s.y + s.h, vb.b + 20);
+  const g = ctx.createLinearGradient(0, s.y, 0, s.y + 260);
+  g.addColorStop(0, '#f7f9fd'); g.addColorStop(1, '#dde6f4');
+  ctx.fillStyle = g; ctx.fillRect(x0, s.y, x1 - x0, bot - s.y);
+  ctx.strokeStyle = 'rgba(170,190,215,0.45)'; ctx.lineWidth = 1;
+  for (let x = Math.floor(x0 / 64) * 64; x < x1; x += 64) { ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x, s.y + 40); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(x0, s.y + 40); ctx.lineTo(x1, s.y + 40); ctx.stroke();
+  { const mid = STAGE_HOME.x + STAGE_HOME.w / 2, cx = mid + (cam.x - mid) * 0.55, K = 1.55;   // (its reflection in the glossy floor)
+    ctx.save(); ctx.globalAlpha = 0.12; ctx.translate(cx, s.y + 20 * K); ctx.scale(K, -K); drawChamberPalace(0, 0); ctx.restore(); }
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x0, s.y - 1, x1 - x0, 3);                       // (the bright top edge)
+  ctx.fillStyle = 'rgba(120,150,190,0.12)'; ctx.fillRect(x0, s.y + 2, x1 - x0, 6);
+}
 // ---- CHECKER HILLS: a sunny sky, puffy clouds, a sparkling lake and rolling green hills (parallax with the camera) ----
 function drawHillsBackground() {
   const g = ctx.createLinearGradient(0, -OY, 0, 470);
@@ -27287,6 +27454,7 @@ function drawValleyStage() {
   }
 }
 function drawBackground() {
+  if (stageDef.chamber) return drawChamberBackground();
   if (stageDef.valley) return drawValleyBackground();
   if (stageDef.ship) return drawShipBackground();
   if (stageDef.arctic) { ctx.fillStyle = '#5ea1e8'; ctx.fillRect(-400, -400, W + 800, H + 800); return; }   // (the GLACIER: its sky + mountains are drawn with the stage)
@@ -27745,6 +27913,7 @@ function drawTourneyStage() {
   ctx.globalAlpha = 1;
 }
 function drawStage() {
+  if (stageDef.chamber) return drawChamberStage();
   if (stageDef.valley) return drawValleyStage();
   if (stageDef.ship) return drawShipStage();
   if (stageDef.arctic) return drawGlacierStage();
@@ -29064,6 +29233,7 @@ function drawFigure(fig, opts = {}) {
   if (look.oneArm && f < 0) { /* (facing left: the near side is his missing arm - see the far arm) */ }
   else if (grip) { if (MUS) edgedIk(shoulder, grip); else ikArm(shoulder, grip); }
   else if (S && S.hands === 2) ikArm(shoulder, S.g);
+  else if (look.bolter && fig.transformed && !fig.noScythe && sniperFore && !opts.tint) ikArm(shoulder, sniperFore);   // COLTEN, SNIPER MODE: both hands on the rifle
   else if (MUS) muscleLimb(shoulder, pz.armA, AL, AL2, f, ARM_W, main, EDGE);
   else limb(shoulder, pz.armA, 16, 15, f);
   if (look.hunter && !grip) { drawHunterDelt(shoulder, pz.armA, f, main, EDGE); drawHunterBracer(shoulder, pz.armA, f, opts); }   // (the near arm's delt + bracer, on top of it)
@@ -29077,7 +29247,7 @@ function drawFigure(fig, opts = {}) {
     drawKunaiShape(H.hand.x + dx * 4, H.hand.y + dy * 4, Math.atan2(dy, dx), 1.1, opts.tint);
     ctx.fillStyle = opts.tint || main; ctx.beginPath(); ctx.arc(H.hand.x, H.hand.y, 3.6, 0, Math.PI * 2); ctx.fill();   // (her fist closed round the grip)
   }
-  if (look.greatsword && !grip && !fig.noScythe) (look.katana ? drawKatana : look.chainsword ? drawChainsword : drawGreatsword)(shoulder, pz, f, opts);   // the greatsword (Sevon: katana), in his front hand
+  if (look.greatsword && !grip && !fig.noScythe && !(look.bolter && fig.transformed)) (look.katana ? drawKatana : look.chainsword ? drawChainsword : drawGreatsword)(shoulder, pz, f, opts);   // the greatsword (Sevon: katana), in his front hand
   if (look.sledge && !grip) drawSledge(shoulder, pz, f, opts, look);      // HUNTER: the sledgehammer
   if (look.auraArmor && fig.transformed && !opts.tint && !sketch) drawAuraArmor(hip, shoulder, head, f);
   if (look.ranger && !opts.tint) drawRangerGloves(shoulder, pz, f, look);
@@ -29351,6 +29521,7 @@ function drawMuzzleFlash(P, at, size) {
 }
 // THE .50 CAL (after the reference): skeleton stock, pistol grip, a long slab-sided receiver with two oval cut-outs, a rail
 // and a big scope on top, then the barrel and a fat suppressor with a port at the end
+let sniperFore = null;                                              // (where his other hand goes: the front of the rifle)
 function drawSniper50(shoulder, arm, f, flash) {
   const [th, bend] = arm, mid = { x: shoulder.x + Math.sin(th) * 16 * f, y: shoulder.y + Math.cos(th) * 16 };
   const a2 = th - bend, end = { x: mid.x + Math.sin(a2) * 15 * f, y: mid.y + Math.cos(a2) * 15 };
@@ -29384,6 +29555,7 @@ function drawSniper50(shoulder, arm, f, flash) {
   ctx.strokeStyle = K; ctx.lineWidth = 2.4; { const a = P(75, -2), b = P(80, -2); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }   // (its port)
   { const h = P(hx, hy); ctx.fillStyle = armCol; ctx.beginPath(); ctx.arc(h.x, h.y, 5, 0, Math.PI * 2); ctx.fill(); }   // his fist on the grip
   if (flash) drawMuzzleFlash(P, 84, 24);
+  sniperFore = P(14, 4);
   ctx.restore();
 }
 function drawBolter(shoulder, arm, f, flash) {
@@ -29875,7 +30047,7 @@ function drawFighter(p) {
       particles.push({ x: cx + Math.cos(an) * r, y: cy + Math.sin(an) * r, vx: -Math.sin(an) * 180, vy: Math.cos(an) * 180 - 60,
                        life: 0.25, max: 0.25, size: 2, color: SEVON_FIRE[(realRandom() * 4) | 0], type: 'bit', grav: -150 });
     }
-  } else if (p.shielding && p.look && p.look.stormShield && !sketch) {   // COLTEN: a rectangular STORM SHIELD, braced in front of him
+  } else if ((p.shielding || (p.action && p.action.type === 'attack' && p.action.move && p.action.move.cCounter && p.action.fx === 'stance')) && p.look && p.look.stormShield && !sketch) {   // COLTEN: a rectangular STORM SHIELD, braced in front of him
     const hp = clamp(p.shieldHP / SHIELD_MAX, 0, 1), sc = (p.look.scale || 1), x = p.x + p.face * 24 * sc, y = p.y - 50 * sc, w = 15 * sc, h = 40 * sc;
     ctx.save(); ctx.globalAlpha = 0.55 + 0.45 * hp;
     ctx.fillStyle = '#d8a838'; ctx.fillRect(x - w - 2, y - h - 2, w * 2 + 4, h * 2 + 4);
@@ -30683,12 +30855,7 @@ function drawHUD() {
     sctx.fillRect(tx - 6, ty + 6, 12, 3); sctx.fillRect(tx - 3, ty + 9, 6, 3);
 
     // Off-screen marker
-    if (sx < 0 || sx > W || sy - fh < 0 || sy > H) {
-      const mx = clamp(sx, 24, W - 24), my = clamp(sy - fh / 2, 24, H - 24);
-      sctx.fillStyle = '#0e0c0c'; sctx.fillRect(mx - 15, my - 15, 30, 30);
-      sctx.fillStyle = f.color;   sctx.fillRect(mx - 12, my - 12, 24, 24);
-      text(f.name[0], mx, my + 5, 9, '#ffffff', 'center', false);
-    }
+    if (sx < 0 || sx > W || sy - fh < 0 || sy > H) drawOffscreenBubble(f, sx, sy - fh / 2);
 
     if (f.dodgeCount > 0 || !f.ground) {             // always shown in the air: your Z vanishes left
       const dots = f.ground ? dodgeFree(f) : airDodgeMax(f);   // 4 dodges on the ground, 5 Z vanishes in the air (Colbalias: 6 / 7)
@@ -30966,7 +31133,7 @@ function render() {
     else withCover(ctx, () => { if (sketch) drawPaper(); else drawBackground(); });   // (scaled to cover any screen shape)
     const ss2L = fighters.find(f => f.action && f.action.type === 'ssj2Cut');   // Lance's Super Saiyan 2 (live): the lava tear in the sky
     if (ss2L && !arc) withCover(ctx, () => drawSsj2Backdrop(ss2L, ctx));
-    if (!sketch && !arc && !stageDef.arctic && !stageDef.ship) {
+    if (!sketch && !arc && !stageDef.arctic && !stageDef.ship && !stageDef.chamber) {   // (the TIME CHAMBER stays pure white)
       // ATMOSPHERIC HAZE: knock the backdrop back (darker, flatter, less contrast) so the fighters pop off
       // it - like the soft, muted backgrounds behind the figures in an animated stick fight
       ctx.fillStyle = stageDef.walkoff ? 'rgba(20,40,60,0.12)' : stageDef.hell ? 'rgba(26,4,3,0.36)' : 'rgba(34,29,27,0.42)';
@@ -31343,7 +31510,8 @@ function drawStageThumb(k, r) {
   const st = STAGE_LIST[k], c = sctx, gy = r.y + r.h * 0.68;
   c.save(); c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
   const sky = c.createLinearGradient(0, r.y, 0, gy);
-  if (st.walkoff) { sky.addColorStop(0, '#2f8fe8'); sky.addColorStop(1, '#c9ecff'); }
+  if (st.chamber) { sky.addColorStop(0, '#eef3fb'); sky.addColorStop(1, '#ffffff'); }
+  else if (st.walkoff) { sky.addColorStop(0, '#2f8fe8'); sky.addColorStop(1, '#c9ecff'); }
   else if (st.hell) { sky.addColorStop(0, '#2a0503'); sky.addColorStop(1, '#a3260c'); }
   else if (st.pit) { sky.addColorStop(0, '#0d0d10'); sky.addColorStop(1, '#2a2a30'); }
   else if (st.tower) { sky.addColorStop(0, '#0b1030'); sky.addColorStop(0.6, '#2a2a5e'); sky.addColorStop(1, '#f39a5a'); }
@@ -31354,7 +31522,14 @@ function drawStageThumb(k, r) {
   else if (st.ship) { sky.addColorStop(0, '#1a0f2e'); sky.addColorStop(0.6, '#6b2a3a'); sky.addColorStop(1, '#f08a3c'); }
   else { sky.addColorStop(0, '#1a1716'); sky.addColorStop(1, '#56493f'); }
   c.fillStyle = sky; c.fillRect(r.x, r.y, r.w, r.h);
-  if (st.walkoff) {                                                 // hills + the endless checkered ground
+  if (st.chamber) {                                                 // the aurora, the white floor, the golden dome + hourglasses
+    c.fillStyle = '#f4f7fb'; c.fillRect(r.x, gy, r.w, r.y + r.h - gy);
+    const cx = r.x + r.w / 2;
+    c.fillStyle = '#eef2f8'; c.fillRect(cx - r.w * 0.28, gy - 12, r.w * 0.56, 12); c.fillStyle = '#f2a9c9'; c.fillRect(cx - r.w * 0.28, gy - 14, r.w * 0.56, 3);
+    c.fillStyle = '#e3b23c'; c.beginPath(); c.ellipse(cx, gy - 12, r.w * 0.09, r.w * 0.08, 0, Math.PI, 0); c.fill();
+    for (const sd of [-1, 1]) { c.fillStyle = 'rgba(200,225,245,0.9)'; c.fillRect(cx + sd * r.w * 0.36 - 4, gy - 22, 8, 22); c.fillStyle = '#5fd36a'; c.fillRect(cx + sd * r.w * 0.36 - 4, gy - 8, 8, 8);
+      c.fillStyle = '#e3b23c'; c.fillRect(cx + sd * r.w * 0.36 - 5, gy - 25, 10, 4); }
+  } else if (st.walkoff) {                                                 // hills + the endless checkered ground
     c.fillStyle = '#5bc25a'; c.beginPath(); c.moveTo(r.x, gy);
     for (let x = 0; x <= r.w; x += 8) c.lineTo(r.x + x, gy - 20 - 14 * Math.sin(x / r.w * Math.PI * 2.5)); c.lineTo(r.x + r.w, gy); c.fill();
     for (let x = 0; x < r.w; x += 16) for (let y = 0; y < r.h; y += 16) { c.fillStyle = ((x + y) / 16) % 2 ? '#c17a2e' : '#8f5420'; c.fillRect(r.x + x, gy + 6 + y, 16, 16); }
@@ -32763,7 +32938,7 @@ const MOVESETS = {
       ['J J J', 'Chain Slice > Chainsaw Rise > Boot', 'A fast slice, then the chainsword goes in low and GRINDS UP through them like a saw through a tree (it bites and slows - a stream of hits and sparks holding them there), then a giant armoured front kick.'],
       ['SIDE J (HOLD)', 'Jump Pack Charge', 'Hold to spool up the jump pack, let go and he ROCKETS forward and rips the chainsword through the first one he hits. Longer charge = further. Runs straight off the edge.'],
       ['UP J', 'Heaven Cleaver', 'A huge arc from in front, up over his head and down behind. Hold to charge.'],
-      ['DOWN J (HOLD)', 'Cyclone Reaper', 'Crouched low, he SPINS with the blade out flat - it swipes low on both sides at once.'],
+      ['DOWN J', 'Iron Counter', 'He plants the STORM SHIELD. Anything that hits it is stopped dead - and if they are close enough, he GRABS them (pick a throw). Whiff it and he is stuck behind the shield for a moment.'],
       ['RUN + J', 'Charging Thrust', 'Runs the chainsword straight through them.'] ] },
     { title: 'AIR J', rows: [
       ['AIR J', 'Whirlwind Blade', 'The chainsword spun all the way round him.'],
@@ -32782,7 +32957,7 @@ const MOVESETS = {
       ['FWD / BACK THROW', 'Leg Slam', 'Grabbed by the LEG, whipped back over his head and SLAMMED into the floor in front of him - blood everywhere - and they bounce up and HANG there, ready to be hit again.'] ] },
     { title: 'MORALE + ULTIMATES (I)', rows: [
       ['TAUNT (UP)', 'For the Emperor!', 'Fills a third of his MORALE meter. (It also builds from the damage he DEALS - not from damage he takes.)'],
-      ['I (FULL METER)', 'WARLORD', 'Transforms: more damage and knockback, 2 hits of HYPER ARMOR - and the bolter becomes a .50 CAL SNIPER (neutral K): a red laser sight while he lines it up, then a blisteringly fast round that goes straight through everyone in the line and hits like a truck. 4 rounds then a reload. Blockable - but two rounds BREAK a shield, and a perfect block sends it straight back at him.'],
+      ['I (FULL METER)', 'WARLORD', 'Transforms into SNIPER MODE: more damage and knockback, 2 hits of HYPER ARMOR - and ONLY the .50 CAL out (both hands on it): every attack button shoots it, and besides that he can only move, jump, Z vanish and use his up K jump-pack recovery (no melee, grabs or shield). The .50 CAL: a red laser sight while he lines it up, then a blisteringly fast round that goes straight through everyone in the line and hits like a truck. 4 rounds then a reload. Blockable - but two rounds BREAK a shield, and a perfect block sends it straight back at him.'],
       ['I (TRANSFORMED)', 'Execution Round', 'He kneels with a huge sniper rifle - the LASER finds whoever is in front... and he fires THREE re-aimed shots. Anyone not READY (shield up, or rolling out of it) is hit hard.'],
       ['DOWN + I (TRANSFORMED)', 'Air Support', 'He calls it in on the vox: a HUGE armoured gunship roars low across the stage, shelling EVERY part of it as it passes - and anyone the hull runs into is pinned to its nose, dragged along and flung off the far side.'],
       ['SIDE + I (TRANSFORMED)', 'One Punch', 'A close-up: his eyes light up... and he is ENORMOUS behind them.'],
@@ -33198,8 +33373,15 @@ function arcadeStartRound() {
   Object.assign(cpu, { off: false, cpu: true, dev: null, char: foe, level: 'AI ' + ARCADE_DIFFS[A.diff], team: 1, name: 'CPU' });
   for (let i = 2; i < players.length; i++) players[i].off = true;
   // a RANDOM stage every tournament match (HELLFIRE is kept for the bonus boss fight)
+  // (VERY unlikely to get the same stage twice in a row - some stages are rough on some characters - and less likely to
+  //  get one it's already had this run, so a run goes round more of them)
   const pool = STAGE_LIST.map((s, i) => i).filter(i => !STAGE_LIST[i].hell);
-  gameOptions.stage = boss ? STAGE_LIST.findIndex(s => s.hell) : pool[Math.floor(realRandom() * pool.length)];
+  const used = A.stagesUsed || (A.stagesUsed = []), last = used[used.length - 1];
+  const wt = i => i === last ? 0.03 : used.includes(i) ? 0.35 : 1;
+  let pick = pool[0], r = realRandom() * pool.reduce((t, i) => t + wt(i), 0);
+  for (const i of pool) { r -= wt(i); if (r <= 0) { pick = i; break; } }
+  gameOptions.stage = boss ? STAGE_LIST.findIndex(s => s.hell) : pick;
+  if (!boss) used.push(pick);
   gameOptions.stocks = ARCADE_STOCKS; gameOptions.teams = false; watchMode = !!A.watch;   // (watching: no controller jumps in; BACK pauses)
   for (const f of fighterPool) f.arcadeBoss = false;
   startMatch();
@@ -34926,7 +35108,7 @@ function rbSave() {
     g: rbClone({ time, hitstop, slowmo, xray, lastXray, ult, cage, matchOver, camPunch, ultBanner, simFrame, readyT }, memo),
   };
 }
-const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong'];
+const RB_SOUND_SLOTS = ['kiSnd', 'kameSnd', 'shotSnd', 'chidoriSnd', 'uiSong', 'ssj2Song', 'shipSong', 'ninthSnd', 'l3Song', 'ss1Song', 'sgSong', 'fxSong', 'tsuSong', 'leeSong', 'grindSong', 'roarSnd', 'sunSong', 'opSong', 'mzSong', 'hkSong', 'rgSong', 'omSong', 'asSong'];
 function rbLoad(S) {
   noteHeldSounds();
   const liveSounds = fighterPool.map(f => RB_SOUND_SLOTS.map(k => f[k]));   // (what's playing right now - kept through the rewind)

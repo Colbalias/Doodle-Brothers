@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.95",
+    "version":  "0.7.96",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,8 +8,8 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "d2f1392195951ade8bae408fb30dcbbf89e3a4e62d54804e90e2106d1faf8769",
-                                     "size":  2623002
+                                     "hash":  "bcf0a3e251e3984be3b5e474c887d657c97a77c1f2ce1027f6a75412f95f0c49",
+                                     "size":  2640177
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
@@ -83,6 +83,14 @@
                                                         "hash":  "864101b6ab9d7cb1e3bdfd2eaabad0fec940e30fa3a0409820717910d3d82a5c",
                                                         "size":  1010304
                                                     },
+                  "sounds/battle/colten-air-support.mp3":  {
+                                                               "hash":  "f08e687e9c44c01efdcff0bc44f2c04260c066f044e71d1c80a1202b277fceae",
+                                                               "size":  185695
+                                                           },
+                  "sounds/battle/colten-artillery.mp3":  {
+                                                             "hash":  "2941b740d9a3ae014330cd8bfa80aabf288fc1b660168c7d4e0f40de71cbf90a",
+                                                             "size":  34272
+                                                         },
                   "sounds/battle/colten-bolter.mp3":  {
                                                           "hash":  "1b04935436c827cb17c735d0c3b908255a27f5264cfa5189d8601c84810a6502",
                                                           "size":  36181
@@ -119,6 +127,10 @@
                                                              "hash":  "508a0fcddb056b98314a273fcc8b49e62bed62318868f5d138b3399db50caf8a",
                                                              "size":  1422070
                                                          },
+                  "sounds/battle/colten-sniper.mp3":  {
+                                                          "hash":  "6ac5fe7d5fff46f1fabf75e6f62181fc3e800848321af7eb8128eb56ecf862d5",
+                                                          "size":  44909
+                                                      },
                   "sounds/battle/colten-sun.mp3":  {
                                                        "hash":  "510f71e8ed4dade1f2fa2c18fc8f55214a6bf59704d026f4dc68175b14075605",
                                                        "size":  404121
