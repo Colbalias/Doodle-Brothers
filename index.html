@@ -7297,12 +7297,13 @@ function colbyMirrorTick(f) {
   let c = mirrorOf(f);
   if (s && !c && f.mirrorFor !== s) {                                // the scythe's down: the MIRROR steps out of it
     f.mirrorFor = s;
-    c = makeFighter({ name: 'MIRROR', color: '#6a0a1a', energy: f.energy, x: 2 * s.x - f.x, controller: 'mirror', char: 'COLBY' });
+    c = makeFighter({ name: 'MIRROR', color: '#6a0a1a', energy: f.energy, x: s.x, controller: 'mirror', char: 'COLBY' });   // (it steps out of the SCYTHE - its other half)
     c.minion = true; c.mirror = true; c.owner = f;
     equipWeapon(c, null);
     c.look = { ...c.look, body: '#3a0d12', headColor: '#7a0b0b', longHair: '#4a4248', demonEyes: true };   // (Colbalias's colours: it's his spirit)
     c.stats = { ...f.stats };
-    c.y = f.y; c.vx = -f.vx; c.vy = f.vy; c.face = -f.face; c.ground = f.ground; c.halo = 0; c.invuln = 0.3;
+    c.y = Math.min(s.y + 10, STAGE.y); c.vx = 0; c.vy = -260; c.face = -f.face; c.ground = false; c.halo = 0; c.invuln = 0.3;   // (rising up out of the blade)
+    for (let k = 0; k < 2; k++) ghosts.push({ fig: figureOf(c), life: 0.35 + k * 0.15, max: 0.35 + k * 0.15, color: k ? '#ff1a1a' : '#ffffff' });
     c.stocks = Infinity; c.ult = 0; c.life = Infinity; c.cpuLevel = null; c.damage = 0;
     fighters.push(c);
     burst(c.x, c.y - 50, ['#1a0000', '#7a0b0b', '#ff1a1a', '#ffffff'], 24, 0, Math.PI, 420, { grav: 0 }); ring(s.x, s.y - 20);
@@ -9911,8 +9912,8 @@ const hSpd = f => f.look && f.look.rage ? 1 + 0.008 * (f.hForm || 0) : 1;   // (
 // (he takes the damage, but doesn't flinch or fly). Each soaked hit's charge comes back after 2 seconds. Ultimates and
 // throws aren't soaked.
 const H_FORM_ARMOR = { lss: 1, l3: 2, recharge: 2 };
-const COLTEN_ARMOR = { hits: 2, refill: 2, maxPct: 100 };   // COLTEN, TRANSFORMED: 2 hits of hyper armor - once both are used up, they come back 2s later
-const hunterArmorMax = f => f.char === 'COLTEN' ? (f.transformed && !f.minion ? COLTEN_ARMOR.hits : 0) : f.hForm === 3 ? H_FORM_ARMOR.l3 : f.hForm === 2 ? H_FORM_ARMOR.lss : 0;
+const COLTEN_ARMOR = { hits: 2, refill: 5, maxPct: 100 };   // COLTEN: 2 hits of HYPER ARMOR, always - each one comes back 5s after it's used (gone at 100%+)
+const hunterArmorMax = f => f.char === 'COLTEN' ? (!f.minion ? COLTEN_ARMOR.hits : 0) : f.hForm === 3 ? H_FORM_ARMOR.l3 : f.hForm === 2 ? H_FORM_ARMOR.lss : 0;
 const hunterFormArmor = t => !!(t && t.look && (t.look.rage || t.char === 'COLTEN') && !t.minion && hunterArmorMax(t) > 0 && (t.hArmor || 0) > 0);
 const HUNTER_FORMS = [
   { name: 'BASE', short: '', power: 1, size: 0 },
@@ -10653,7 +10654,7 @@ function hunterMouth(f) { const S = hScale(f); return { x: f.x + f.face * 9 * S,
 const HL = { red: '#d4202a', black: '#141414', gold: '#e8b23a', orange: '#ff7a1a', visor: '#7fd8ff' };
 const H_KUNAI = { speed: 1650, life: 0.6, r: 9, stick: 6, upSpeed: 1750, upLife: 0.3, max: 2, holdT: 0.14 };   // (max: kunai stuck in someone at once; holdT: hold side K this long = throw another)
 const H_RASEN = { full: 1.1, rush: 980, rushT: 0.36, blue: ['#7fd8ff', '#ffffff', '#3aa0ff'] };
-const H_PORTAL = { r: 38, life: 15, cd: 1.0 };   // (cd: through a portal = 1s before you can take one again - no portal-looping yourself off the stage)
+const H_PORTAL = { r: 38, life: 15, cd: 1.0, reenter: 0.5 };   // (reenter: a FIGHTER who's just stepped out of a portal can't be taken by one for half a second - less accidental portalling. Shots don't wait.)   // (cd: through a portal = 1s before you can take one again - no portal-looping yourself off the stage)
 const H_PHASE = { dur: 4, dbl: 0.3 };
 const hPortalColor = f => (f && f.look && (f.look.portal || f.look.body)) || '#ff3a1a';
 const H_POSE = {
@@ -11140,7 +11141,7 @@ function updatePortals(dt) {
     if (g.respawnTimer > 0 || (a && ['hitstun', 'grabbed', 'thrown', 'whipped', 'timeStop', 'ultVictim'].includes(a.type))) { g.hChain = null; continue; }
     if (!a || a.type === 'land' || (a.key === 'hStrike' && a.phase === 'end')) hailieChainNext(g);
   }
-  for (const g of fighters) if (g.portalCD > 0) g.portalCD -= dt;
+  for (const g of fighters) { if (g.portalCD > 0) g.portalCD -= dt; if (g.portalReT > 0) g.portalReT -= dt; }
   for (const q of projectiles) if (q.portalCD > 0) q.portalCD -= dt;
   for (const o of fighters) {
     const P = o.hPortal; if (!P) continue;
@@ -11150,8 +11151,8 @@ function updatePortals(dt) {
     const ends = [[P.a, P.b], [P.b, P.a]];
     for (const g of fighters) {                                  // anyone who touches an end comes out the other
       const inside = ends.some(([A]) => Math.hypot(g.x - A.x, (g.y - 45) - (A.y - 50)) <= H_PORTAL.r + 8);
-      if (!inside) g.portalHold = false;                         // (you have to step OUT of a portal before it takes you again)
-      if (g.respawnTimer > 0 || g.portalCD > 0 || g.portalHold || (g.action && ['grabbed', 'holding', 'ultSeq', 'ultVictim', 'thrown', 'whipped'].includes(g.action.type))) continue;
+      if (!inside && g.portalHold) { g.portalHold = false; g.portalReT = H_PORTAL.reenter; }   // (you have to step OUT of a portal before it takes you again - and then wait half a second)
+      if (g.respawnTimer > 0 || g.portalCD > 0 || g.portalHold || g.portalReT > 0 || (g.action && ['grabbed', 'holding', 'ultSeq', 'ultVictim', 'thrown', 'whipped'].includes(g.action.type))) continue;
       for (const [A, B] of ends) {
         if (Math.hypot(g.x - A.x, (g.y - 45) - (A.y - 50)) > H_PORTAL.r + 8) continue;
         g.portalHold = true;
@@ -11499,8 +11500,15 @@ const FLAMEKING_MOVES = {
   // ---- AIR NEUTRAL J: FIREBALL SPIN - he whirls round with a fireball blazing in each hand: they reach well past his fists
   //      (both sides at once) - two quick hits that keep them in, then a bigger burst that sends them off ----
   nair: { name: 'Fireball Spin', startup: 0.06, active: 0.34, endlag: 0.14, landLag: 0.1, mirrorSpin: 0.05, fkSpin: true,
-    hitboxes: [0, 1, 2].flatMap(g => [1, -1].map(sd => ({ x: 52 * sd, y: -58, r: 24, from: g * 0.115, to: g * 0.115 + 0.11, group: g,
-      ...(g < 2 ? { dmg: 2.5, base: 140, growth: 0.4, angle: sd > 0 ? 75 : 105 } : { dmg: 4.5, base: 330, growth: 4.6, angle: sd > 0 ? 45 : 135 }) }))),
+    hitboxes: [0, 1, 2].flatMap(g => [[1, -58], [-1, -58], [0.7, -92], [-0.7, -24], [0.7, -24], [-0.7, -92]].map(([sd, y]) => ({ x: 52 * sd, y, r: 24, from: g * 0.115, to: g * 0.115 + 0.11, group: g,
+      ...(g < 2 ? { dmg: 2.5, base: 140, growth: 0.4, angle: sd > 0 ? 75 : 105 } : { dmg: 4.5, base: 330, growth: 4.6, angle: sd > 0 ? 45 : 135 }) }))),   // (high and low as well as out to the sides: it's TILTED)
+    step(f, a) {                                                      // TILTED: the line of his arms rocks as he spins - up on one side, down on the other
+      if (a.phase === 'active') {
+        const tilt = Math.sin(a.t * 26) * 0.75, base = FLAMEKING_MOVES.nair.strike;
+        a.poseOverride = { ...base, armA: [1.57 - tilt, 0], armB: [-1.57 - tilt, 0], lean: tilt * 0.15, mirror: Math.floor(a.t / 0.05) % 2 === 1, raw: true };
+      } else a.poseOverride = null;
+      return false;
+    },
     wind: pose({ lean: 0.05, legA: [0.9, 1.6], legB: [0.5, 1.4], armA: [0.6, -1.4], armB: [-0.4, -1.4] }),
     strike: pose({ lean: 0, legA: [0.5, 1.2], legB: [-0.4, 1.0], armA: [1.57, 0], armB: [-1.57, 0] }),
     onHit(f, t, a, h) { fkFlames(t.x, t.y - 55, h && h.group === 2 ? 14 : 5, Math.PI, 320); } },
@@ -11754,9 +11762,12 @@ function drawFkAuras() {
     }
     if (m && m.fkSpin && a.phase !== 'end') {                       // (the two fireballs' white-hot hearts)
       const J = fkJoints(f);
-      if (J) for (const h of [J.hA, J.hB]) { const r = 9 + Math.sin(time * 40) * 1.2, g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, r * 1.8);
-        g.addColorStop(0, '#fffbe6'); g.addColorStop(0.45, 'rgba(255,200,70,0.9)'); g.addColorStop(1, 'rgba(255,90,20,0)');
-        ctx.save(); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, r * 1.8, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      if (J) for (const h of [J.hA, J.hB]) { const r = 13 + Math.sin(time * 40) * 1.5, g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, r * 2.2);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.3, '#fff2b0'); g.addColorStop(0.55, 'rgba(255,170,40,0.95)'); g.addColorStop(1, 'rgba(255,70,10,0)');
+        ctx.save(); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(120,20,0,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(h.x, h.y, r * 1.05, 0, Math.PI * 2); ctx.stroke();   // (a dark rim, so it reads against the fire)
+        ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(h.x, h.y, r * 0.95, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(h.x, h.y, r * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
     }
     const charging = m && m.fkBall && a.fx === 'charge';
     const c = charging ? a.c : (f.fkStore || 0);
@@ -11976,18 +11987,18 @@ function fkAmbient(f, dt) {
     if (J) {
       const R = Math.random, H = J.head, S = J.sh, fc = J.f, sc = J.sc;
       const busy = f.action && f.action.type === 'attack';
-      for (let i = fkRate(60, dt); i--;) { const k = Math.floor(R() * 5) - 2;                                           // little flames off the tips of his hair
+      for (let i = fkRate(26, dt); i--;) { const k = Math.floor(R() * 5) - 2;                                           // little flames off the tips of his hair
         fkEmit(H.x + (k * 5 + (R() - 0.5) * 3) * sc, H.y - (18 + (2 - Math.abs(k)) * 3) * sc, (R() - 0.5) * 30, -90 - R() * 80, (3.5 + R() * 2.5) * sc, 0.12 + R() * 0.1); }
-      for (let i = fkRate(150, dt); i--;) { const side = R() < 0.55 ? 1 : -1;                                               // the SHOULDERS (rolling up behind the pads)
-        fkEmit(S.x + side * fc * (11 + R() * 8) * sc, S.y + 2 * sc, side * fc * (70 + R() * 90), -130 - R() * 110, (6 + R() * 5) * sc, 0.22 + R() * 0.14); }   // (out to the SIDES - his face stays clear)
-      for (const w of [J.wA, J.wB]) for (let i = fkRate(busy ? 120 : 55, dt); i--;) { const ang = R() * Math.PI * 2;      // FLAMING CUFFS (a ring of fire at each wrist)
+      for (let i = fkRate(60, dt); i--;) { const side = R() < 0.55 ? 1 : -1;                                               // the SHOULDERS (rolling up behind the pads)
+        fkEmit(S.x + side * fc * (11 + R() * 8) * sc, S.y + 2 * sc, side * fc * (60 + R() * 70), -110 - R() * 90, (4.5 + R() * 3.5) * sc, 0.18 + R() * 0.1); }   // (out to the SIDES - his face stays clear)
+      for (const w of [J.wA, J.wB]) for (let i = fkRate(busy ? 55 : 22, dt); i--;) { const ang = R() * Math.PI * 2;      // FLAMING CUFFS (a ring of fire at each wrist)
         fkEmit(w.x + Math.cos(ang) * 6 * sc, w.y + Math.sin(ang) * 4 * sc, Math.cos(ang) * 30, -70 - R() * 90, (3.5 + R() * 2.5) * sc, 0.14 + R() * 0.1); }
-      for (const an of [J.aA, J.aB]) for (let i = fkRate(Math.abs(f.vx) > 220 ? 80 : 50, dt); i--;) { const ang = R() * Math.PI * 2;   // FLAMING ANKLES
+      for (const an of [J.aA, J.aB]) for (let i = fkRate(Math.abs(f.vx) > 220 ? 36 : 18, dt); i--;) { const ang = R() * Math.PI * 2;   // FLAMING ANKLES
         fkEmit(an.x + Math.cos(ang) * 8 * sc, an.y + Math.sin(ang) * 3 * sc, Math.cos(ang) * 40, -60 - R() * 80, (4.5 + R() * 3) * sc, 0.16 + R() * 0.1); }
       { const sa = f.action, sm = sa && sa.type === 'attack' && sa.move;     // FIREBALL SPIN: a fireball in each hand + a ring of fire round him
         if (sm && sm.fkSpin && sa.phase !== 'end') {
-          for (const h of [J.hA, J.hB]) if (h) for (let i = fkRate(160, dt); i--;) fkEmit(h.x + (R() - 0.5) * 14, h.y + (R() - 0.5) * 14, (R() - 0.5) * 80, -60 - R() * 80, (7 + R() * 5) * sc, 0.16 + R() * 0.1);
-          if (sa.phase === 'active') for (let i = fkRate(140, dt); i--;) { const ang = R() * Math.PI * 2, rr = 52 * sc;
+          for (const h of [J.hA, J.hB]) if (h) for (let i = fkRate(80, dt); i--;) fkEmit(h.x + (R() - 0.5) * 12, h.y + (R() - 0.5) * 12, (R() - 0.5) * 70, -50 - R() * 70, (5 + R() * 4) * sc, 0.13 + R() * 0.08);
+          if (sa.phase === 'active') for (let i = fkRate(60, dt); i--;) { const ang = R() * Math.PI * 2, rr = 52 * sc;
             fkEmit(f.x + Math.cos(ang) * rr, f.y - 58 * sc + Math.sin(ang) * rr * 0.35, -Math.sin(ang) * 260, Math.cos(ang) * 90 - 40, (6 + R() * 4) * sc, 0.12 + R() * 0.06); }
         } }
       const a = f.action, m = a && a.type === 'attack' && a.move;           // the fireball in his hand (charging / stored)
@@ -15451,10 +15462,11 @@ COLBY_MOVES.runAttack = { name: 'Reaper Roll', startup: 0.06, active: 0.5, endla
 LANCE_MOVES.runAttack = { name: 'Rocket Headbutt', startup: 0.08, active: 0.34, endlag: 0.22, landLag: 0.14, travel: 980, hop: 140, hover: true, noPush: true,
   hitboxes: [{ x: 42, y: -50, r: 30, dmg: 11, base: 400, growth: 4.6, angle: 78, group: 0 }],
   wind: pose({ lean: 0.5, bob: -18, legA: [1.0, 1.4], legB: [-0.6, 0.8], armA: [-0.6, -0.4], armB: [-0.8, -0.3] }),            // crouched, about to spring
-  strike: pose({ lean: 1.45, bob: -30, legA: [-0.15, 0.05], legB: [-0.32, 0.1], armA: [-0.5, 0.1], armB: [-0.7, 0.1] }),        // flat out, head first, like a rocket
+  strike: pose({ lean: 0, bob: 6, legA: [0.06, 0.02], legB: [-0.06, 0.02], armA: [-0.25, 0.05], armB: [-0.4, 0.05] }),        // straight as an arrow (turned flat - see step)
   fire(f) { dust(f.x, f.y, 10, 1.6); sfx.whoosh(true); },
   step(f, a, dt) {
     if (a.phase === 'active') {
+      a.poseOverride = { ...LANCE_MOVES.runAttack.strike, spin: f.face * Math.PI / 2, raw: true };   // FLAT OUT, horizontal, head first like a rocket
       a.ghostT = (a.ghostT || 0) - dt;
       if (a.ghostT <= 0) { a.ghostT = 0.025; ghosts.push({ fig: figureOf(f), life: 0.18, max: 0.18, color: kiColor(f) }); }
       for (const t of hitFighters(a)) if (!a.thru) {                          // ...straight THROUGH them: he keeps going out the far side
@@ -15462,21 +15474,35 @@ LANCE_MOVES.runAttack = { name: 'Rocket Headbutt', startup: 0.08, active: 0.34, 
         if (gore) burst(t.x + f.face * 14, t.y - 50, BLOOD, 12, f.face > 0 ? 0 : Math.PI, 0.5, 460, { stain: true });
         ring(t.x, t.y - 50); shake = Math.max(shake, 12); hitstop = Math.max(hitstop, 0.07); sfx.slam();
       }
-    }
+    } else a.poseOverride = null;
     return false;
   } };
 
 // CAPTAIN HEEL: FLYING KNEE - he leaps in off the run, the knee driving up and forward
-AIDEN_MOVES.runAttack = { name: 'Flying Knee', startup: 0.07, active: 0.14, endlag: 0.26, landLag: 0.16, lunge: 720, lungeFriction: 0.32, hop: 340,
-  hitboxes: [{ x: 34, y: -62, r: 28, dmg: 11, base: 450, growth: 5.6, angle: 52 }],
-  wind: pose({ lean: 0.4, bob: -12, legA: [1.0, 1.3], legB: [-0.5, 0.7], armA: [-0.9, -0.6], armB: [-1.1, -0.5], armC: [-0.8, -0.5], armD: [-1.0, -0.4] }),
-  strike: pose({ lean: -0.15, bob: -2, legA: [1.75, 2.5], legB: [-0.55, 0.35], armA: [-1.3, -0.8], armB: [-1.6, -0.6], armC: [-1.1, -0.6], armD: [-1.4, -0.5] }),
-  fire(f) { sfx.whoosh(true); },
-  onHit(f, t) { shake = Math.max(shake, 10); hitstop = Math.max(hitstop, 0.06); burst(t.x, t.y - 60, ['#ffffff', '#e8e2cf'], 12, f.face > 0 ? 0 : Math.PI, 0.7, 420, { grav: 0 }); sfx.slam(); } };
+AIDEN_MOVES.runAttack = { name: 'Flying Knee', startup: 0.1, active: 0.14, endlag: 0.26, landLag: 0.16, lunge: 820, lungeFriction: 0.3, hop: 380,
+  hitboxes: [{ x: 36, y: -62, r: 30, dmg: 13, base: 560, growth: 6.2, angle: 50 }],
+  wind: pose({ lean: 0.55, bob: -20, legA: [1.1, 1.6], legB: [-0.6, 0.9], armA: [-1.1, -0.6], armB: [-1.4, -0.5], armC: [-1.0, -0.5], armD: [-1.3, -0.4] }),   // dropped LOW, coiled
+  strike: pose({ lean: -0.3, bob: -2, legA: [1.85, 2.6], legB: [-0.7, 0.3], armA: [-1.6, -0.6], armB: [-1.9, -0.4], armC: [-1.4, -0.5], armD: [-1.7, -0.3] }),     // the knee DRIVEN up and through, arms flung back
+  fire(f) {                                                          // he LAUNCHES off the floor: a crater of dust, a ring, a heavy whoosh
+    sfx.whoosh(true); dust(f.x, f.y, 16, 2.2); ring(f.x - f.face * 10, f.y - 4); shake = Math.max(shake, 6);
+    burst(f.x - f.face * 12, f.y - 6, ['#cdb79a', '#b4b4bb', '#806b5a'], 12, f.face > 0 ? Math.PI : 0, 0.6, 420, { grav: 900 });
+  },
+  step(f, a, dt) {
+    if (a.phase === 'active') { a.ghostT = (a.ghostT || 0) - dt; if (a.ghostT <= 0) { a.ghostT = 0.025; ghosts.push({ fig: figureOf(f), life: 0.2, max: 0.2, color: '#e8e2cf' }); } }
+    return false;
+  },
+  onHit(f, t) {                                                      // ...and it LANDS: freeze, flash, bone-white shockwave
+    shake = Math.max(shake, 20); hitstop = Math.max(hitstop, 0.13); impactFrame = Math.max(impactFrame, 0.07);
+    impactAt = { x: t.x, y: t.y - 62, ang: 0, all: false, focus: true };
+    burst(t.x, t.y - 62, ['#ffffff', '#e8e2cf', '#ffd23f'], 26, f.face > 0 ? 0 : Math.PI, 0.9, 640, { grav: 0 });
+    ring(t.x, t.y - 62); ring(t.x, t.y - 62);
+    if (gore) burst(t.x, t.y - 62, BLOOD, 10, f.face > 0 ? 0 : Math.PI, 0.6, 460, { stain: true });
+    sfx.slam(); sfx.hit(1);
+  } };
 
 // COLBALIAS: DEMON FLASH KICK - he plants off the run and BACKFLIPS, the kick sending them straight up over him (right
 // where his clones' kick from above comes down)
-COLBALIAS_MOVES.runAttack = { name: 'Demon Flash Kick', startup: 0.06, active: 0.3, endlag: 0.2, landLag: 0.14, lunge: 180, lungeFriction: 0.5, hop: 560,
+COLBALIAS_MOVES.runAttack = { name: 'Demon Flash Kick', startup: 0.06, active: 0.3, endlag: 0.2, landLag: 0.14, lunge: 480, lungeFriction: 0.4, hop: 560,
   flip: true, flipDir: -1, flipTurns: 1,
   hitboxes: [{ x: 26, y: -70, r: 34, dmg: 8, base: 560, growth: 1.4, angle: 89, from: 0, to: 0.14 }],
   wind: pose({ bob: -16, lean: 0.35, legA: [1.0, 1.3], legB: [-0.5, 0.9], armA: [-0.8, -0.6], armB: [-1.0, -0.5] }),
@@ -15496,7 +15522,7 @@ SEVON_MOVES.runAttack = { name: 'Flash Draw', startup: 0.04, active: 0.1, endlag
 
 // HUNTER: THE HAYMAKER - he winds the fist ALL the way back behind him... and throws everything into one huge punch with the
 // whole length of his arm behind it
-HUNTER_MOVES.runAttack = { name: 'Haymaker', startup: 0.3, active: 0.1, endlag: 0.36, landLag: 0.16, lunge: 560, lungeFriction: 0.35, armor: true,
+HUNTER_MOVES.runAttack = { name: 'Haymaker', startup: 0.17, active: 0.08, endlag: 0.26, landLag: 0.16, lunge: 560, lungeFriction: 0.35, armor: true,
   hitboxes: [hbx(66, -66, 30, { dmg: 16, base: 560, growth: 7, angle: 34 }), hbx(34, -64, 26, { dmg: 16, base: 560, growth: 7, angle: 34 })],
   wind: pose({ lean: -0.35, bob: -8, armA: [-2.5, -0.3], armB: [1.2, -1.4], legA: [0.9, 0.6], legB: [-0.8, 0.3] }),       // the fist wound way back
   strike: pose({ lean: 0.75, bob: -10, armA: [1.6, 0.0], armB: [-1.0, -0.8], legA: [1.1, 0.7], legB: [-1.1, 0.1] }),     // ...and the whole arm thrown out
@@ -15513,7 +15539,7 @@ HAILIE_MOVES.runAttack = { name: 'Tornado Spin', startup: 0.05, active: 9, endla
   step(f, a, dt, inp) {
     if (a.phase !== 'active') return false;
     if (a.n === undefined) { a.n = 1; a.segT = 0; a.face0 = f.face; sfx.whoosh(true); }
-    if (inp && (inp.atkTap || f.atkBuf > 0)) { if (a.segT > 0.02) a.queued = true; f.atkBuf = 0; }
+    if (inp && (inp.atkTap || f.atkBuf > 0 || inp.atkHeld)) { if (a.segT > 0.02 || inp.atkHeld) a.queued = true; f.atkBuf = 0; }   // (TAP it or HOLD it - either keeps her spinning)
     a.segT += dt;
     f.vx = a.face0 * H_SPIN.speed; if (!f.ground) f.vy = Math.min(f.vy, 120);
     const half = a.segT > H_SPIN.seg / 2;
@@ -20403,7 +20429,7 @@ CHARACTERS.OLDMAN.transformStats = { power: OM_MAX.power, speed: OM_MAX.speed, d
 // Some characters' transformations are tuned differently (Lance's Super Saiyan: less power, more speed)
 const tfStats = f => (f.lanceForm && LANCE_FORMS[f.lanceForm]) || (f.ui ? UI_STATS : null) || (f.char && CHARACTERS[f.char] && CHARACTERS[f.char].transformStats) || TRANSFORM;
 // BALANCE: per-fighter damage (round robin, Nov 2026: Colten 85% and Sevon 60% wins - both are meant to sit UNDER Colbalias)
-const CHAR_POWER = { COLTEN: 0.75, SEVON: 0.95, COLBY: 0.9, HAILIE: 1.18, AIDEN: 0.92 };   // (Aiden: -8% - he topped the round robin twice; HYPE still builds him back up)
+const CHAR_POWER = { COLTEN: 0.97, SEVON: 0.95, COLBY: 0.9, HAILIE: 1.18, AIDEN: 0.92 };   // (Aiden: -8% - he topped the round robin twice; HYPE still builds him back up)
 // DAMAGE ONLY (not knockback) per fighter - see applyHit
 const CHAR_DMG = { COLBY: 0.9 };   // (Colby: -10% damage - he topped the round robin; his knockback's untouched)   // (Hailie: she hits HARD - she's made of glass)   // (Colby: -10%)
 function powerOf(f) {
@@ -24273,7 +24299,7 @@ function beginActive(f, a) {
   if (m.hop && f.ground) { f.vy = -m.hop; f.ground = false; f.y -= 2; a.air = true; }
   if (m.lift && f.ground) { f.y -= m.lift; f.vy = 0; f.ground = false; a.air = true; }   // pops just off the floor
   if (m.airDash && !f.ground) { f.vx = f.face * m.airDash; f.vy = Math.min(f.vy, 0) * 0.3 - 60; }    // air dash kick: burst forward
-  const coltenSaw = f.char === 'COLTEN' && !f.minion && f.weapon === 'sword' && moveUsesScythe(m);
+  const coltenSaw = f.char === 'COLTEN' && !f.minion && f.weapon === 'sword' && moveUsesScythe(m) && !['runAttack', 'jab3', 'downGround', 'neutralRanged'].includes(a.key);   // (not his kicks, shots or the counter)
   if (coltenSaw) coltenSwordSfx(a.key === 'jab' ? 'swipe' : a.key === 'jab2' ? 'follow' : 'vary');   // COLTEN: the CHAINSWORD (the 2nd hit of his J string: the follow-through)
   else sfx.whoosh(!!(m.sweep || m.spinScythe || a.mult > 1.3));      // swing sound
   // AIDEN releasing a CHARGED move: a burst of fire blasts out the way he swings (bigger the longer he held it)
@@ -24775,7 +24801,7 @@ function freeControl(f, inp, dt) {
 function freeMove(f, dir, inp, dt) {
   if (dir && f.squat <= 0 && f.ground) f.face = dir;   // you don't turn around in the air (so back airs work)
   const walking = f.ground && inp.walk && !f.running;   // controller stick only tilted a little: walk
-  const maxSpeed = f.ground ? f.stats.runSpeed * hSpd(f) * (f.running ? RUN_MULT : walking ? WALK_SPEED : WALK_GROUND) : f.stats.airSpeed * hSpd(f);
+  const maxSpeed = f.ground ? f.stats.runSpeed * hSpd(f) * (f.running || (f.minion && !f.mirror) ? RUN_MULT : walking ? WALK_SPEED : WALK_GROUND) : f.stats.airSpeed * hSpd(f);   // (CLONES always RUN - they're on the attack)
   if (f.running && f.ground && Math.random() < dt * 14) dust(f.x - f.face * 10, f.y, 2, 0.6);   // kicking up dust
   // CROUCH: hold down on the ground (not while running). You can still turn around, but not walk.
   f.crouching = f.ground && inp.down && f.squat <= 0 && !f.running;
@@ -24940,7 +24966,7 @@ function updateFighter(f, inp, dt) {
     const mx = hunterArmorMax(f), form = f.char === 'COLTEN' ? (f.transformed ? 1 : 0) : (f.hForm || 0);
     if ((f.hArmorForm || 0) !== form) { f.hArmorForm = form; f.hArmor = mx; f.hArmorT = 0; }   // (a new form / transforming: fully charged; powering down: gone)
     if ((f.hArmor || 0) > mx) f.hArmor = mx;
-    if (f.char === 'COLTEN') { if (mx > 0 && (f.hArmor || 0) <= 0) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= COLTEN_ARMOR.refill) { f.hArmor = mx; f.hArmorT = 0; } } }
+    if (f.char === 'COLTEN') { if (mx > 0 && (f.hArmor || 0) < mx) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= COLTEN_ARMOR.refill) { f.hArmor = (f.hArmor || 0) + 1; f.hArmorT = 0; } } }   // (one back every 5s)
     else if ((f.hArmor || 0) < mx) { f.hArmorT = (f.hArmorT || 0) + dt; if (f.hArmorT >= H_FORM_ARMOR.recharge) { f.hArmor = (f.hArmor || 0) + 1; f.hArmorT = 0; } }
   }            // Colbalias's gaze mark wears off
   f.tsCD = Math.max(0, (f.tsCD || 0) - dt);
@@ -26002,6 +26028,7 @@ function aiInput(f, level) {
   inp.ultTap = ai.tapUlt;
   inp.taunt = ai.tapTaunt || 0; ai.tapTaunt = 0;
   inp.flyTap = ai.flyTap || 0;
+  inp.runHeld = !!ai.run && !!ai.dir;                  // (the RUN button: sprinting in / on the run)
   ai.tapJump = ai.tapAtk = ai.tapSpc = ai.tapBlock = ai.tapDown = ai.tapGrab = ai.tapUlt = false;
   ai.flyTap = 0;
   return inp;
@@ -26029,7 +26056,7 @@ function safeDir(f, d) {
 }
 
 function aiDecide(f, o, ai, L) {
-  ai.dir = 0; ai.up = false; ai.down = false; ai.block = false;
+  ai.dir = 0; ai.up = false; ai.down = false; ai.block = false; ai.run = false;   // (run: HOLD the run button this think - see aiInput)
   const a = f.action;
   // PERFECT-BLOCKED: try to parry their punish back - press shield as their attack is about to land
   if (a && a.type === 'parried' && !a.tried && o && o.action && o.action.type === 'attack' && o.action.phase === 'startup' &&
@@ -26117,6 +26144,29 @@ function aiDecide(f, o, ai, L) {
     return;
   }
 
+  // COLTEN: plays his whole kit - the IRON COUNTER when they swing at him up close, the BOLTER from mid range, the JUMP PACK
+  // CHARGE to close the gap, his strong THROWS, MORALE (taunt it up from a distance, set it off when full) - and transformed,
+  // SNIPER MODE: keep them at range, line the shot up (jump to it) and fire
+  if (f.char === 'COLTEN' && !f.minion && o) {
+    const snipe = sniperMode(f);
+    if (!snipe && f.ground && oa && oa.type === 'attack' && oa.phase === 'startup' && oa.move.hitboxes && adx < 125 && Math.abs(dy) < 80 &&
+        Math.random() < 0.3 + 0.5 * L.defend) { f.face = toward; ai.dir = 0; ai.down = true; ai.tapAtk = true; return; }   // IRON COUNTER
+    if (snipe) {
+      if (adx < 210 && Math.abs(dy) < 120 && Math.random() < 0.55) { ai.dir = safeDir(f, -toward); if (f.ground && Math.random() < 0.3) { ai.tapJump = true; ai.jumpHold = 0.3; } return; }   // too close: make room
+      if (Math.abs(dy) < 55 && Math.random() < 0.75) { f.face = toward; ai.dir = 0; ai.tapSpc = true; return; }   // lined up: FIRE
+      if (dy < -55 && f.ground && Math.random() < 0.5) { ai.tapJump = true; ai.jumpHold = 0.25; return; }        // they're up high: jump to it
+      if (adx > 560) { ai.dir = toward; return; }
+    }
+    if (!snipe) {
+      if ((f.fury || 0) >= COLTEN_FURY.max && !(f.furyT > 0) && adx < 520 && Math.random() < 0.5) { ai.down = true; ai.tapSpc = true; return; }   // MORALE: set it off
+      if (!(f.furyT > 0) && (f.fury || 0) < COLTEN_FURY.max - 25 && adx > 560 && f.ground && !(oa && oa.type === 'attack') && Math.random() < 0.06) { ai.dir = 0; ai.tapTaunt = 1; return; }   // FOR THE EMPEROR (fills it)
+      if (adx > 230 && adx < 720 && Math.abs(dy) < 60 && (f.bolts ?? BOLTER.mag) > 0 && Math.random() < 0.38) { f.face = toward; ai.dir = 0; ai.tapSpc = true; return; }   // the BOLTER
+      if (f.ground && !f.running && adx > 260 && adx < 600 && Math.abs(dy) < 60 && Math.random() < 0.14) {   // JUMP PACK CHARGE in
+        ai.dir = toward; ai.tapAtk = true; ai.holdBtn = 'atk'; ai.hold = 0.08 + adx / 1500; return;
+      }
+      if (f.ground && adx < 78 && Math.abs(dy) < 40 && !(oa && oa.type === 'attack' && oa.phase !== 'end') && Math.random() < 0.28) { ai.tapGrab = true; return; }   // his throws are strong
+    }
+  }
   // LANCE: someone's KI-MARKED and not right next to him = INSTANT TRANSMISSION to them (hop first if on the ground)
   const marked = f.look && f.look.kiMark ? kiMarkTarget(f) : null;
   if (marked && Math.hypot(marked.x - f.x, marked.y - f.y) > 170 && Math.random() < 0.3) {
@@ -26311,16 +26361,19 @@ function aiDecide(f, o, ai, L) {
     return;
   }
 
-  // RUN: from far away, double-tap toward them; close in = running attack
-  if (f.running && f.moveset.dashAttack && adx < 135 && Math.abs(dy) < 40 && f.face === toward && Math.random() < 0.5) {
-    ai.dir = toward; ai.tapAtk = true;
+  // RUNNING: SPRINT (hold the run button) to close the gap from mid / long range - and once in range, the RUNNING ATTACK
+  // (side J on the run - each character's own, and most of them carry a lot of forward momentum, so it reaches)
+  const runMove = f.moveset.runAttack || f.moveset.dashAttack;
+  const runReach = runMove ? (runMove.travel ? 230 : runMove.lunge ? Math.min(240, 120 + runMove.lunge * 0.12) : 140) : 0;
+  if (f.running && runMove && adx < runReach && adx > 30 && Math.abs(dy) < 50 && f.face === toward && Math.random() < 0.45 + 0.4 * L.aggro) {
+    ai.dir = toward; ai.run = true; ai.tapAtk = true;
     return;
   }
-  if (f.ground && !f.running && adx > 320 && Math.abs(dy) < 60 && Math.random() < 0.3 * L.aggro) {
-    ai.flyTap = toward; ai.dir = toward;
+  if (f.ground && adx > 200 && Math.abs(dy) < 120 && Math.random() < 0.35 + 0.5 * L.aggro) {   // too far: SPRINT in
+    ai.dir = toward; ai.run = true;
     return;
   }
-  if (f.running) { ai.dir = toward; if (f.face !== toward) ai.dir = toward; }
+  if (f.running) { ai.dir = toward; ai.run = adx > 90; }
 
   // FLY DASH (Lance): rocket in from mid range for aggressive plays
   if (f.look && f.look.flyDash && adx > 200 && adx < 650 && Math.abs(dy) < 220 && (f.ground || !f.flyUsed) &&
@@ -29908,7 +29961,7 @@ function drawFighter(p) {
   }
   if (p.tc) drawAura(p, TC.color, !p.transformed);                                // SEVON: TOTAL CONCENTRATION - a flame aura
   if (p.kaioken) for (let k = 0; k < Math.min(2, p.kaioken); k++) drawAura(p, KAIOKEN.color, !p.transformed && k === 0);   // (x2 / x3: a bigger, double aura)                // KAIOKEN: red aura (on top of Super Saiyan's gold)
-  if (p.minion) {
+  if (p.minion && !p.mirror) {                                              // (COLBY's MIRROR isn't a shadow clone - it's drawn as itself, below)
     // SHADOW CLONE: a pitch-black silhouette with burning red eyes. Its eyes FLASH WHITE during the wind-up
     // of every attack - the tell that a hit is coming.
     const windup = a && a.type === 'attack' && a.phase === 'startup';
@@ -29926,7 +29979,7 @@ function drawFighter(p) {
   } else {
     // OUTLINE: a dark, slightly fatter silhouette behind the fighter so they always read clearly against
     // the background and each other (the thick-bodied, high-contrast look of an animated stick fight)
-    if (!sketch && !pixelMode && !vanished) drawFigure(figureOf(p), { alpha: alpha * 0.95, tint: FIG_OUTLINE_COLOR, outline: FIG_OUTLINE });
+    if (!sketch && !pixelMode && !vanished) drawFigure(figureOf(p), { alpha: alpha * 0.95, tint: p.mirror ? '#c0101e' : FIG_OUTLINE_COLOR, outline: FIG_OUTLINE });   // (COLBY's MIRROR: a blood-red outline - so it's never mistaken for him)
     drawFigure(figureOf(p), { alpha, tint: vanished ? (sketch ? '#8c8c8c' : p.energy) : tint, bladeOf: p,
       eye: charging || (a && a.type === 'attack' && a.mult > 1.3) ? '#fff3a8' : null });
     if (a && a.type === 'flameDragon' && a.phase !== 'follow' && !sketch) drawNinthBlaze(p, a);   // Sevon's NINTH FORM: his body fills with flame
@@ -31335,6 +31388,10 @@ const CHAR_INFO = {
 // The name a fighter is SHOWN by (their id - AIDEN, COLBY... - never changes, so saves and online play aren't affected)
 const charName = c => (c && CHAR_INFO[c] && CHAR_INFO[c].name) || c;
 const CPU_LEVELS = ['AI EASY', 'AI NORMAL', 'AI HARD', 'AI MASTER', 'AI IMPOSSIBLE'];
+// SANDBOX: the CPU can also just STAND there (a training dummy) - and whichever you pick is remembered for next time
+const SANDBOX_LEVELS = [...CPU_LEVELS, 'STAND'];
+function sandboxLevel() { try { const v = localStorage.getItem('dbSandboxLevel'); if (SANDBOX_LEVELS.includes(v)) return v; } catch (e) {} return 'STAND'; }
+function saveSandboxLevel(v) { try { localStorage.setItem('dbSandboxLevel', v); } catch (e) {} }
 // WATCH MODE: CPU vs CPU. Nobody joins as a player - any controller / the keyboard / the mouse just
 // drives a HOST cursor that picks both CPUs' fighters and levels. Turned on in GAME OPTIONS.
 let watchMode = false;
@@ -31742,7 +31799,8 @@ function selectClick(p) {
     }
     if (q.cpu && inRect(pt, levelRect(c))) {
       if (netGuest()) return hostOnly();
-      q.level = CPU_LEVELS[(CPU_LEVELS.indexOf(q.level) + 1) % CPU_LEVELS.length]; menuSfx('move'); return;
+      const LV = sandbox ? SANDBOX_LEVELS : CPU_LEVELS;
+      q.level = LV[(LV.indexOf(q.level) + 1) % LV.length]; if (sandbox) saveSandboxLevel(q.level); menuSfx('move'); return;
     }
     if (inRect(pt, c)) {                     // click your own card or a CPU's card = pick its token back up
       if (q === p || (q.cpu && !netGuest())) { q.char = null; p.carry = i; menuSfx('back'); }
@@ -32933,7 +32991,7 @@ const MOVESETS = {
       'MORE DODGES: 7 Z vanishes in the air and 6 ground dodges (everyone else: 5 / 4) - because summoning spends them.',
       'GLASS JAW: he takes the most knockback in the game - but his own hits do 15% more damage to make up for it. Keep your distance and let the clones work.',
       'D-E-M-O-N METER: fills as he lands hits - full = one extra clone past his limit on down K.' ] } ] },
-  COLTEN: { blurb: 'A Salamanders ASTARTES: power armour, a chainsword, a bolter and a storm shield - heavy, but he hits like a battle tank.', sections: [
+  COLTEN: { blurb: 'A Salamanders ASTARTES: power armour, a chainsword, a bolter and a storm shield - heavy, but he hits like a battle tank. HYPER ARMOR: 2 hits he just walks through (each one back 5s after it is used; gone at 100%+).', sections: [
     { title: 'GROUND J (CHAINSWORD)', rows: [
       ['J J J', 'Chain Slice > Chainsaw Rise > Boot', 'A fast slice, then the chainsword goes in low and GRINDS UP through them like a saw through a tree (it bites and slows - a stream of hits and sparks holding them there), then a giant armoured front kick.'],
       ['SIDE J (HOLD)', 'Jump Pack Charge', 'Hold to spool up the jump pack, let go and he ROCKETS forward and rips the chainsword through the first one he hits. Longer charge = further. Runs straight off the edge.'],
@@ -32957,7 +33015,7 @@ const MOVESETS = {
       ['FWD / BACK THROW', 'Leg Slam', 'Grabbed by the LEG, whipped back over his head and SLAMMED into the floor in front of him - blood everywhere - and they bounce up and HANG there, ready to be hit again.'] ] },
     { title: 'MORALE + ULTIMATES (I)', rows: [
       ['TAUNT (UP)', 'For the Emperor!', 'Fills a third of his MORALE meter. (It also builds from the damage he DEALS - not from damage he takes.)'],
-      ['I (FULL METER)', 'WARLORD', 'Transforms into SNIPER MODE: more damage and knockback, 2 hits of HYPER ARMOR - and ONLY the .50 CAL out (both hands on it): every attack button shoots it, and besides that he can only move, jump, Z vanish and use his up K jump-pack recovery (no melee, grabs or shield). The .50 CAL: a red laser sight while he lines it up, then a blisteringly fast round that goes straight through everyone in the line and hits like a truck. 4 rounds then a reload. Blockable - but two rounds BREAK a shield, and a perfect block sends it straight back at him.'],
+      ['I (FULL METER)', 'WARLORD', 'Transforms into SNIPER MODE: more damage and knockback - and ONLY the .50 CAL out (both hands on it): every attack button shoots it, and besides that he can only move, jump, Z vanish and use his up K jump-pack recovery (no melee, grabs or shield). The .50 CAL: a red laser sight while he lines it up, then a blisteringly fast round that goes straight through everyone in the line and hits like a truck. 4 rounds then a reload. Blockable - but two rounds BREAK a shield, and a perfect block sends it straight back at him.'],
       ['I (TRANSFORMED)', 'Execution Round', 'He kneels with a huge sniper rifle - the LASER finds whoever is in front... and he fires THREE re-aimed shots. Anyone not READY (shield up, or rolling out of it) is hit hard.'],
       ['DOWN + I (TRANSFORMED)', 'Air Support', 'He calls it in on the vox: a HUGE armoured gunship roars low across the stage, shelling EVERY part of it as it passes - and anyone the hull runs into is pinned to its nose, dragged along and flung off the far side.'],
       ['SIDE + I (TRANSFORMED)', 'One Punch', 'A close-up: his eyes light up... and he is ENORMOUS behind them.'],
@@ -33371,6 +33429,9 @@ function arcadeStartRound() {
   Object.assign(me, A.watch ? { off: false, cpu: true, dev: null, char: arcadeMeChar(A), level: 'AI ' + ARCADE_DIFFS[A.diff], team: 0, name: 'CPU' }   // (WATCH CPU: yours is a CPU too)
                             : { off: false, cpu: false, dev: A.dev, char: arcadePicks()[A.sel], team: 0, name: 'YOU' });
   Object.assign(cpu, { off: false, cpu: true, dev: null, char: foe, level: 'AI ' + ARCADE_DIFFS[A.diff], team: 1, name: 'CPU' });
+  // (never YOUR OWN SKIN across the stage: the same character, they get a different skin - so it's clear who's who)
+  cpu.alt = 0;
+  if (cpu.char === me.char) { const n = altList(cpu.char).length + 1, mine = me.alt || 0, opts = [...Array(n).keys()].filter(k => k !== mine); if (opts.length) cpu.alt = opts[Math.floor(realRandom() * opts.length)]; }
   for (let i = 2; i < players.length; i++) players[i].off = true;
   // a RANDOM stage every tournament match (HELLFIRE is kept for the bonus boss fight)
   // (VERY unlikely to get the same stage twice in a row - some stages are rough on some characters - and less likely to
@@ -34287,10 +34348,10 @@ function homeUpdate(dt) {
 }
 function homeChoose(item, dev = 'keyboard') {
   menuSfx('go');
-  if (item === 'PLAY') { sandbox = false; scene = 'select'; }
-  else if (item === 'SANDBOX') { sandbox = true; scene = 'select'; }
+  if (item === 'PLAY') { sandbox = false; scene = 'select'; for (const q of players) if (!CPU_LEVELS.includes(q.level)) q.level = 'AI NORMAL'; }   // (a sandbox STAND dummy doesn't follow you into a real match)
+  else if (item === 'SANDBOX') { sandbox = true; scene = 'select'; const lv = sandboxLevel(); for (const q of players) q.level = lv; }   // (the CPU's level you last used in the sandbox - STAND to start with)
   else if (item === 'UPDATE NOW') { if (window.appInfo && window.appInfo.installUpdate) window.appInfo.installUpdate(); }   // installs + restarts
-  else if (item === 'ONLINE') { sandbox = false; scene = 'select'; sbNet.ui.show('menu'); }
+  else if (item === 'ONLINE') { sandbox = false; scene = 'select'; for (const q of players) if (!CPU_LEVELS.includes(q.level)) q.level = 'AI NORMAL'; sbNet.ui.show('menu'); }
   else if (item === 'MOVESETS') openMovesets(dev);
   else if (item === 'ARCADE') { sandbox = false; openArcade(); }
   else if (item === 'MINIGAMES') { sandbox = false; openMinigames(dev); }
