@@ -1,5 +1,5 @@
 {
-    "version":  "0.7.98",
+    "version":  "0.7.99",
     "shell":  "685cfcdd49b6d2fd",
     "android":  "11c3186805028360",
     "files":  {
@@ -8,16 +8,16 @@
                                          "size":  232719
                                      },
                   "index.html":  {
-                                     "hash":  "bd495929980a300464e246fee6813bba14137f3d453b1f32a1d3f0be4557423e",
-                                     "size":  2647800
+                                     "hash":  "c44af438e0eb1dad186da25e97e3cd5fc500deefdb0cd52f8247d64b658e1208",
+                                     "size":  2784714
                                  },
                   "lib/peerjs.min.js":  {
                                             "hash":  "ad5d8870d1e389914f9cba8d35be313c4327c69ee0a221e482e9bf7621136fe5",
                                             "size":  92865
                                         },
                   "net.js":  {
-                                 "hash":  "bc928364c0a67c9f4c2843ac696431b4f6aee6e2b734fa8b7e8e4d07c5a631fe",
-                                 "size":  67980
+                                 "hash":  "fd2c2affed9650ce357386b24146d05ab39ba7a6998b300438a0039801c85f23",
+                                 "size":  68222
                              },
                   "sounds/battle/a-samurais-death.mp3":  {
                                                              "hash":  "0fa2765a6f521e2154568fbc2ff61c08a726a9283388ea9e57a6065d9ba8752c",

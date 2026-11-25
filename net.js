@@ -432,7 +432,8 @@
         p.name = name;
         N.slots[i] = { ...emptySlot(i), kind: 'human', owner: 0, name, char: p.char, alt: p.alt || 0, team: p.team || 0, build: BUILD };
       });
-      N.opts = { stage: gameOptions.stage || 0, stocks: gameOptions.stocks, teams: !!gameOptions.teams, turbo: !!netTurbo, rollback: gameOptions.netcode !== 'DELAY' };   // (TURBO: the host's choice, for everyone)
+      N.opts = { stage: gameOptions.stage || 0, stocks: gameOptions.stocks, teams: !!gameOptions.teams, turbo: !!netTurbo, rollback: gameOptions.netcode !== 'DELAY',
+                rules: { mode: curRules().mode, freq: curRules().freq || 'med' } };   // (the GAME RULES: the host's current preset)   // (TURBO: the host's choice, for everyone)
       if (JSON.stringify([N.slots, N.opts]) !== N.lastRoster) broadcastRoster();
     } else {
       for (const i of mySlots(N)) {
@@ -539,6 +540,7 @@
     gameOptions.stage = m.opts.stage; gameOptions.stocks = m.opts.stocks; gameOptions.teams = !!m.opts.teams; gore = !!m.gore;
     turbo = false; netTurbo = !!m.opts.turbo; cannon.on = false; demo = null; showHitboxes = false; showControls = false;   // (online turbo: only if the host turned it on)
     time = 0; simRng = null; dummyMode = 0;
+    netRulesNext = m.opts.rules || { mode: 'anime', freq: 'med' };   // (everyone plays the HOST's game rules)
     cam.x = W / 2; cam.y = 390; cam.z = 1;
     startMatch();
     for (const i of N.humans) fighterPool[i].controller = 'net';
